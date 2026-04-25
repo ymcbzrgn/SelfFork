@@ -1,0 +1,8 @@
+GEMINI.md
+CLAUDE.md
+.claude/
+.opencode/
+.vscode/
+.obsidian/
+examples/
+examples_crucial/
