@@ -1,25 +1,22 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 
 :root {
-  /* Light Theme Colors */
-  --bg-core: #fafafa;
-  --bg-panel: #ffffff;
-  --border-dim: #e4e4e7;
-  --border-focus: #d4d4d8;
-  
-  --text-main: #18181b;
-  --text-muted: #71717a;
-  
-  /* Accents */
-  --accent-blue: #3b82f6;
-  --accent-green: #10b981;
-  --accent-amber: #f59e0b;
-  --accent-red: #ef4444;
-  
-  /* Sidebar */
-  --bg-sidebar: #f4f4f5;
-  --sidebar-hover: #e4e4e7;
-  --sidebar-active: #ffffff;
+  color-scheme: light;
+  --page-top: #f6f4ef;
+  --page-bottom: #efede7;
+  --panel: #ffffff;
+  --line-soft: #dde3ea;
+  --ink-strong: #1f2933;
+  --ink-soft: #667085;
+  --teal: #156f73;
+  --teal-deep: #0a5c57;
+  --amber: #a66b21;
+  --amber-deep: #8f5e17;
+  --copper: #9f5d34;
+  --danger: #b42318;
+  --slate: #4e6478;
+  --font-sans: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
 }
 
 * {
@@ -28,34 +25,60 @@
   padding: 0;
 }
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 body {
-  font-family: 'Inter', -apple-system, sans-serif;
-  background-color: var(--bg-core);
-  color: var(--text-main);
-  height: 100vh;
-  width: 100vw;
-  overflow: hidden;
+  font-family: var(--font-sans);
+  background: linear-gradient(180deg, var(--page-top) 0%, var(--page-bottom) 100%);
+  color: var(--ink-strong);
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
-code, pre, .mono {
-  font-family: 'JetBrains Mono', monospace;
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(21, 111, 115, 0.04), transparent 22%, transparent 100%);
 }
 
-/* Minimalist Scrollbar */
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+code,
+pre,
+.mono {
+  font-family: var(--font-mono);
+}
+
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: var(--border-focus);
-  border-radius: 4px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(122, 102, 74, 0.36);
+  background-clip: padding-box;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: rgba(122, 102, 74, 0.52);
+  background-clip: padding-box;
 }
