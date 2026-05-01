@@ -206,7 +206,7 @@ def _build_session(
     sandbox: _FakeSandbox,
     agent: _FakeCLIAgent,
     skip_verify: bool = False,
-    max_rounds: int = 20,
+    max_rounds: int | None = 20,
 ) -> tuple[Session, FilesystemPlanStore, AuditLogger]:
     workspace = Path(sandbox.host_workspace_path)
     workspace.mkdir(parents=True, exist_ok=True)
@@ -411,6 +411,29 @@ class TestFailures:
         outcome = await session.run()
         assert outcome == SessionState.FAILED
         assert "max_rounds" in (session.failure_reason or "")
+
+    @pytest.mark.asyncio
+    async def test_max_rounds_none_runs_until_sentinel(self, tmp_path: Path) -> None:
+        # ``max_rounds=None`` means unlimited — the loop must run past the
+        # legacy default of 20 and only stop when SelfFork Jr emits the
+        # sentinel. We feed 25 non-sentinel replies followed by DONE.
+        runtime = _FakeRuntime(
+            replies=["keep going"] * 25 + [f"all done {DONE_SENTINEL}"],
+        )
+        sandbox = _FakeSandbox(workspace_path=str(tmp_path / "ws"))
+        sandbox.configure_exec(lines=[b"ok\n"], exit_code=0)
+        agent = _FakeCLIAgent()
+        session, _, _ = _build_session(
+            tmp_path,
+            runtime=runtime,
+            sandbox=sandbox,
+            agent=agent,
+            max_rounds=None,
+        )
+        outcome = await session.run()
+        assert outcome == SessionState.COMPLETED
+        # 25 non-sentinel rounds executed, then sentinel on round 26.
+        assert len(agent.command_calls) == 25
 
 
 class TestTeardownAlwaysRuns:

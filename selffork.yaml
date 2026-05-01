@@ -65,9 +65,11 @@ lifecycle:
   skip_verify: false
   # Verifier strictness when skip_verify=false. "noop" = always pass.
   verifier_mode: lenient        # noop | lenient | moderate | strict
-  # Round-loop cap (SelfFork Jr ↔ CLI-agent exchanges). 20 is plenty for
-  # calculator-class tasks; raise for multi-file projects.
-  max_rounds: 20
+  # Optional cap on round-loop iterations (SelfFork Jr ↔ CLI-agent
+  # exchanges). null (production default) = unlimited — Jr keeps going
+  # until it emits [SELFFORK:DONE]. Set to a positive int only for
+  # tests / safety drills. Wall-clock guard is sandbox.timeout_seconds.
+  max_rounds: null
 
 logging:
   level: INFO                   # DEBUG | INFO | WARNING | ERROR

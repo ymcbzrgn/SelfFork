@@ -152,7 +152,9 @@ class Session:
           3. Otherwise, run the CLI subprocess with that message, capture
              its stdout, and append both the SelfFork-Jr reply (assistant)
              and the captured CLI output (user) to the chat history.
-          4. Repeat until done or :attr:`LifecycleConfig.max_rounds`.
+          4. Repeat until SelfFork Jr emits ``[SELFFORK:DONE]``. If
+             :attr:`LifecycleConfig.max_rounds` is set (None = unlimited),
+             the loop also bails out after that many rounds.
         """
         self._transition(SessionState.RUNNING)
         binary = self._cli_agent.resolve_binary()
@@ -174,9 +176,12 @@ class Session:
 
         is_first_round = True
         rounds_completed = 0
+        # ``None`` ⇒ unlimited (production default). A positive int caps
+        # the loop, used by tests / safety drills.
+        # See ``LifecycleConfig.max_rounds`` for the rationale.
         max_rounds = self._lifecycle_config.max_rounds
 
-        while rounds_completed < max_rounds:
+        while max_rounds is None or rounds_completed < max_rounds:
             # Greedy decoding for the small SelfFork Jr model. Stochastic
             # sampling on a 2B Q4 model produces wildly variable replies
             # — including pathological ones (immediate sentinel, empty

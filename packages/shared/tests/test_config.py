@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from selffork_shared.config import (
     AuditConfig,
@@ -62,6 +63,17 @@ class TestSubConfigDefaults:
         cfg = LifecycleConfig()
         assert cfg.skip_verify is False
         assert cfg.verifier_mode == "lenient"
+        # Production default = unlimited rounds. A positive int is only
+        # used in tests or safety drills.
+        assert cfg.max_rounds is None
+
+    def test_lifecycle_max_rounds_accepts_positive_int(self) -> None:
+        cfg = LifecycleConfig(max_rounds=8)
+        assert cfg.max_rounds == 8
+
+    def test_lifecycle_max_rounds_rejects_zero(self) -> None:
+        with pytest.raises(ValidationError):
+            LifecycleConfig(max_rounds=0)
 
     def test_logging_defaults(self) -> None:
         cfg = LoggingConfig()

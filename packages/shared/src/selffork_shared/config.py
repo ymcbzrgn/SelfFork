@@ -105,9 +105,13 @@ class LifecycleConfig(_StrictModel):
 
     skip_verify: bool = False
     verifier_mode: Literal["noop", "lenient", "moderate", "strict"] = "lenient"
-    # Hard cap on round-loop iterations (SelfFork-Jr ↔ CLI-agent exchanges).
-    # Without this, a stuck loop could chew quota indefinitely.
-    max_rounds: int = Field(default=20, ge=1)
+    # Optional cap on round-loop iterations (SelfFork-Jr ↔ CLI-agent
+    # exchanges). ``None`` (the default) means unlimited — Jr keeps going
+    # until it emits ``[SELFFORK:DONE]``. Set to a positive int only for
+    # tests / safety drills; the wall-clock guard
+    # (``sandbox.timeout_seconds``, default 1h) acts as the hard upper
+    # bound either way.
+    max_rounds: int | None = Field(default=None, ge=1)
 
 
 class LoggingConfig(_StrictModel):
