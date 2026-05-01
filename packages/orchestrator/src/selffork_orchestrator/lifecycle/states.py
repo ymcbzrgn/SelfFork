@@ -19,6 +19,10 @@ class SessionState(StrEnum):
     VERIFYING = "verifying"
     COMPLETED = "completed"
     FAILED = "failed"
+    # Quota-paused: a CLI agent's subscription rate-limit fired mid-loop.
+    # The orchestrator persists a ScheduledResume record and tears down;
+    # ``selffork resume`` brings the session back when the window opens.
+    PAUSED_RATE_LIMIT = "paused_rate_limit"
     TORN_DOWN = "torn_down"
 
 
@@ -41,6 +45,7 @@ ALLOWED_TRANSITIONS: dict[SessionState, frozenset[SessionState]] = {
             SessionState.VERIFYING,
             SessionState.COMPLETED,  # skip_verify=True path
             SessionState.FAILED,
+            SessionState.PAUSED_RATE_LIMIT,  # quota window hit mid-loop
         }
     ),
     SessionState.VERIFYING: frozenset(
@@ -51,6 +56,7 @@ ALLOWED_TRANSITIONS: dict[SessionState, frozenset[SessionState]] = {
     ),
     SessionState.COMPLETED: frozenset({SessionState.TORN_DOWN}),
     SessionState.FAILED: frozenset({SessionState.TORN_DOWN}),
+    SessionState.PAUSED_RATE_LIMIT: frozenset({SessionState.TORN_DOWN}),
     SessionState.TORN_DOWN: frozenset(),  # terminal
 }
 

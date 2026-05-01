@@ -72,6 +72,17 @@ class MlxServerRuntime(LLMRuntime):
         return self._config.model_id
 
     @property
+    def actual_port(self) -> int | None:
+        """Port the runtime is bound to, or None if not started yet.
+
+        Useful for parents (``selffork run-many``) that spawn this in
+        owned mode and need to tell children which port to attach in
+        shared mode — especially when ``config.port == 0`` triggered an
+        auto-allocation that the children couldn't have predicted.
+        """
+        return self._actual_port
+
+    @property
     def base_url(self) -> str:
         if self._actual_port is None:
             raise RuntimeStartError("base_url accessed before start() / after stop()")
@@ -84,6 +95,31 @@ class MlxServerRuntime(LLMRuntime):
         return f"http://{self._config.host}:{self._actual_port}/health"
 
     async def start(self) -> None:
+        if self._actual_port is not None:
+            return
+        # Shared mode: parent process owns the server. We only verify it's
+        # reachable, never spawn or teardown. Used by ``selffork run-many``
+        # so N parallel sessions can hit one warm MLX server.
+        if self._config.mode == "shared":
+            if self._config.port == 0:
+                raise RuntimeStartError(
+                    "shared runtime mode requires a concrete port "
+                    "(port=0 / auto-allocate is owned-mode only)",
+                )
+            self._actual_port = self._config.port
+            _log.info(
+                "runtime_attach_shared",
+                backend="mlx-server",
+                model=self._config.model_id,
+                host=self._config.host,
+                port=self._actual_port,
+            )
+            try:
+                await self._wait_ready()
+            except BaseException:
+                self._actual_port = None
+                raise
+            return
         if self._process is not None:
             return
         port = self._config.port if self._config.port != 0 else find_free_port(self._config.host)
@@ -171,6 +207,12 @@ class MlxServerRuntime(LLMRuntime):
         )
 
     async def stop(self) -> None:
+        # Shared mode: parent owns the server lifecycle, we just detach.
+        if self._config.mode == "shared":
+            if self._actual_port is not None:
+                _log.info("runtime_detach_shared", port=self._actual_port)
+            self._actual_port = None
+            return
         proc = self._process
         if proc is None:
             return

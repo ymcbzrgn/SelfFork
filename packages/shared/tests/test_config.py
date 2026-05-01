@@ -40,6 +40,17 @@ class TestSubConfigDefaults:
         # Smallest known PLE-safe MLX 4-bit Gemma 4 E2B-it variant.
         assert "gemma-4-e2b-it" in cfg.model_id.lower()
         assert "4bit" in cfg.model_id.lower()
+        # Owned mode (we spawn the server) is the default. Shared mode
+        # is opt-in for parents like ``selffork run-many``.
+        assert cfg.mode == "owned"
+
+    def test_runtime_mode_accepts_shared(self) -> None:
+        cfg = RuntimeConfig(mode="shared", port=8080)
+        assert cfg.mode == "shared"
+
+    def test_runtime_mode_rejects_unknown(self) -> None:
+        with pytest.raises(ValidationError):
+            RuntimeConfig(mode="hybrid")  # type: ignore[arg-type]
 
     def test_sandbox_defaults(self) -> None:
         cfg = SandboxConfig()

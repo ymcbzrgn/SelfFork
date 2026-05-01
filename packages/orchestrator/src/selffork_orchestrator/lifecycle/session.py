@@ -16,24 +16,85 @@ from __future__ import annotations
 
 import contextlib
 import os
+from typing import Protocol
 
 from selffork_orchestrator.cli_agent.base import CLIAgent
 from selffork_orchestrator.lifecycle.states import (
     SessionState,
     is_legal_transition,
 )
+from selffork_orchestrator.limits.base import (
+    AuthRequired,
+    LimitDetector,
+    NoLimit,
+    RateLimited,
+)
 from selffork_orchestrator.plan.model import Plan
 from selffork_orchestrator.plan.store_base import PlanStore
 from selffork_orchestrator.runtime.base import ChatMessage, LLMRuntime
 from selffork_orchestrator.sandbox.base import Sandbox
+from selffork_orchestrator.spawn.sentinel import (
+    SpawnRequest,
+    extract_spawn_requests,
+)
+from selffork_orchestrator.tools.base import (
+    ToolContext,
+    ToolRegistry,
+    ToolResult,
+)
+from selffork_orchestrator.tools.parser import parse_tool_calls
 from selffork_shared.audit import AuditLogger
 from selffork_shared.config import LifecycleConfig
 from selffork_shared.errors import SelfForkError
 from selffork_shared.logging import bind_session_id, get_logger
 
-__all__ = ["Session"]
+__all__ = ["RateLimitHandler", "Session", "SpawnHandler"]
 
 _log = get_logger(__name__)
+
+
+class RateLimitHandler(Protocol):
+    """Callback invoked when a CLI agent hits a subscription rate limit.
+
+    The handler is responsible for persisting whatever record the
+    ``selffork resume`` daemon needs to resurrect the session at
+    ``verdict.reset_at``. The orchestrator does NOT manage that store
+    directly — keeping persistence concerns at the CLI layer where the
+    necessary metadata (config_path, prd_path, ...) lives.
+
+    Implementations MUST be ``async`` and short — Session is mid-loop
+    when this fires, and we want to tear down promptly.
+    """
+
+    async def __call__(
+        self,
+        *,
+        session_id: str,
+        verdict: RateLimited,
+        last_round_text: str,
+    ) -> None: ...
+
+
+class SpawnHandler(Protocol):
+    """Callback invoked when parent Jr emits one or more SPAWN sentinels.
+
+    Synchronous-blocking semantics: implementations spawn N children,
+    wait for ALL to finish, and return one aggregated user-role text
+    that the parent's next round will see. The aggregator format is
+    the implementation's call — typically a plain ``=== Child <i> ===``
+    delimited transcript.
+
+    The orchestrator does NOT manage child sandboxes / tmux panes / the
+    shared MLX runtime — those concerns live at the cli.py boundary
+    where the parent's runtime port + config path are already known.
+    """
+
+    async def __call__(
+        self,
+        *,
+        parent_session_id: str,
+        requests: list[SpawnRequest],
+    ) -> str: ...
 
 
 class Session:
@@ -59,6 +120,12 @@ class Session:
         plan_store: PlanStore,
         audit_logger: AuditLogger,
         lifecycle_config: LifecycleConfig,
+        limit_detector: LimitDetector | None = None,
+        rate_limit_handler: RateLimitHandler | None = None,
+        spawn_handler: SpawnHandler | None = None,
+        tool_registry: ToolRegistry | None = None,
+        project_slug: str | None = None,
+        project_store: object | None = None,
     ) -> None:
         self._session_id = session_id
         self._prd_text = prd_text
@@ -70,6 +137,12 @@ class Session:
         self._plan_store = plan_store
         self._audit = audit_logger
         self._lifecycle_config = lifecycle_config
+        self._limit_detector = limit_detector
+        self._rate_limit_handler = rate_limit_handler
+        self._spawn_handler = spawn_handler
+        self._tool_registry = tool_registry
+        self._project_slug = project_slug
+        self._project_store = project_store
         self._state: SessionState = SessionState.IDLE
         self._failure_reason: str | None = None
 
@@ -89,16 +162,20 @@ class Session:
         """Drive the lifecycle and return the pre-teardown terminal state.
 
         On return, ``self.state`` is :class:`SessionState.TORN_DOWN`. The
-        meaningful outcome is the value returned (``COMPLETED`` or
-        ``FAILED``).
+        meaningful outcome is the value returned (``COMPLETED``,
+        ``FAILED``, or ``PAUSED_RATE_LIMIT``).
         """
         bind_session_id(self._session_id)
         outcome: SessionState = SessionState.FAILED
         try:
             await self._prepare()
             await self._run_agent()
-            await self._verify()
-            outcome = self._state  # COMPLETED or FAILED
+            # _run_agent may have transitioned to PAUSED_RATE_LIMIT mid-loop;
+            # in that case skip verification — the session isn't done, it's
+            # parked until ``selffork resume`` brings it back.
+            if self._state != SessionState.PAUSED_RATE_LIMIT:
+                await self._verify()
+            outcome = self._state  # COMPLETED | FAILED | PAUSED_RATE_LIMIT
         except SelfForkError as exc:
             self._fail(reason=str(exc))
             outcome = SessionState.FAILED
@@ -210,6 +287,34 @@ class Session:
                 )
                 return
 
+            spawn_requests = extract_spawn_requests(yamac_reply)
+            if spawn_requests:
+                aggregated = await self._handle_spawn(
+                    rounds_completed=rounds_completed,
+                    requests=spawn_requests,
+                )
+                history.append({"role": "assistant", "content": yamac_reply})
+                history.append({"role": "user", "content": aggregated})
+                rounds_completed += 1
+                is_first_round = False
+                continue
+
+            # Tool calls (e.g. <selffork-tool-call> ... kanban_card_done ...)
+            # are handled BEFORE the CLI exec because the typical Jr-with-
+            # tools turn looks like "I'm marking card X done; now please
+            # proceed". The tool result is appended to Jr's next user
+            # message instead of dispatching to the CLI agent for a round.
+            tool_results = self._handle_tool_calls(
+                rounds_completed=rounds_completed,
+                reply=yamac_reply,
+            )
+            if tool_results is not None:
+                history.append({"role": "assistant", "content": yamac_reply})
+                history.append({"role": "user", "content": tool_results})
+                rounds_completed += 1
+                is_first_round = False
+                continue
+
             cmd = [
                 binary,
                 *self._cli_agent.build_command(
@@ -229,11 +334,15 @@ class Session:
             )
 
             proc = await self._sandbox.exec(cmd, env=env)
-            output_chunks: list[bytes] = []
+            stdout_chunks: list[bytes] = []
             async for line in proc.stdout:
-                output_chunks.append(line)
+                stdout_chunks.append(line)
+            stderr_chunks: list[bytes] = []
+            async for line in proc.stderr:
+                stderr_chunks.append(line)
             exit_code = await proc.wait()
-            output_text = b"".join(output_chunks).decode("utf-8", errors="replace")
+            output_text = b"".join(stdout_chunks).decode("utf-8", errors="replace")
+            stderr_text = b"".join(stderr_chunks).decode("utf-8", errors="replace")
 
             self._audit.emit(
                 "agent.output",
@@ -241,8 +350,23 @@ class Session:
                     "round": rounds_completed,
                     "exit_code": exit_code,
                     "output_chars": len(output_text),
+                    "stderr_chars": len(stderr_text),
                 },
             )
+
+            # Subscription quota / auth detection. Runs even on exit_code=0
+            # because gemini hits 429 mid-stream without a non-zero exit
+            # and opencode can hang/exit-zero on its own (see
+            # opencode_detector.py docstring).
+            if self._limit_detector is not None:
+                paused = await self._handle_limit_verdict(
+                    stdout=output_text,
+                    stderr=stderr_text,
+                    exit_code=exit_code,
+                    last_round_text=yamac_reply,
+                )
+                if paused:
+                    return
 
             if exit_code != 0:
                 raise SelfForkError(
@@ -257,6 +381,141 @@ class Session:
         raise SelfForkError(
             f"max_rounds ({max_rounds}) reached without [SELFFORK:DONE] sentinel from SelfFork Jr",
         )
+
+    def _handle_tool_calls(
+        self,
+        *,
+        rounds_completed: int,
+        reply: str,
+    ) -> str | None:
+        """Parse Jr's reply for tool calls; invoke them; return aggregated text.
+
+        Returns ``None`` when no tool calls were found, signalling the
+        run loop should fall through to its normal CLI-agent exec path.
+        Returns a non-empty string when at least one call ran — that
+        string is the text appended to Jr's next user message so the
+        LLM can react to the result on the next round.
+        """
+        if self._tool_registry is None:
+            return None
+        calls = parse_tool_calls(reply)
+        if not calls:
+            return None
+        ctx = ToolContext(
+            session_id=self._session_id,
+            project_slug=self._project_slug,
+            project_store=self._project_store,
+        )
+        results: list[ToolResult] = []
+        for call in calls:
+            self._audit.emit(
+                "tool.call",
+                payload={
+                    "round": rounds_completed,
+                    "tool": call.tool,
+                    "args": call.args,
+                    "order": call.order_in_reply,
+                },
+            )
+            result = self._tool_registry.invoke(call, ctx)
+            self._audit.emit(
+                "tool.result",
+                payload={
+                    "round": rounds_completed,
+                    "tool": result.tool,
+                    "status": result.status,
+                    "error": result.error,
+                    "payload_keys": list(result.payload or {}),
+                },
+            )
+            results.append(result)
+        return _format_tool_results(results)
+
+    async def _handle_spawn(
+        self,
+        *,
+        rounds_completed: int,
+        requests: list[SpawnRequest],
+    ) -> str:
+        """Delegate child-spawning to the configured handler.
+
+        Without a handler we fail-fast: Jr signaled intent we can't honor.
+        Continuing silently would silently drop work and confuse Jr.
+        """
+        if self._spawn_handler is None:
+            raise SelfForkError(
+                "SelfFork Jr emitted [SELFFORK:SPAWN: ...] but no "
+                "spawn_handler is wired; configure one or stop emitting "
+                "SPAWN tags.",
+            )
+        self._audit.emit(
+            "agent.spawn_request",
+            payload={
+                "round": rounds_completed,
+                "n_spawns": len(requests),
+                "specs_preview": [r.spec[:120] for r in requests],
+            },
+        )
+        aggregated = await self._spawn_handler(
+            parent_session_id=self._session_id,
+            requests=requests,
+        )
+        self._audit.emit(
+            "agent.spawn_complete",
+            payload={
+                "round": rounds_completed,
+                "aggregated_chars": len(aggregated),
+            },
+        )
+        return aggregated
+
+    async def _handle_limit_verdict(
+        self,
+        *,
+        stdout: str,
+        stderr: str,
+        exit_code: int,
+        last_round_text: str,
+    ) -> bool:
+        """Run the limit detector; return ``True`` when the loop must stop.
+
+        ``True`` means we've transitioned to PAUSED_RATE_LIMIT and the
+        run_loop should return; the outer ``run()`` flow then skips the
+        verify step and goes straight to teardown. AuthRequired raises
+        a fast SelfForkError so the user gets a clear "re-login" message.
+        """
+        assert self._limit_detector is not None  # noqa: S101
+        verdict = self._limit_detector.detect(
+            stdout=stdout,
+            stderr=stderr,
+            exit_code=exit_code,
+        )
+        if isinstance(verdict, NoLimit):
+            return False
+        if isinstance(verdict, AuthRequired):
+            self._audit.emit(
+                "agent.auth_required",
+                payload={"reason": verdict.reason},
+            )
+            raise SelfForkError(verdict.reason)
+        # RateLimited
+        assert isinstance(verdict, RateLimited)  # noqa: S101 — exhaustive
+        self._audit.emit(
+            "agent.rate_limited",
+            payload={
+                "reason": verdict.reason,
+                "kind": verdict.kind,
+                "resume_at_iso": verdict.reset_at.isoformat(),
+            },
+        )
+        if self._rate_limit_handler is not None:
+            await self._rate_limit_handler(
+                session_id=self._session_id,
+                verdict=verdict,
+                last_round_text=last_round_text,
+            )
+        self._transition(SessionState.PAUSED_RATE_LIMIT, reason=verdict.reason)
+        return True
 
     async def _verify(self) -> None:
         if self._lifecycle_config.skip_verify:
@@ -310,3 +569,26 @@ class Session:
         if is_legal_transition(self._state, SessionState.FAILED):
             self._transition(SessionState.FAILED, reason=reason)
         # else: we're already in COMPLETED or TORN_DOWN — nothing to do.
+
+
+def _format_tool_results(results: list[ToolResult]) -> str:
+    """Render a list of tool results as a human-readable block.
+
+    Format keeps Jr's next round-input small but unambiguous:
+
+        === Tool results ===
+        [ok] kanban_card_done(card-01HJ...) -> {"to_column": "done", ...}
+        [invalid_args] kanban_card_move(card-???) -> error: card_id missing
+        === /Tool results ===
+        [Now decide the next step.]
+    """
+    lines: list[str] = ["=== Tool results ==="]
+    for result in results:
+        prefix = f"[{result.status}] {result.tool}"
+        if result.status == "ok":
+            lines.append(f"{prefix} -> {result.payload}")
+        else:
+            lines.append(f"{prefix} -> error: {result.error}")
+    lines.append("=== /Tool results ===")
+    lines.append("[Now decide the next step.]")
+    return "\n".join(lines)

@@ -38,6 +38,12 @@ AuditCategory = Literal[
     "agent.invoke",  # one CLI subprocess invocation in the round loop
     "agent.output",  # captured stdout from one CLI invocation
     "agent.done",
+    "agent.rate_limited",  # subscription quota hit; session paused
+    "agent.auth_required",  # subscription auth invalid; user must re-login
+    "agent.spawn_request",  # parent Jr asked to spawn a child session
+    "agent.spawn_complete",  # child session finished; aggregated back to parent
+    "tool.call",  # Jr emitted a <selffork-tool-call> block; we're invoking it
+    "tool.result",  # corresponding result returned to Jr's next round
     "selffork_jr.reply",  # SelfFork Jr's chat completion output for one round
     "plan.load",
     "plan.save",

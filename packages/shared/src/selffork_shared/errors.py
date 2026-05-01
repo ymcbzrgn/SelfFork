@@ -31,6 +31,9 @@ __all__ = [
     "SandboxTeardownError",
     "SelfForkError",
     "SelfForkTimeoutError",
+    "TmuxError",
+    "TmuxPaneError",
+    "TmuxSessionError",
 ]
 
 
@@ -131,6 +134,21 @@ class PlanLoadError(PlanError):
 
 class PlanSaveError(PlanError):
     """Plan could not be persisted (disk full, permission denied, etc.)."""
+
+
+# ── Tmux driver ───────────────────────────────────────────────────────────────
+
+
+class TmuxError(SelfForkError):
+    """Tmux driver failure umbrella."""
+
+
+class TmuxSessionError(TmuxError):
+    """Tmux session create / kill / lookup failed."""
+
+
+class TmuxPaneError(TmuxError):
+    """Tmux pane create / send-keys / pipe-pane failed."""
 
 
 # ── Generic ───────────────────────────────────────────────────────────────────

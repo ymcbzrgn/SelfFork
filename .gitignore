@@ -7,6 +7,20 @@ CLAUDE.md
 examples/
 examples_crucial/
 
+# Playwright session artifacts (per-run logs + scratch screenshots).
+# Curated UI screenshots live under docs/screenshots/ instead.
+.playwright-mcp/
+
+# Next.js / Node build artefacts. apps/web/ ships sources only; the
+# bundle is rebuilt locally via `npm run build` and served by FastAPI
+# from apps/web/out/. Committing these would mean megabytes of webpack
+# packs (29 MB+ each) which GitHub rejects past the 100 MB hard limit.
+apps/web/.next/
+apps/web/out/
+apps/web/node_modules/
+apps/web/*.tsbuildinfo
+apps/web/.env.development
+
 # Python
 __pycache__/
 *.py[cod]

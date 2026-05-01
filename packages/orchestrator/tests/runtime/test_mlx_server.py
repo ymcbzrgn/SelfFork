@@ -46,3 +46,38 @@ async def test_stop_before_start_is_noop() -> None:
     # Should not raise.
     await rt.stop()
     assert await rt.health() is False
+
+
+# ── Shared-mode unit tests ────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_shared_mode_rejects_auto_allocate_port() -> None:
+    # Shared mode means we attach to a server someone else started — we
+    # MUST know the port. port=0 (auto-allocate) only makes sense when
+    # we're spawning the server ourselves.
+    cfg = RuntimeConfig(mode="shared", port=0)
+    rt = MlxServerRuntime(cfg)
+    with pytest.raises(RuntimeStartError, match="requires a concrete port"):
+        await rt.start()
+
+
+@pytest.mark.asyncio
+async def test_shared_mode_stop_skips_process_teardown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # In shared mode the runtime never owns a subprocess; stop() must
+    # NEVER reach _terminate_group regardless of internal state. Spy on
+    # the group-killer to assert it stays untouched.
+    cfg = RuntimeConfig(mode="shared", port=8080)
+    rt = MlxServerRuntime(cfg)
+
+    calls: list[object] = []
+
+    async def _spy(proc: object) -> None:
+        calls.append(proc)
+
+    monkeypatch.setattr(MlxServerRuntime, "_terminate_group", staticmethod(_spy))
+    await rt.stop()
+    assert calls == []
+    assert await rt.health() is False

@@ -71,6 +71,12 @@ class RuntimeConfig(_StrictModel):
     port: int = Field(default=8080, ge=0, le=65535)  # mlx-lm default
     startup_timeout_seconds: int = Field(default=180, ge=1)
     health_check_interval_seconds: float = Field(default=2.0, gt=0)
+    # Process ownership mode. ``owned`` (default) means SelfFork spawns and
+    # tears down the runtime subprocess. ``shared`` means a parent process
+    # already started the server (e.g. ``selffork run-many``) and this
+    # session must only connect, never spawn or teardown. Shared mode
+    # requires ``port`` to be a concrete non-zero value (no auto-allocate).
+    mode: Literal["owned", "shared"] = "owned"
 
 
 class SandboxConfig(_StrictModel):
