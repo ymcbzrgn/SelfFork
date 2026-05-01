@@ -1,0 +1,80 @@
+# SelfFork — default configuration.
+#
+# Every field is optional; the values shown are defaults.
+# Override precedence (last wins): YAML file → SELFFORK_* env vars → CLI flags.
+# Schema lives in packages/shared/src/selffork_shared/config.py (ADR-001 §7).
+
+runtime:
+  # LLM runtime backend for **SelfFork Jr** (the user-simulator LLM, NOT the
+  # coder — see ``project_selffork_jr_is_user_simulator.md``). Only
+  # "mlx-server" is implemented in MVP v0; ollama / llama-cpp / vllm are
+  # stubs (NotImplementedError) — see ADR-001 §15.
+  backend: mlx-server
+
+  # Hugging Face model id (or local path) for SelfFork Jr.
+  # Locked: **Gemma 4 E2B-it** per ``docs/Operator_Locked_Decisions_archive.md``.
+  # Smallest known PLE-safe MLX 4-bit variant (~7.1 GB disk, ~7.6 GB VRAM
+  # at moderate context, 128k max context):
+  #     FakeRockert543/gemma-4-e2b-it-MLX-4bit
+  # SelfFork spawns ``mlx_vlm.server`` (NOT ``mlx_lm.server``) because
+  # Gemma 4 is multimodal — mlx-lm's text-only path emits unmatched-
+  # weights warnings and hangs on inference. mlx-vlm serves the same
+  # OpenAI-compat /v1/chat/completions endpoint and unlocks vision for
+  # the future Body pillar (M5).
+  model_id: FakeRockert543/gemma-4-e2b-it-MLX-4bit
+
+  host: 127.0.0.1
+  port: 8080                    # mlx-lm default; 0 = auto-allocate
+
+  startup_timeout_seconds: 180  # cold-load on Apple Silicon can be slow
+  health_check_interval_seconds: 2.0
+
+sandbox:
+  # "subprocess" for local Mac dev; "docker" for server-side multi-project.
+  mode: subprocess
+
+  # the operator's local test root'u. Her session ULID-isimli bir alt-klasör
+  # açar (ör. ~/Projects/01HJABCDEFG.../add.py). Açık-kaynak kullanıcılar
+  # bunu kendi tercihlerine göre değiştirir (önerilen güvenli default:
+  # ~/.selffork/workspaces).
+  workspace_root: ~/Projects
+
+  # Docker mode only:
+  docker_image: selffork/opencode-runtime:latest
+  docker_run_extra_args: []
+
+  cpu_limit: null               # cores, null = unlimited
+  memory_limit_mb: null         # MB, null = unlimited
+
+  timeout_seconds: 3600         # session-wide hard cap
+
+cli_agent:
+  # Only "opencode" is implemented in MVP v0.
+  # Stubs for: claude-code, codex, gemini-cli. See ADR-001 §15.
+  agent: opencode
+  binary_path: null             # null = auto-resolve from PATH
+  extra_args: []
+
+plan:
+  # MVP: filesystem-backed JSON. Future: "git" (M2+).
+  backend: filesystem
+  plan_filename: .selffork/plan.json
+
+lifecycle:
+  # If true, RUNNING goes straight to COMPLETED without a verifier pass.
+  skip_verify: false
+  # Verifier strictness when skip_verify=false. "noop" = always pass.
+  verifier_mode: lenient        # noop | lenient | moderate | strict
+  # Round-loop cap (SelfFork Jr ↔ CLI-agent exchanges). 20 is plenty for
+  # calculator-class tasks; raise for multi-file projects.
+  max_rounds: 20
+
+logging:
+  level: INFO                   # DEBUG | INFO | WARNING | ERROR
+  json_output: true             # false = TTY-pretty (dev only)
+  log_dir: ~/.selffork/logs
+
+audit:
+  enabled: true
+  audit_dir: ~/.selffork/audit
+  redact_secrets: true

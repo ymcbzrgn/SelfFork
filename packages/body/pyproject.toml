@@ -1,0 +1,16 @@
+[project]
+name = "selffork-body"
+version = "0.0.1"
+description = "Body pillar — vision + cross-UI control across Android, iOS, web, desktop. Skeleton only in MVP v0; implementation lands in M5."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Yamaç Bezirgan" }]
+dependencies = []
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/selffork_body"]

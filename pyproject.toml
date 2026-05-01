@@ -1,0 +1,205 @@
+[project]
+name = "selffork"
+version = "0.0.1"
+description = "Autonomous coding orchestrator built on opencode and a non-fine-tuned local Gemma — the first slice of Yamaç Jr. Nano."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Yamaç Bezirgan" }]
+keywords = ["agent", "llm", "orchestrator", "opencode", "gemma", "mlx"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Software Development",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = [
+    "packages/orchestrator",
+    "packages/shared",
+    "packages/reflex",
+    "packages/body",
+    "packages/mind",
+]
+
+[tool.uv.sources]
+selffork-orchestrator = { workspace = true }
+selffork-shared = { workspace = true }
+selffork-reflex = { workspace = true }
+selffork-body = { workspace = true }
+selffork-mind = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6.9",
+    "mypy>=1.11.0",
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=5.0.0",
+    "hypothesis>=6.110.0",
+    "pre-commit>=3.8.0",
+    "types-pyyaml",
+    # Workspace members so `uv sync` resolves the full graph for dev.
+    "selffork-orchestrator",
+    "selffork-shared",
+    "selffork-reflex",
+    "selffork-body",
+    "selffork-mind",
+]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Ruff — lint + format. See ADR-001 §3.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [
+    "examples",
+    "examples_crucial",
+    "build",
+    "dist",
+    ".venv",
+]
+
+[tool.ruff.lint]
+# Turkish strings legitimately use ``ı``, ``ç``, ``ş``, ``ğ``, ``ü``, ``ö``
+# etc. Tell ruff these are NOT confusables for this codebase.
+allowed-confusables = ["ı", "ç", "ş", "ğ", "ü", "ö", "İ", "Ç", "Ş", "Ğ", "Ü", "Ö"]
+select = [
+    "E", "F", "W",   # pycodestyle, pyflakes
+    "I",              # isort
+    "N",              # pep8-naming
+    "UP",             # pyupgrade
+    "B",              # flake8-bugbear
+    "ASYNC",          # flake8-async
+    "RET",            # flake8-return
+    "S",              # flake8-bandit (security)
+    "RUF",            # ruff-specific
+    "SIM",            # flake8-simplify
+    "TRY",            # tryceratops (exception anti-patterns)
+]
+ignore = [
+    "TRY003",  # avoid long messages outside exception class — too restrictive for now
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = [
+    "S101", "S105", "S106", "S107",  # asserts and hardcoded secrets allowed in tests
+    "ASYNC240",                        # tests may do sync I/O inside async test functions
+]
+"**/__init__.py" = ["F401"]            # re-exports allowed
+
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "selffork",
+    "selffork_orchestrator",
+    "selffork_shared",
+    "selffork_reflex",
+    "selffork_body",
+    "selffork_mind",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Mypy — strict type checking. See ADR-001 §3.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+# Workspace has multiple ``tests/`` directories (one per package) plus a root
+# ``tests/``. Rootless layout (no ``__init__.py`` in test dirs) requires
+# namespace_packages + explicit_package_bases so mypy resolves them as
+# distinct trees instead of one duplicate ``tests`` module.
+#
+# ``mypy_path`` lists each package's ``src/`` so mypy knows the package base
+# for ``selffork_*`` modules — without this, mypy walks from repo root and
+# names them ``packages.<pkg>.src.selffork_<pkg>``, which then collides with
+# the venv-installed ``selffork_<pkg>`` (same source file, two names).
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "packages/orchestrator/src:packages/shared/src:packages/reflex/src:packages/body/src:packages/mind/src"
+exclude = [
+    "examples/",
+    "examples_crucial/",
+    "build/",
+    "dist/",
+    "\\.venv/",
+]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_decorators = false
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Pytest. See ADR-001 §11.
+# ──────────────────────────────────────────────────────────────────────────────
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+# importlib mode prevents same-basename test files in different package
+# trees from colliding under the legacy ``prepend`` import mode.
+addopts = "-ra --strict-markers --strict-config --import-mode=importlib"
+testpaths = [
+    "tests",
+    "packages/orchestrator/tests",
+    "packages/shared/tests",
+    "packages/reflex/tests",
+    "packages/body/tests",
+    "packages/mind/tests",
+]
+asyncio_mode = "auto"
+markers = [
+    "real_runtime: requires a real LLM runtime (skipped by default)",
+    "real_docker: requires a Docker daemon (skipped by default)",
+    "slow: deselect with '-m \"not slow\"'",
+]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:pydantic.*",
+]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Coverage. Gate tightens to 80%/60% in step 11 (ADR-001 §16.2).
+# ──────────────────────────────────────────────────────────────────────────────
+
+[tool.coverage.run]
+branch = true
+source = [
+    "packages/orchestrator/src",
+    "packages/shared/src",
+]
+omit = [
+    "*/__init__.py",
+    "*/tests/*",
+]
+
+[tool.coverage.report]
+fail_under = 0
+show_missing = true
+skip_covered = false
+precision = 1

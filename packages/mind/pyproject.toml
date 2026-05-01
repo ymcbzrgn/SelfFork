@@ -1,0 +1,16 @@
+[project]
+name = "selffork-mind"
+version = "0.0.1"
+description = "Mind pillar — persistent memory, RAG/GraphRAG, deterministic compaction, historian. Skeleton only in MVP v0; implementation lands in M2."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Yamaç Bezirgan" }]
+dependencies = []
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/selffork_mind"]

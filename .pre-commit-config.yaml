@@ -1,0 +1,33 @@
+# Pre-commit hooks for SelfFork.
+#
+# Install once:    uv run pre-commit install
+# Run all files:   uv run pre-commit run --all-files
+#
+# Per CLAUDE.md MANDATE 1, hook failures are fixed at the root cause —
+# never bypassed with --no-verify.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
+
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.26.0
+    hooks:
+      - id: typos
+        args: ["--exclude", "examples/", "--exclude", "examples_crucial/"]

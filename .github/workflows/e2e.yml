@@ -1,0 +1,41 @@
+name: E2E
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * *"   # nightly 06:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke-subprocess:
+    name: Smoke (subprocess) on macOS
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.10.9"
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --all-packages --group dev
+      - name: E2E smoke
+        run: uv run pytest tests/e2e/ -m "not real_runtime and not real_docker"
+
+  smoke-docker:
+    name: Smoke (docker) on Linux
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.10.9"
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --all-packages --group dev
+      - name: E2E smoke (docker placeholder)
+        run: uv run pytest tests/e2e/ -m "not real_runtime"
