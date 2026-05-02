@@ -89,12 +89,12 @@ function SidebarBody() {
   return (
     <aside
       className={cn(
-        "hidden flex-col border-r border-border bg-card transition-[width] duration-200 ease-out md:flex",
+        "hidden flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out md:flex",
         collapsed ? "w-14" : "w-60",
       )}
       aria-label="Primary navigation"
     >
-      <div className="flex h-14 items-center gap-2 border-b border-border px-3">
+      <div className="flex h-14 items-center gap-2 border-b border-sidebar-border px-3">
         <span
           aria-hidden
           className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-primary font-bold text-primary-foreground"
@@ -157,8 +157,8 @@ function SidebarBody() {
                 className={cn(
                   "ml-2 flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors",
                   activeSlug === p.slug
-                    ? "bg-secondary text-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                    ? "bg-sidebar-accent text-sidebar-foreground"
+                    : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
                 )}
               >
                 <span aria-hidden className="text-muted-foreground/70">
@@ -182,8 +182,8 @@ function SidebarBody() {
       </nav>
 
       {!collapsed && (
-        <div className="border-t border-border px-4 py-3 text-[11px] leading-relaxed text-muted-foreground">
-          <p className="font-medium text-foreground">read-only</p>
+        <div className="border-t border-sidebar-border px-4 py-3 text-[11px] leading-relaxed text-muted-foreground">
+          <p className="font-medium text-sidebar-foreground">read-only</p>
           <p>
             UI reflects only on-disk artifacts. No mock data per
             project_ui_stack.md.
@@ -236,8 +236,8 @@ function NavLink({
       className={cn(
         "flex items-center gap-2.5 rounded-md px-3 py-2 transition-colors",
         active
-          ? "bg-secondary text-foreground"
-          : "text-muted-foreground hover:bg-accent hover:text-foreground",
+          ? "bg-sidebar-accent text-sidebar-foreground"
+          : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
         collapsed && "justify-center px-2",
       )}
     >

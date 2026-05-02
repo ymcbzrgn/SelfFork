@@ -452,6 +452,11 @@ async def _amain(
     project_slug: str | None,
 ) -> tuple[SessionState, str | None]:
     """Async orchestrator. Returns (outcome, failure_reason)."""
+    settings = _apply_project_routing(
+        settings,
+        project_slug=project_slug,
+        projects_root=projects_root,
+    )
     audit_logger = AuditLogger(settings.audit, session_id=session_id)
     runtime = build_runtime(settings.runtime)
     sandbox = build_sandbox(settings.sandbox, session_id=session_id)
@@ -569,6 +574,40 @@ def _resolve_projects_root() -> Path:
     if env:
         return Path(env).expanduser()
     return _DEFAULT_PROJECTS_ROOT
+
+
+def _apply_project_routing(
+    settings: SelfForkSettings,
+    *,
+    project_slug: str | None,
+    projects_root: Path,
+) -> SelfForkSettings:
+    """Redirect audit + sandbox dirs under ``projects_root/<slug>``.
+
+    No-op when ``project_slug`` is ``None``. Otherwise both
+    ``audit.audit_dir`` and ``sandbox.workspace_root`` are pointed at
+    the per-project layout from :class:`ProjectStore`, and the
+    directories are materialised so AuditLogger + sandbox can write
+    immediately. Closes the TODO captured in
+    ``project_run_project_routing_followup.md``.
+    """
+    if project_slug is None:
+        return settings
+    from selffork_orchestrator.projects.store import ProjectStore
+
+    store = ProjectStore(root=projects_root)
+    audit_dir = store.audit_dir(project_slug)
+    workspace_root = store.workspace_root(project_slug)
+    audit_dir.mkdir(parents=True, exist_ok=True)
+    workspace_root.mkdir(parents=True, exist_ok=True)
+    return settings.model_copy(
+        update={
+            "audit": settings.audit.model_copy(update={"audit_dir": str(audit_dir)}),
+            "sandbox": settings.sandbox.model_copy(
+                update={"workspace_root": str(workspace_root)},
+            ),
+        },
+    )
 
 
 # ── selffork project sub-app ─────────────────────────────────────────────────

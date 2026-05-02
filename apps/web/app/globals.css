@@ -34,12 +34,22 @@
     --input: 240 6% 90%;
     --ring: 240 5% 65%;
     --radius: 0.625rem;
+
+    /*
+     * Sidebar tokens. Linear "structure felt not seen" — sidebar
+     * should feel slightly dimmer than the main content surface so
+     * the eye lands on the working area, not the chrome.
+     */
+    --sidebar: 240 6% 96%;
+    --sidebar-foreground: 240 10% 4%;
+    --sidebar-border: 240 6% 88%;
+    --sidebar-accent: 240 5% 92%;
   }
 
   .dark {
-    --background: 240 10% 4%;
+    --background: 240 8% 6%;
     --foreground: 0 0% 98%;
-    --card: 240 7% 8%;
+    --card: 240 7% 9%;
     --card-foreground: 0 0% 98%;
     --primary: 0 0% 98%;
     --primary-foreground: 240 6% 10%;
@@ -60,6 +70,16 @@
     --border: 240 4% 16%;
     --input: 240 4% 16%;
     --ring: 240 5% 65%;
+
+    /*
+     * Dark sidebar: deliberately darker than ``--background`` so the
+     * content area reads as the focal surface, mirrors Linear's 2026
+     * refresh philosophy. Border is dimmer too (no harsh divider).
+     */
+    --sidebar: 240 10% 3%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-border: 240 6% 11%;
+    --sidebar-accent: 240 4% 14%;
   }
 }
 

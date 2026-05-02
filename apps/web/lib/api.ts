@@ -269,4 +269,15 @@ export function openSessionStream(sessionId: string): WebSocket {
   return new WebSocket(`${wsBase}/api/sessions/${sessionId}/stream`);
 }
 
+export function openKanbanStream(slug: string): WebSocket {
+  const httpBase =
+    API_BASE !== ""
+      ? API_BASE
+      : typeof window !== "undefined"
+        ? window.location.origin
+        : "";
+  const wsBase = httpBase.replace(/^http/, "ws");
+  return new WebSocket(`${wsBase}/api/projects/${slug}/kanban/stream`);
+}
+
 export { ApiError };

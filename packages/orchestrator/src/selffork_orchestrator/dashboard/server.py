@@ -47,6 +47,7 @@ from selffork_orchestrator.dashboard.schemas import (
 )
 from selffork_orchestrator.projects.model import (
     DEFAULT_COLUMNS,
+    KanbanBoard,
     KanbanCard,
     KanbanColumn,
 )
@@ -67,6 +68,10 @@ _log = get_logger(__name__)
 # Number of recent sessions returned by ``GET /api/sessions/recent``.
 # 50 is enough for a dashboard list without paginating.
 _RECENT_LIMIT = 50
+
+# How often the kanban WebSocket re-reads the board file. 0.5s feels
+# instant in the UI without thrashing the disk for an idle project.
+_KANBAN_POLL_INTERVAL_SECONDS = 0.5
 
 # Cap workspace listing depth so ``ls -R`` on a huge tree doesn't pin
 # the dashboard event loop. Files past this depth are silently skipped.
@@ -169,9 +174,14 @@ def _register_api_routes(app: FastAPI, config: DashboardConfig) -> None:
         response_model=list[RecentSession],
     )
     async def recent() -> list[RecentSession]:
-        return await anyio.to_thread.run_sync(
-            lambda: list_recent_sessions(config.audit_dir, limit=_RECENT_LIMIT),
-        )
+        def _collect() -> list[RecentSession]:
+            audit_dirs: list[Path] = [config.audit_dir]
+            project_store = ProjectStore(root=config.projects_root)
+            for project in project_store.list_all():
+                audit_dirs.append(project_store.audit_dir(project.slug))
+            return list_recent_sessions(audit_dirs, limit=_RECENT_LIMIT)
+
+        return await anyio.to_thread.run_sync(_collect)
 
     @app.get(
         "/api/sessions/{session_id}/events",
@@ -453,14 +463,7 @@ def _register_api_routes(app: FastAPI, config: DashboardConfig) -> None:
                     detail=f"project {slug!r} not found",
                 )
             board = store.load_board(slug)
-            groups = board.cards_by_column()
-            return KanbanResponse(
-                schema_version=board.schema_version,
-                columns=list(DEFAULT_COLUMNS),
-                cards_by_column={
-                    col: [_card_to_response(c) for c in cards] for col, cards in groups.items()
-                },
-            )
+            return _board_to_response(board)
 
         return await anyio.to_thread.run_sync(_load)
 
@@ -599,6 +602,35 @@ def _register_api_routes(app: FastAPI, config: DashboardConfig) -> None:
                 ),
             )
 
+    @app.websocket("/api/projects/{slug}/kanban/stream")
+    async def kanban_stream(websocket: WebSocket, slug: str) -> None:
+        await websocket.accept()
+        store = ProjectStore(root=config.projects_root)
+        if store.load(slug) is None:
+            # Reserved app close codes start at 4000; 4404 mirrors HTTP 404
+            # so the client can branch on a "project gone" cause distinctly
+            # from a generic disconnect.
+            await websocket.close(code=4404, reason=f"project {slug} not found")
+            return
+        last_serialized: str | None = None
+        try:
+            while True:
+                board = store.load_board(slug)
+                serialized = _board_to_response(board).model_dump_json()
+                if serialized != last_serialized:
+                    await websocket.send_text(serialized)
+                    last_serialized = serialized
+                await asyncio.sleep(_KANBAN_POLL_INTERVAL_SECONDS)
+        except WebSocketDisconnect:
+            return
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            _log.exception("dashboard_kanban_ws_stream_failed", slug=slug)
+            await websocket.send_text(
+                json.dumps({"error": f"{type(exc).__name__}: {exc}"}),
+            )
+
 
 # ── Static frontend mount ─────────────────────────────────────────────────────
 
@@ -703,6 +735,22 @@ def _card_to_response(card: KanbanCard) -> KanbanCardResponse:
         completed_at=card.completed_at,
         last_touched_by_session_id=card.last_touched_by_session_id,
         order=card.order,
+    )
+
+
+def _board_to_response(board: KanbanBoard) -> KanbanResponse:
+    """Convert a domain ``KanbanBoard`` to the wire-shape response.
+
+    Used by both ``GET /api/projects/<slug>/kanban`` and the live
+    WebSocket stream so REST and WS clients see identical payloads.
+    """
+    groups = board.cards_by_column()
+    return KanbanResponse(
+        schema_version=board.schema_version,
+        columns=list(DEFAULT_COLUMNS),
+        cards_by_column={
+            col: [_card_to_response(c) for c in cards] for col, cards in groups.items()
+        },
     )
 
 

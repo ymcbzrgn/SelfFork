@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -75,17 +75,27 @@ def _parse_iso(s: str) -> datetime:
     return dt.astimezone(UTC)
 
 
-def list_recent_sessions(audit_dir: Path, *, limit: int = 50) -> list[RecentSession]:
-    """List sessions sorted by file mtime (newest first), capped at ``limit``.
+def list_recent_sessions(
+    audit_dirs: Iterable[Path],
+    *,
+    limit: int = 50,
+) -> list[RecentSession]:
+    """List sessions across one or more audit dirs, sorted by mtime.
 
     For each ``<session_id>.jsonl`` file, we open it, read the first
     event for ``started_at``, the last for ``last_event_at`` and any
     terminal state. CLI agent name is recovered from the first
-    ``agent.invoke`` event whose payload contains a ``binary``.
+    ``agent.invoke`` event whose payload contains a ``binary``. Files
+    from multiple roots are merged before mtime sort, so a project
+    run alongside an orphan run interleave correctly in the dashboard.
     """
-    if not audit_dir.is_dir():
-        return []
-    jsonl_files = [p for p in audit_dir.iterdir() if p.is_file() and p.suffix == ".jsonl"]
+    jsonl_files: list[Path] = []
+    for audit_dir in audit_dirs:
+        if not audit_dir.is_dir():
+            continue
+        jsonl_files.extend(
+            p for p in audit_dir.iterdir() if p.is_file() and p.suffix == ".jsonl"
+        )
     jsonl_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     out: list[RecentSession] = []
     for path in jsonl_files[:limit]:

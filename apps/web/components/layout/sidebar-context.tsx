@@ -42,6 +42,38 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Keyboard: `[` toggles the sidebar (Linear convention). Skip when
+  // an editable element is focused so typing doesn't collapse chrome.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "[") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+      e.preventDefault();
+      setCollapsedState((prev) => {
+        const next = !prev;
+        try {
+          window.localStorage.setItem(STORAGE_KEY, next ? "1" : "0");
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   const setCollapsed = useCallback((next: boolean) => {
     setCollapsedState(next);
     if (typeof window === "undefined") return;

@@ -196,6 +196,43 @@ class TestRecentListing:
         assert row["final_state"] == "torn_down"  # last state observed
         assert row["cli_agent"] == "claude-code"
 
+    def test_merges_per_project_audit_dirs(self, tmp_path: Path) -> None:
+        # Orphan run lands in the global audit dir; project run lands
+        # under ~/.selffork/projects/<slug>/audit/. The /api/sessions/recent
+        # endpoint must walk both and present a single merged listing.
+        from selffork_orchestrator.projects.store import ProjectStore
+
+        _seed_audit_log(tmp_path, session_id="01HJORPHAN", rounds=1)
+
+        project_store = ProjectStore(root=tmp_path / "projects")
+        project_store.create(name="My", slug="myproj")
+        project_audit = project_store.audit_dir("myproj")
+        project_audit.mkdir(parents=True, exist_ok=True)
+
+        project_jsonl = project_audit / "01HJPROJSESSION.jsonl"
+        project_jsonl.write_text(
+            json.dumps(
+                {
+                    "ts": "2026-05-01T12:00:00+00:00",
+                    "correlation_id": "01HJTESTCORRELATIONABCDEF",
+                    "session_id": "01HJPROJSESSION",
+                    "category": "session.state",
+                    "level": "INFO",
+                    "event": "test",
+                    "payload": {"from": "idle", "to": "preparing"},
+                },
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        client = _build_test_client(tmp_path)
+        r = client.get("/api/sessions/recent")
+        assert r.status_code == 200
+        rows = r.json()
+        session_ids = {row["session_id"] for row in rows}
+        assert session_ids == {"01HJORPHAN", "01HJPROJSESSION"}
+
 
 # ── /api/sessions/<id>/events ─────────────────────────────────────────────────
 
@@ -346,3 +383,55 @@ class TestWebSocketStream:
             # Phase 3 tail — receive the new event.
             third = json.loads(ws.receive_text())
             assert third["category"] == "agent.invoke"
+
+
+# ── /api/projects/<slug>/kanban/stream ────────────────────────────────────────
+
+
+class TestKanbanWebSocketStream:
+    def test_pushes_initial_then_update_on_disk_mutation(self, tmp_path: Path) -> None:
+        # Initial snapshot, then mutate the board on disk via ProjectStore;
+        # the WS must surface a second message reflecting the new card.
+        from selffork_orchestrator.projects.store import ProjectStore
+
+        store = ProjectStore(root=tmp_path / "projects")
+        store.create(name="Live", slug="live")
+
+        client = _build_test_client(tmp_path)
+        with client.websocket_connect("/api/projects/live/kanban/stream") as ws:
+            initial = json.loads(ws.receive_text())
+            assert initial["schema_version"] == 1
+            assert initial["columns"] == [
+                "backlog",
+                "in_progress",
+                "review",
+                "done",
+            ]
+            initial_card_count = sum(
+                len(cards) for cards in initial["cards_by_column"].values()
+            )
+            assert initial_card_count == 0
+
+            store.add_card(slug="live", title="Hello from store")
+
+            second = json.loads(ws.receive_text())
+            all_titles = [
+                card["title"]
+                for col_cards in second["cards_by_column"].values()
+                for card in col_cards
+            ]
+            assert "Hello from store" in all_titles
+
+    def test_unknown_project_closes_with_4404(self, tmp_path: Path) -> None:
+        import pytest
+        from starlette.websockets import WebSocketDisconnect
+
+        client = _build_test_client(tmp_path)
+        with (
+            pytest.raises(WebSocketDisconnect) as exc_info,
+            client.websocket_connect(
+                "/api/projects/never-was/kanban/stream",
+            ) as ws,
+        ):
+            ws.receive_text()
+        assert exc_info.value.code == 4404

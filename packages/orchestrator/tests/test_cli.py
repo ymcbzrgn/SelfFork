@@ -167,3 +167,71 @@ class TestRunManyHelpers:
         # "exited cleanly with non-zero code".
         log.write_text("[SELFFORK:EXIT:-15]\n", encoding="utf-8")
         assert _parse_exit_code(log) == -15
+
+
+# ── _apply_project_routing ────────────────────────────────────────────────────
+
+
+class TestApplyProjectRouting:
+    def test_no_slug_returns_settings_unchanged(self, tmp_path: Path) -> None:
+        from selffork_orchestrator.cli import _apply_project_routing
+        from selffork_shared.config import SelfForkSettings
+
+        settings = SelfForkSettings()
+        result = _apply_project_routing(
+            settings,
+            project_slug=None,
+            projects_root=tmp_path / "projects",
+        )
+        # No-op when no project slug is supplied — defaults stay intact.
+        assert result is settings
+
+    def test_redirects_audit_and_workspace_dirs(self, tmp_path: Path) -> None:
+        from selffork_orchestrator.cli import _apply_project_routing
+        from selffork_orchestrator.projects.store import ProjectStore
+        from selffork_shared.config import SelfForkSettings
+
+        projects_root = tmp_path / "projects"
+        ProjectStore(root=projects_root).create(name="My Project", slug="my-project")
+
+        settings = SelfForkSettings()
+        result = _apply_project_routing(
+            settings,
+            project_slug="my-project",
+            projects_root=projects_root,
+        )
+
+        expected_audit = projects_root / "my-project" / "audit"
+        expected_workspace = projects_root / "my-project" / "workspaces"
+
+        assert result.audit.audit_dir == str(expected_audit)
+        assert result.sandbox.workspace_root == str(expected_workspace)
+        assert expected_audit.is_dir()
+        assert expected_workspace.is_dir()
+
+        # Original settings object is left untouched (model_copy semantics).
+        assert settings.audit.audit_dir == "~/.selffork/audit"
+        assert settings.sandbox.workspace_root == "~/.selffork/workspaces"
+
+    def test_idempotent_on_existing_dirs(self, tmp_path: Path) -> None:
+        from selffork_orchestrator.cli import _apply_project_routing
+        from selffork_orchestrator.projects.store import ProjectStore
+        from selffork_shared.config import SelfForkSettings
+
+        projects_root = tmp_path / "projects"
+        ProjectStore(root=projects_root).create(name="P", slug="p")
+
+        settings = SelfForkSettings()
+        # Running twice must not raise — directories are mkdir'd with
+        # ``exist_ok=True``.
+        once = _apply_project_routing(
+            settings,
+            project_slug="p",
+            projects_root=projects_root,
+        )
+        twice = _apply_project_routing(
+            settings,
+            project_slug="p",
+            projects_root=projects_root,
+        )
+        assert once.audit.audit_dir == twice.audit.audit_dir

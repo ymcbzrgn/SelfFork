@@ -11,6 +11,7 @@ import {
   FolderOpen,
   PanelLeft,
   PanelLeftClose,
+  Search,
   Wifi,
   WifiOff,
 } from "lucide-react";
@@ -73,6 +74,7 @@ export function TopBar({ title }: { title: string }) {
       </h1>
 
       <div className="ml-auto flex items-center gap-3 text-xs">
+        <SearchTrigger />
         <PathPill label="audit" path={pathFromHealth(health, "audit_dir")} />
         <PathPill
           label="scheduled"
@@ -81,6 +83,26 @@ export function TopBar({ title }: { title: string }) {
         <ConnectivityPill state={health} />
       </div>
     </header>
+  );
+}
+
+function SearchTrigger() {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (typeof window === "undefined") return;
+        window.dispatchEvent(new Event("selffork:open-palette"));
+      }}
+      title="Open command palette (⌘K)"
+      className="hidden items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground sm:inline-flex"
+    >
+      <Search className="h-3.5 w-3.5" />
+      <span className="hidden md:inline">Search</span>
+      <kbd className="rounded border border-border bg-background px-1 py-0.5 font-mono text-[10px] uppercase">
+        ⌘K
+      </kbd>
+    </button>
   );
 }
 
