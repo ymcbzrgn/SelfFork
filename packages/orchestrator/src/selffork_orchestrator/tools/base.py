@@ -23,7 +23,8 @@ Design choices:
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import inspect
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -40,8 +41,15 @@ __all__ = [
 # A handler runs the tool. It receives a ``Context`` (whatever the
 # orchestrator wires in — typically a small dataclass with the active
 # session's project_slug + ProjectStore reference) and the parsed,
-# validated args. Returns a JSON-serialisable result dict.
-ToolHandler = Callable[["ToolContext", BaseModel], dict[str, Any]]
+# validated args. Returns either a JSON-serialisable result dict OR an
+# awaitable that resolves to one. Sync handlers are the common case
+# (kanban filesystem operations); async handlers exist for tools that
+# bridge to async I/O (Mind store, embedders) — the registry's
+# ``invoke_async`` resolves both transparently.
+ToolHandler = Callable[
+    ["ToolContext", BaseModel],
+    "dict[str, Any] | Awaitable[dict[str, Any]]",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,11 +67,27 @@ class ToolContext:
         project_store: the active :class:`ProjectStore` instance.
             Wired in by the orchestrator at registry construction
             time — handlers don't import it directly.
+        mind_store: optional :class:`MindStore` for Mind-aware tools
+            (``mind_recall``, ``mind_note_add``). ``None`` when Mind is
+            disabled at the boot path; tools must return an
+            ``unauthorized`` :class:`ToolResult` rather than raise.
+        mind_retriever: optional retriever for ``mind_recall``. ``None``
+            when Mind is disabled.
+        episodic_writer: optional Mind T2 writer for ``mind_note_add``.
+            ``None`` when Mind is disabled.
+        cli_agent_name: human label of the active CLI agent
+            (``"claude-code"`` / ``"gemini-cli"`` / ``"opencode"`` /
+            ``"codex"``); used by Mind T2 tag generation when this
+            session writes notes.
     """
 
     session_id: str
     project_slug: str | None
     project_store: object  # selffork_orchestrator.projects.ProjectStore
+    mind_store: object | None = None  # selffork_mind.store.MindStore
+    mind_retriever: object | None = None  # selffork_mind.rag.HybridRetriever
+    episodic_writer: object | None = None  # selffork_mind.memory.tiers.EpisodicWriter
+    cli_agent_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,7 +144,10 @@ class ToolSpec[A: BaseModel]:
         name: str,
         description: str,
         args_model: type[A],
-        handler: Callable[[ToolContext, A], dict[str, Any]],
+        handler: Callable[
+            [ToolContext, A],
+            dict[str, Any] | Awaitable[dict[str, Any]],
+        ],
     ) -> None:
         if not name or " " in name:
             raise ValueError(
@@ -130,9 +157,14 @@ class ToolSpec[A: BaseModel]:
         self.description = description
         self.args_model: type[A] = args_model
         # Wrap the typed handler in a BaseModel-typed handler so the
-        # registry can store handlers uniformly.
+        # registry can store handlers uniformly. Both sync and async
+        # handlers are supported — the registry resolves them via
+        # ``inspect.isawaitable`` at invoke time.
 
-        def _erased(ctx: ToolContext, args: BaseModel) -> dict[str, Any]:
+        def _erased(
+            ctx: ToolContext,
+            args: BaseModel,
+        ) -> dict[str, Any] | Awaitable[dict[str, Any]]:
             assert isinstance(args, args_model), (  # noqa: S101 — internal invariant
                 f"handler for {name} got args of type "
                 f"{type(args).__name__}, expected {args_model.__name__}"
@@ -179,24 +211,17 @@ class ToolRegistry:
         ]
 
     def invoke(self, call: ToolCall, ctx: ToolContext) -> ToolResult:
-        """Validate args + invoke the handler. Always returns a result —
+        """Validate args + invoke a SYNC handler. Always returns a result —
         never raises (handler exceptions are captured as ``handler_error``).
+
+        For tools that bridge to async I/O (Mind tools), use
+        :meth:`invoke_async` instead — calling :meth:`invoke` on an async
+        handler returns a ``handler_error`` result with a clear hint.
         """
-        spec = self._tools.get(call.tool)
-        if spec is None:
-            return ToolResult(
-                tool=call.tool,
-                status="unknown_tool",
-                error=(f"tool {call.tool!r} is not registered; known tools: {self.names()}"),
-            )
-        try:
-            args = spec.args_model.model_validate(call.args)
-        except ValidationError as exc:
-            return ToolResult(
-                tool=call.tool,
-                status="invalid_args",
-                error=str(exc),
-            )
+        spec, args, early = self._validate_call(call)
+        if early is not None:
+            return early
+        assert spec is not None and args is not None  # noqa: S101 — validate_call invariant
         try:
             payload = spec.handler(ctx, args)
         except _UnauthorizedError as exc:
@@ -211,7 +236,72 @@ class ToolRegistry:
                 status="handler_error",
                 error=f"{type(exc).__name__}: {exc}",
             )
+        if inspect.isawaitable(payload):
+            return ToolResult(
+                tool=call.tool,
+                status="handler_error",
+                error=(
+                    f"tool {call.tool!r} is async; call ToolRegistry.invoke_async "
+                    "(or await it from an async caller)"
+                ),
+            )
         return ToolResult(tool=call.tool, status="ok", payload=payload)
+
+    async def invoke_async(self, call: ToolCall, ctx: ToolContext) -> ToolResult:
+        """Async-aware invoke. Awaits awaitable handlers; passes sync
+        handlers through unchanged. Use this from async call sites
+        (e.g. ``Session._handle_tool_calls``) so Mind tools that bridge
+        to ``MindStore.upsert_note`` resolve correctly.
+        """
+        spec, args, early = self._validate_call(call)
+        if early is not None:
+            return early
+        assert spec is not None and args is not None  # noqa: S101
+        try:
+            result = spec.handler(ctx, args)
+            payload = await result if inspect.isawaitable(result) else result
+        except _UnauthorizedError as exc:
+            return ToolResult(
+                tool=call.tool,
+                status="unauthorized",
+                error=str(exc),
+            )
+        except Exception as exc:
+            return ToolResult(
+                tool=call.tool,
+                status="handler_error",
+                error=f"{type(exc).__name__}: {exc}",
+            )
+        return ToolResult(tool=call.tool, status="ok", payload=payload)
+
+    def _validate_call(
+        self,
+        call: ToolCall,
+    ) -> tuple[ToolSpec[Any] | None, BaseModel | None, ToolResult | None]:
+        spec = self._tools.get(call.tool)
+        if spec is None:
+            return (
+                None,
+                None,
+                ToolResult(
+                    tool=call.tool,
+                    status="unknown_tool",
+                    error=(f"tool {call.tool!r} is not registered; known tools: {self.names()}"),
+                ),
+            )
+        try:
+            args = spec.args_model.model_validate(call.args)
+        except ValidationError as exc:
+            return (
+                spec,
+                None,
+                ToolResult(
+                    tool=call.tool,
+                    status="invalid_args",
+                    error=str(exc),
+                ),
+            )
+        return spec, args, None
 
 
 class _UnauthorizedError(RuntimeError):

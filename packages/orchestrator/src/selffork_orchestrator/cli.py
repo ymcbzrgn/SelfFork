@@ -25,6 +25,7 @@ import typer
 
 from selffork_orchestrator import __version__
 from selffork_orchestrator.cli_agent.factory import build_cli_agent
+from selffork_orchestrator.cli_mind import mind_app
 from selffork_orchestrator.lifecycle.session import Session
 from selffork_orchestrator.lifecycle.states import SessionState
 from selffork_orchestrator.limits.base import RateLimited
@@ -620,6 +621,7 @@ project_app = typer.Typer(
     rich_markup_mode=None,
 )
 app.add_typer(project_app, name="project")
+app.add_typer(mind_app, name="mind")
 
 
 @project_app.command("create")

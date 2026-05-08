@@ -407,9 +407,7 @@ class TestKanbanWebSocketStream:
                 "review",
                 "done",
             ]
-            initial_card_count = sum(
-                len(cards) for cards in initial["cards_by_column"].values()
-            )
+            initial_card_count = sum(len(cards) for cards in initial["cards_by_column"].values())
             assert initial_card_count == 0
 
             store.add_card(slug="live", title="Hello from store")

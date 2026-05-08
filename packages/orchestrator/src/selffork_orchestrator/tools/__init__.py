@@ -16,12 +16,13 @@ from selffork_orchestrator.tools.base import (
     raise_unauthorized,
 )
 from selffork_orchestrator.tools.kanban import build_kanban_tools
+from selffork_orchestrator.tools.mind import build_mind_tools
 from selffork_orchestrator.tools.parser import parse_tool_calls
 
 
 def build_default_registry() -> ToolRegistry:
     """The canonical registry — every tool the orchestrator wires by default."""
-    return ToolRegistry(specs=[*build_kanban_tools()])
+    return ToolRegistry(specs=[*build_kanban_tools(), *build_mind_tools()])
 
 
 __all__ = [
@@ -33,6 +34,7 @@ __all__ = [
     "ToolSpec",
     "build_default_registry",
     "build_kanban_tools",
+    "build_mind_tools",
     "parse_tool_calls",
     "raise_unauthorized",
 ]

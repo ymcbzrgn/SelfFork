@@ -18,6 +18,12 @@ import contextlib
 import os
 from typing import Protocol
 
+from selffork_mind.memory.tiers import (
+    EpisodicToolCall,
+    EpisodicWriter,
+)
+from selffork_mind.rag.retriever import HybridRetriever
+from selffork_mind.store.base import MindStore
 from selffork_orchestrator.cli_agent.base import CLIAgent
 from selffork_orchestrator.lifecycle.states import (
     SessionState,
@@ -38,6 +44,7 @@ from selffork_orchestrator.spawn.sentinel import (
     extract_spawn_requests,
 )
 from selffork_orchestrator.tools.base import (
+    ToolCall,
     ToolContext,
     ToolRegistry,
     ToolResult,
@@ -126,6 +133,10 @@ class Session:
         tool_registry: ToolRegistry | None = None,
         project_slug: str | None = None,
         project_store: object | None = None,
+        episodic_writer: EpisodicWriter | None = None,
+        mind_retriever: HybridRetriever | None = None,
+        mind_store: MindStore | None = None,
+        cli_agent_name: str | None = None,
     ) -> None:
         self._session_id = session_id
         self._prd_text = prd_text
@@ -143,6 +154,10 @@ class Session:
         self._tool_registry = tool_registry
         self._project_slug = project_slug
         self._project_store = project_store
+        self._episodic_writer = episodic_writer
+        self._mind_retriever = mind_retriever
+        self._mind_store = mind_store
+        self._cli_agent_name = cli_agent_name
         self._state: SessionState = SessionState.IDLE
         self._failure_reason: str | None = None
 
@@ -295,6 +310,12 @@ class Session:
                 )
                 history.append({"role": "assistant", "content": yamac_reply})
                 history.append({"role": "user", "content": aggregated})
+                await self._record_episodic_round(
+                    round_index=rounds_completed,
+                    operator_message=yamac_reply,
+                    cli_response=aggregated,
+                    sentinels=["[SELFFORK:SPAWN:"],
+                )
                 rounds_completed += 1
                 is_first_round = False
                 continue
@@ -304,13 +325,21 @@ class Session:
             # tools turn looks like "I'm marking card X done; now please
             # proceed". The tool result is appended to Jr's next user
             # message instead of dispatching to the CLI agent for a round.
-            tool_results = self._handle_tool_calls(
+            tool_outcome = await self._handle_tool_calls(
                 rounds_completed=rounds_completed,
                 reply=yamac_reply,
             )
-            if tool_results is not None:
+            if tool_outcome is not None:
+                rendered_text, raw_calls, raw_results = tool_outcome
                 history.append({"role": "assistant", "content": yamac_reply})
-                history.append({"role": "user", "content": tool_results})
+                history.append({"role": "user", "content": rendered_text})
+                await self._record_episodic_round(
+                    round_index=rounds_completed,
+                    operator_message=yamac_reply,
+                    cli_response=rendered_text,
+                    tool_calls=raw_calls,
+                    tool_results=raw_results,
+                )
                 rounds_completed += 1
                 is_first_round = False
                 continue
@@ -376,25 +405,31 @@ class Session:
 
             history.append({"role": "assistant", "content": yamac_reply})
             history.append({"role": "user", "content": output_text})
+            await self._record_episodic_round(
+                round_index=rounds_completed,
+                operator_message=yamac_reply,
+                cli_response=output_text,
+            )
             rounds_completed += 1
 
         raise SelfForkError(
             f"max_rounds ({max_rounds}) reached without [SELFFORK:DONE] sentinel from SelfFork Jr",
         )
 
-    def _handle_tool_calls(
+    async def _handle_tool_calls(
         self,
         *,
         rounds_completed: int,
         reply: str,
-    ) -> str | None:
-        """Parse Jr's reply for tool calls; invoke them; return aggregated text.
+    ) -> tuple[str, list[ToolCall], list[ToolResult]] | None:
+        """Parse Jr's reply for tool calls; invoke them; return aggregated text + raw calls/results.
 
         Returns ``None`` when no tool calls were found, signalling the
         run loop should fall through to its normal CLI-agent exec path.
-        Returns a non-empty string when at least one call ran — that
-        string is the text appended to Jr's next user message so the
-        LLM can react to the result on the next round.
+        Returns ``(rendered_text, calls, results)`` when at least one call ran —
+        ``rendered_text`` is the text appended to Jr's next user message; the
+        raw lists are forwarded to the Mind T2 hook (when wired) so each
+        tool call becomes a ``pattern`` Note alongside the round observation.
         """
         if self._tool_registry is None:
             return None
@@ -405,6 +440,10 @@ class Session:
             session_id=self._session_id,
             project_slug=self._project_slug,
             project_store=self._project_store,
+            mind_store=self._mind_store,
+            mind_retriever=self._mind_retriever,
+            episodic_writer=self._episodic_writer,
+            cli_agent_name=self._cli_agent_name,
         )
         results: list[ToolResult] = []
         for call in calls:
@@ -417,7 +456,7 @@ class Session:
                     "order": call.order_in_reply,
                 },
             )
-            result = self._tool_registry.invoke(call, ctx)
+            result = await self._tool_registry.invoke_async(call, ctx)
             self._audit.emit(
                 "tool.result",
                 payload={
@@ -429,7 +468,51 @@ class Session:
                 },
             )
             results.append(result)
-        return _format_tool_results(results)
+        return _format_tool_results(results), calls, results
+
+    async def _record_episodic_round(
+        self,
+        *,
+        round_index: int,
+        operator_message: str,
+        cli_response: str,
+        tool_calls: list[ToolCall] | None = None,
+        tool_results: list[ToolResult] | None = None,
+        sentinels: list[str] | None = None,
+    ) -> None:
+        """Mind T2 hook — capture this round as an Episodic note.
+
+        No-op when ``episodic_writer`` is not wired. Failures are logged but
+        never propagated: Mind capture is observability, not a critical path.
+        """
+        if self._episodic_writer is None:
+            return
+        episodic_calls = _convert_tool_calls(tool_calls or [], tool_results or [])
+        try:
+            await self._episodic_writer.write_round(
+                session_id=self._session_id,
+                project_slug=self._project_slug,
+                cli_agent=self._cli_agent_name,
+                round_index=round_index,
+                operator_message=operator_message,
+                cli_response=cli_response,
+                tool_calls=episodic_calls,
+                sentinels=sentinels,
+            )
+            self._audit.emit(
+                "mind.note.write",
+                payload={
+                    "round": round_index,
+                    "tier": "episodic",
+                    "tool_calls": len(episodic_calls),
+                },
+            )
+        except Exception as exc:
+            _log.warning(
+                "episodic_writer_failed",
+                round_index=round_index,
+                error=f"{type(exc).__name__}: {exc}",
+            )
 
     async def _handle_spawn(
         self,
@@ -569,6 +652,30 @@ class Session:
         if is_legal_transition(self._state, SessionState.FAILED):
             self._transition(SessionState.FAILED, reason=reason)
         # else: we're already in COMPLETED or TORN_DOWN — nothing to do.
+
+
+def _convert_tool_calls(
+    calls: list[ToolCall],
+    results: list[ToolResult],
+) -> list[EpisodicToolCall]:
+    """Pair each :class:`ToolCall` with its :class:`ToolResult` for Mind T2.
+
+    The orchestrator's typed ToolCall/ToolResult are pillar-internal; Mind
+    consumes the slim :class:`EpisodicToolCall` snapshot. Order is taken
+    from the ``calls`` list (tool registry guarantees a 1:1 result per call).
+    """
+    out: list[EpisodicToolCall] = []
+    for call, result in zip(calls, results, strict=True):
+        out.append(
+            EpisodicToolCall(
+                tool=call.tool,
+                args=call.args,
+                status=result.status,
+                result_payload=result.payload,
+                error=result.error,
+            ),
+        )
+    return out
 
 
 def _format_tool_results(results: list[ToolResult]) -> str:

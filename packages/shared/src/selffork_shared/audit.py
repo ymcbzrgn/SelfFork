@@ -45,6 +45,11 @@ AuditCategory = Literal[
     "tool.call",  # Jr emitted a <selffork-tool-call> block; we're invoking it
     "tool.result",  # corresponding result returned to Jr's next round
     "selffork_jr.reply",  # SelfFork Jr's chat completion output for one round
+    "mind.note.write",  # Mind T2 EpisodicWriter or `selffork mind` CLI wrote a Note
+    "mind.note.supersede",  # Mind decision superseded (bi-temporal validity stamped)
+    "mind.recall.query",  # Mind HybridRetriever ran a query
+    "mind.compact.run",  # Mind compaction layer (L1-L4) executed
+    "mind.projection.write",  # Mind plain-md projection written to disk
     "plan.load",
     "plan.save",
     "plan.update",

@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from selffork_mind.projections.provenance import ProvenanceRecorder
 from selffork_orchestrator.dashboard.audit_reader import (
     list_recent_sessions,
     read_session_events,
@@ -40,6 +41,7 @@ from selffork_orchestrator.dashboard.schemas import (
     PlanSnapshot,
     ProjectCreatePayload,
     ProjectResponse,
+    ProvenanceEntryResponse,
     RecentSession,
     RunRequestPayload,
     RunRequestResponse,
@@ -583,6 +585,29 @@ def _register_api_routes(app: FastAPI, config: DashboardConfig) -> None:
 
         return await anyio.to_thread.run_sync(_aggregate)
 
+    # ── Mind provenance — Order 5 §8 (ChatGPT Memory Sources pattern) ─────
+
+    @app.get(
+        "/api/projects/{slug}/mind/provenance",
+        response_model=list[ProvenanceEntryResponse],
+    )
+    async def get_project_mind_provenance(
+        slug: str,
+        limit: int = 100,
+    ) -> list[ProvenanceEntryResponse]:
+        log_path = config.projects_root / slug / "mind" / "provenance.jsonl"
+        return await anyio.to_thread.run_sync(_load_provenance, log_path, limit)
+
+    @app.get(
+        "/api/mind/provenance",
+        response_model=list[ProvenanceEntryResponse],
+    )
+    async def get_orphan_mind_provenance(
+        limit: int = 100,
+    ) -> list[ProvenanceEntryResponse]:
+        log_path = config.audit_dir.parent / "mind" / "provenance.jsonl"
+        return await anyio.to_thread.run_sync(_load_provenance, log_path, limit)
+
     @app.websocket("/api/sessions/{session_id}/stream")
     async def stream(websocket: WebSocket, session_id: str) -> None:
         await websocket.accept()
@@ -761,3 +786,35 @@ def _validate_column(name: str) -> KanbanColumn:
             f"invalid column {name!r}; expected one of {list(DEFAULT_COLUMNS)}",
         )
     return name
+
+
+def _load_provenance(
+    log_path: Path,
+    limit: int,
+) -> list[ProvenanceEntryResponse]:
+    """Read the project's provenance JSONL → response shape.
+
+    Returns the most-recent ``limit`` entries (file order is append-only,
+    so we slice the tail). Missing file → empty list (no error). Order
+    5 §8 — ChatGPT Memory Sources pattern.
+    """
+    if not log_path.is_file():
+        return []
+    recorder = ProvenanceRecorder(log_path=log_path)
+    entries = recorder.read_all()
+    if limit > 0:
+        entries = entries[-limit:]
+    return [
+        ProvenanceEntryResponse(
+            ts=entry.ts,
+            correlation_id=entry.correlation_id,
+            session_id=entry.session_id,
+            project_slug=entry.project_slug,
+            query=entry.query,
+            note_ids=[str(nid) for nid in entry.note_ids],
+            scores=list(entry.scores),
+            retriever=entry.retriever,
+            reranker=entry.reranker,
+        )
+        for entry in entries
+    ]

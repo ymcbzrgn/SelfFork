@@ -28,9 +28,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from selffork_orchestrator.dashboard.audit_reader import _infer_cli_from_binary
 from selffork_orchestrator.resume.store import ScheduledResumeStore
 from selffork_orchestrator.usage.model import ProviderName, ProviderUsage
+from selffork_shared.audit_reader import infer_cli_from_binary
 from selffork_shared.logging import get_logger
 
 __all__ = ["UsageAggregator", "UsageAggregatorConfig"]
@@ -224,11 +224,11 @@ def _parse_iso(raw: object) -> datetime | None:
 def _cli_from_invoke(payload: dict[str, object]) -> ProviderName | None:
     binary = payload.get("binary")
     if isinstance(binary, str):
-        name = _infer_cli_from_binary(binary)
+        name = infer_cli_from_binary(binary)
         return _validate_cli_name(name)
     cmd = payload.get("command")
     if isinstance(cmd, list) and cmd and isinstance(cmd[0], str):
-        return _validate_cli_name(_infer_cli_from_binary(cmd[0]))
+        return _validate_cli_name(infer_cli_from_binary(cmd[0]))
     return None
 
 

@@ -8,6 +8,7 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "Yamaç Bezirgan" }]
 dependencies = [
     "selffork-shared",
+    "selffork-mind",
     "pydantic>=2.9.0",
     "pydantic-settings>=2.5.0",
     "structlog>=24.4.0",
@@ -33,3 +34,4 @@ packages = ["src/selffork_orchestrator"]
 
 [tool.uv.sources]
 selffork-shared = { workspace = true }
+selffork-mind = { workspace = true }

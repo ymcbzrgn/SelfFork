@@ -1,12 +1,82 @@
 [project]
 name = "selffork-mind"
 version = "0.0.1"
-description = "Mind pillar — persistent memory, RAG/GraphRAG, deterministic compaction, historian. Skeleton only in MVP v0; implementation lands in M2."
+description = "Mind pillar — six-tier cognitive memory (working/episodic/semantic-graph/procedural/reflection/recall), pluggable storage (DuckDB+LanceDB+Kuzu), pluggable embedders (BGE-M3/OpenAI/Gemini/Jina/Ollama/Gemma) + rerankers (BGE/Jina/Cohere/Voyage), HippoRAG 2 multi-hop, Graphiti bi-temporal facts, deterministic compaction with Ebbinghaus forgetting curve, plain-markdown projection, provenance traces, multi-axis eval suite. Per ADR-002."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
-authors = [{ name = "Yamaç Bezirgan" }]
-dependencies = []
+authors = [{ name = "SelfFork contributors" }]
+keywords = [
+    "memory",
+    "graphrag",
+    "agent-memory",
+    "long-term-memory",
+    "knowledge-graph",
+    "rag",
+    "rerank",
+    "hipporag",
+    "graphiti",
+    "complementary-learning-systems",
+    "duckdb",
+    "lancedb",
+    "kuzu",
+    "bge-m3",
+    "jina",
+    "gemini",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "selffork-shared",
+    "pydantic>=2.9.0",
+    "duckdb>=1.0.0",
+    "numpy>=1.26.0",
+    "structlog>=24.4.0",
+    "anyio>=4.4.0",
+    "httpx>=0.27.0",
+    "pytz>=2024.1",
+    "rank-bm25>=0.2.2",
+]
+
+[project.optional-dependencies]
+# ── Graph backend (Order 4) ────────────────────────────────────────────────
+# Kuzu embedded graph store (MIT, Graphiti-compatible). Optional because
+# the default DuckDB store covers vector + lexical retrieval; install only
+# when the operator wants T3 Semantic Graph (HippoRAG 2 PPR + Graphiti
+# bi-temporal facts).
+graph-kuzu = ["kuzu>=0.6.0"]
+
+# ── Embedders ──────────────────────────────────────────────────────────────
+# Default embedder (BGE-M3, multilingual incl. Turkish, MIT, dense+sparse+ColBERT).
+embedders-bge = ["sentence-transformers>=3.0.0"]
+embedders-openai = ["openai>=1.50.0"]
+embedders-gemini = ["google-generativeai>=0.8.0"]
+# embedders-jina + embedders-ollama use httpx (already core); no extra install.
+# embedders-gemma uses the Reflex-served local mlx-server (no extra dep).
+
+# ── Rerankers ──────────────────────────────────────────────────────────────
+# Default reranker (BGE-reranker-v2-m3, multilingual, MIT, cross-encoder).
+rerankers-bge = ["sentence-transformers>=3.0.0"]
+rerankers-cohere = ["cohere>=5.0.0"]
+rerankers-voyage = ["voyageai>=0.2.0"]
+# rerankers-jina uses httpx (already core); no extra install.
+
+# ── Convenience bundle ─────────────────────────────────────────────────────
+all = [
+    "selffork-mind[embedders-bge]",
+    "selffork-mind[embedders-openai]",
+    "selffork-mind[embedders-gemini]",
+    "selffork-mind[rerankers-bge]",
+    "selffork-mind[rerankers-cohere]",
+    "selffork-mind[rerankers-voyage]",
+]
+
+# Order 4 (T3 Semantic Graph) will add LanceDB + Kuzu under separate extras.
 
 [build-system]
 requires = ["hatchling>=1.25"]
@@ -14,3 +84,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/selffork_mind"]
+
+[tool.uv.sources]
+selffork-shared = { workspace = true }

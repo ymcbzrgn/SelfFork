@@ -17,18 +17,24 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { RelativeAge } from "@/components/format";
 import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
-import { type KanbanCardResponse } from "@/lib/api";
+import {
+  type KanbanCardResponse,
+  type ProvenanceEntry,
+  listOrphanProvenance,
+  listProjectProvenance,
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 type Tab = "overview" | "logs" | "tools" | "settings";
 
 interface CardDetailPanelProps {
   card: KanbanCardResponse | null;
+  projectSlug: string | null;
   onClose: () => void;
   onDelete: (cardId: string) => Promise<void> | void;
 }
 
-export function CardDetailPanel({ card, onClose, onDelete }: CardDetailPanelProps) {
+export function CardDetailPanel({ card, projectSlug, onClose, onDelete }: CardDetailPanelProps) {
   const [tab, setTab] = useState<Tab>("overview");
   const open = card !== null;
 
@@ -108,7 +114,7 @@ export function CardDetailPanel({ card, onClose, onDelete }: CardDetailPanelProp
 
             <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
               {tab === "overview" && <OverviewTab card={card} />}
-              {tab === "logs" && <LogsTab />}
+              {tab === "logs" && <LogsTab projectSlug={projectSlug} />}
               {tab === "tools" && <ToolsTab />}
               {tab === "settings" && <SettingsTab card={card} onDelete={onDelete} />}
             </div>
@@ -232,20 +238,97 @@ function OverviewTab({ card }: { card: KanbanCardResponse }) {
   );
 }
 
-function LogsTab() {
+function LogsTab({ projectSlug }: { projectSlug: string | null }) {
+  const [entries, setEntries] = useState<ProvenanceEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetcher = projectSlug
+      ? listProjectProvenance(projectSlug, 50)
+      : listOrphanProvenance(50);
+    fetcher
+      .then((rows) => {
+        if (!cancelled) setEntries(rows);
+      })
+      .catch((exc: unknown) => {
+        if (!cancelled) {
+          setError(exc instanceof Error ? exc.message : String(exc));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectSlug]);
+
+  if (error) {
+    return (
+      <Empty>
+        <EmptyHeader>
+          <EmptyMedia>
+            <Activity className="h-5 w-5" />
+          </EmptyMedia>
+          <EmptyTitle>Couldn&apos;t load Sources</EmptyTitle>
+          <EmptyDescription>{error}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    );
+  }
+
+  if (entries === null) {
+    return (
+      <p className="text-sm text-muted-foreground">Loading Sources…</p>
+    );
+  }
+
+  if (entries.length === 0) {
+    return (
+      <Empty>
+        <EmptyHeader>
+          <EmptyMedia>
+            <Activity className="h-5 w-5" />
+          </EmptyMedia>
+          <EmptyTitle>No Mind queries yet</EmptyTitle>
+          <EmptyDescription>
+            Once SelfFork Jr or the operator runs{" "}
+            <code className="font-mono">selffork mind recall</code>, the
+            queries that fed this project surface here. Each row shows
+            the query, the retriever path that ran, and the note ids
+            that contributed to the answer (ChatGPT Memory Sources
+            pattern).
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    );
+  }
+
   return (
-    <Empty>
-      <EmptyHeader>
-        <EmptyMedia>
-          <Activity className="h-5 w-5" />
-        </EmptyMedia>
-        <EmptyTitle>No logs yet</EmptyTitle>
-        <EmptyDescription>
-          Audit events that touch this card will surface here once the
-          backend filter ships.
-        </EmptyDescription>
-      </EmptyHeader>
-    </Empty>
+    <ul className="flex flex-col gap-3">
+      {entries
+        .slice()
+        .reverse()
+        .map((entry, idx) => (
+          <li
+            key={`${entry.correlation_id}-${idx}`}
+            className="rounded border border-border bg-card p-3 text-sm"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-xs text-muted-foreground">
+                {new Date(entry.ts).toLocaleString()}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {entry.retriever}
+                {entry.reranker ? ` + ${entry.reranker}` : ""}
+              </span>
+            </div>
+            <p className="mt-1 font-medium">{entry.query}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {entry.note_ids.length} note(s) ·{" "}
+              session <span className="font-mono">{entry.session_id}</span>
+            </p>
+          </li>
+        ))}
+    </ul>
   );
 }
 

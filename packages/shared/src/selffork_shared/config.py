@@ -36,6 +36,7 @@ __all__ = [
     "CLIAgentConfig",
     "LifecycleConfig",
     "LoggingConfig",
+    "MindConfig",
     "PlanConfig",
     "RuntimeConfig",
     "SandboxConfig",
@@ -136,6 +137,28 @@ class AuditConfig(_StrictModel):
     redact_secrets: bool = True
 
 
+class MindConfig(_StrictModel):
+    """Mind pillar (Pillar 3) configuration.
+
+    Per ADR-002: pluggable storage + embedder + reranker, plain-md
+    projection, provenance recorder. Order 2 ships DuckDB + per-project
+    layout under ``~/.selffork/mind`` (or ``~/.selffork/projects/<slug>/mind``
+    when scoped to a project).
+    """
+
+    enabled: bool = True
+    storage_root: str = "~/.selffork/mind"
+    embedder: Literal["bge-m3", "openai", "gemini", "jina", "ollama", "gemma", "none"] = "none"
+    """``none`` skips embedding (BM25-only retrieval) — Order 2 default until
+    the operator opts into a backend (BGE-M3 model download is non-trivial)."""
+    reranker: Literal["bge-rerank-v2-m3", "jina", "cohere", "voyage", "none"] = "none"
+    top_k: int = Field(default=10, ge=1, le=200)
+    rerank_overfetch: int = Field(default=4, ge=1, le=10)
+    threshold: float = Field(default=0.0, ge=0.0, le=1.0)
+    projection_root: str = "~/.selffork/mind/markdown"
+    provenance_path: str = "~/.selffork/mind/provenance.jsonl"
+
+
 class SelfForkSettings(BaseSettings):
     """Top-level SelfFork settings.
 
@@ -150,6 +173,7 @@ class SelfForkSettings(BaseSettings):
     lifecycle: LifecycleConfig = Field(default_factory=LifecycleConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     audit: AuditConfig = Field(default_factory=AuditConfig)
+    mind: MindConfig = Field(default_factory=MindConfig)
 
     model_config = SettingsConfigDict(
         env_prefix="SELFFORK_",

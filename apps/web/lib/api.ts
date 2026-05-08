@@ -280,4 +280,29 @@ export function openKanbanStream(slug: string): WebSocket {
   return new WebSocket(`${wsBase}/api/projects/${slug}/kanban/stream`);
 }
 
+export interface ProvenanceEntry {
+  ts: string;
+  correlation_id: string;
+  session_id: string;
+  project_slug: string | null;
+  query: string;
+  note_ids: string[];
+  scores: number[];
+  retriever: string;
+  reranker: string | null;
+}
+
+export function listProjectProvenance(
+  slug: string,
+  limit = 100,
+): Promise<ProvenanceEntry[]> {
+  return request<ProvenanceEntry[]>(
+    `/api/projects/${slug}/mind/provenance?limit=${limit}`,
+  );
+}
+
+export function listOrphanProvenance(limit = 100): Promise<ProvenanceEntry[]> {
+  return request<ProvenanceEntry[]>(`/api/mind/provenance?limit=${limit}`);
+}
+
 export { ApiError };

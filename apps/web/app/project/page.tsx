@@ -258,6 +258,7 @@ function ProjectBody({ slug }: { slug: string }) {
       />
       <CardDetailPanel
         card={selectedCard}
+        projectSlug={slug}
         onClose={() => setSelectedCardId(null)}
         onDelete={onDelete}
       />

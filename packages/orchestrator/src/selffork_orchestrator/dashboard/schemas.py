@@ -25,6 +25,7 @@ __all__ = [
     "PlanSnapshot",
     "ProjectCreatePayload",
     "ProjectResponse",
+    "ProvenanceEntryResponse",
     "RecentSession",
     "RunRequestPayload",
     "RunRequestResponse",
@@ -173,6 +174,27 @@ class CardUpdatePayload(BaseModel):
     title: str | None = None
     body: str | None = None
     order: int | None = None
+
+
+class ProvenanceEntryResponse(_StrictResponse):
+    """One row in ``GET /api/projects/<slug>/mind/provenance``.
+
+    Source-of-truth: ``~/.selffork/projects/<slug>/mind/provenance.jsonl``
+    (or ``~/.selffork/mind/provenance.jsonl`` for orphan sessions).
+    Mirrors :class:`selffork_mind.projections.provenance.ProvenanceEntry`
+    flat-shaped so the dashboard's "Sources" surface (CardDetailPanel
+    Logs tab) can render without joining.
+    """
+
+    ts: datetime
+    correlation_id: str
+    session_id: str
+    project_slug: str | None
+    query: str
+    note_ids: list[str]
+    scores: list[float]
+    retriever: str
+    reranker: str | None
 
 
 class RunRequestResponse(_StrictResponse):
