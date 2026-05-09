@@ -20,7 +20,7 @@ pluggable interface day 1, eval coverage day 1, plain-md projection day 1.
 | 6 | Cross-CLI Context Handoff | HandoffBundle Pydantic + Store (Letta `.af` esinli) | ✅ |
 | 7 | Minimax mmx-cli | MinimaxCliAgent + detector + snapper (Token Plan) | ✅ |
 | 8 | Z.AI / GLM | ZaiSnapper (opencode-routed, OAuth-only) | ✅ |
-| 9 | E2E + Polish | Integration tests + ADR + cli.py wire (kısmi) | ⏳ |
+| 9 | E2E + Polish | Integration tests + ADR + cli.py wire + audit-fix (12) + close-out (7) | ✅ |
 
 ## Mimari kararlar
 
@@ -103,14 +103,31 @@ Operator directive (memory: `feedback_infra_before_finetune`):
 Aynı 11-tool surface M3-M6 (base model + explicit playbook) ve M7+ (adapter
 + minimal prompt) dönemlerinde — sadece system prompt swap.
 
-## Sınırlamalar / kalan iş (Order 9'a iter)
+## Sınırlamalar / kalan iş
 
-- `cli.py` round-loop driver henüz autopilot tool sinyallerini consume etmiyor
-- PTB v22.7 implementation (Telegram bridge gerçek HTTP)
-- Z.AI `/v1/usage` HTTP probe (ZaiSnapper full implementation)
-- Minimax Token Plan `/v1/token_plan/remains` HTTP probe (MinimaxSnapper)
-- Mind compaction integration (autopilot `compact_context` → real compactor)
-- Linux/Windows scheduler (launchd alternatifi)
+**Order 9 close-out tamamlandı (2026-05-09 16:30 GMT+3):**
+
+- ✅ `cli.py` round-loop wire — Session constructor `proactive_reader`/`launchd_scheduler`/`resume_store`/`telegram_bridge` parametreleri + `SnapperRunner` background anyio task (T17)
+- ✅ PTB v22.7 concrete `PtbTelegramBridge` — `SELFFORK_TELEGRAM_BOT_TOKEN` env-aware factory + Null fallback (T18)
+- ✅ Z.AI `/v1/usage` HTTP probe — `ZaiSnapper` httpx + `rate_limit_5h`/`rate_limit_daily` projection (T15)
+- ✅ Minimax Token Plan `/v1/token_plan/remains` HTTP probe — `MinimaxSnapper` httpx + Bearer OAuth (T16)
+- ✅ `mark_done` sentinel propagation — Jr autopilot `mark_done` tool çağrısı round-loop'u DONE'a çeker (T13)
+- ✅ Audit attribution — `mmx` binary → `minimax-cli` mapping (audit_reader + aggregator, T1 audit-fix)
+- ✅ `rotate_to(zai)` reject — snapper-only provider'lar rotate target olamaz (T2 audit-fix)
+- ✅ HandoffBundle path-traversal guard + `env_whitelist` secret denylist + dead validator removal (T3+T4+T10 audit-fix)
+- ✅ launchd Year-recur orphan + `sleep_until` empty-prd_path crash (T7+T8 audit-fix)
+- ✅ Codex/Claude context-token sum'ı + cached double-count (T5+T6 audit-fix)
+- ✅ ADR brand violation (T11 audit-fix)
+- ✅ codex_detector auth false-positive tighten (T12 audit-fix)
+- ✅ Empty-windows snapshot → `available_clis` `auth_only` status (T9 audit-fix)
+
+**M4+ scope'a iter (intentional defer):**
+
+- Mind compaction integration — `compact_context` tool gerçek compactor çağrısı için `MindStore.list_recent` API gerek (Mind paketinde yeni method); şimdilik intent-record stub
+- Telegram inbound command handling — `/cancel`, `/p <slug> <msg>` yönü; outbound notify v22.7'de canlı
+- Linux/Windows scheduler — `LaunchdScheduler` alternatifi (systemd user timer + Windows Task Scheduler); macOS-only günümüzde
+- mmx CLI surface manuel verify — Yamaç laptop'una `npm i -g @minimaxai/cli` + `mmx --help` çıktısıyla `chat -p` flag'leri doğrulanmalı (Order 7 audit MEDIUM-confidence iddiaları)
+- Codex CLI surface manuel verify — `codex exec --resume-last` flag doğrulaması (Order 2 audit CRITICAL-confidence-MEDIUM iddiası)
 
 ## Eski karar (varsa)
 
@@ -128,12 +145,20 @@ ADR-002 Mind 6-tier mimarisi korunur — autopilot Mind'a `mind_recall` /
 
 ## Kabul kriterleri (M3 done)
 
-- [x] 9 order test coverage (719+ test M3 öncesi → 770+ M3 sonu beklenen)
+- [x] 9 order test coverage (619 baseline → 752 final, +133 yeni test)
 - [x] Cross-pillar e2e integration test (`test_m3_e2e_integration.py`)
 - [x] ADR yazıldı (bu dosya)
-- [ ] cli.py round-loop integration (Order 9 sonrası)
-- [ ] Operator manual run smoke test (Order 9 sonrası)
-- [ ] PTB v22.7 + ntfy fallback wiring (Order 9 sonrası)
+- [x] cli.py round-loop integration (T17 — Session + SnapperRunner + ToolContext wire)
+- [x] PTB v22.7 wiring (T18 — env-token-aware factory; ntfy fallback M4'e iter)
+- [x] 12 audit-fix CRITICAL/HIGH bulgu kapatıldı (9 audit-god ajanı raporları)
+- [x] Order 9 close-out (T13-T19: 7 sub-task)
+- [ ] Operator manual run smoke test — Yamaç tarafında PRD ile ilk gerçek koşu
+
+## Final test/lint durumu (2026-05-09 16:30 GMT+3)
+
+- **752 test pass** (orchestrator: 752 + mind: 292 + shared: 91 = repo-wide 1135)
+- **ruff** — All checks passed (production code temiz)
+- **mypy strict** — 99 source file, no issues
 
 ## Sonraki M3 işleri (Order 9 close-out)
 

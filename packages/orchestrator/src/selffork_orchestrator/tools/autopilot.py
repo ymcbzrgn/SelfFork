@@ -199,14 +199,28 @@ def _compact_context_handler(
     ctx: ToolContext,
     args: _CompactContextArgs,
 ) -> dict[str, Any]:
-    # Compaction implementation lives in selffork_mind (LLMSummaryCompactor,
-    # RecencyCompactor, ClusterCompactor). The tool just emits the request;
-    # the orchestrator's round loop or a sidecar runs the actual compactor.
+    # Compaction strategies live in :mod:`selffork_mind.compaction`
+    # (RecencyDecayCompactor, MedoidClusterCompactor, LLMSummaryCompactor)
+    # and need a tier-scoped "recent N notes" pull from MindStore. The
+    # round-loop driver (Order 9 close-out + Mind list_recent API) wires
+    # the actual run; today we record the intent so the M7 fine-tune
+    # dataset captures Jr's compaction decisions.
+    if ctx.mind_store is None:
+        return {
+            "compaction_requested": False,
+            "strategy": args.strategy,
+            "reason": args.reason,
+            "session_id": ctx.session_id,
+            "deferred": "mind_store not wired in ToolContext",
+        }
     return {
         "compaction_requested": True,
         "strategy": args.strategy,
         "reason": args.reason,
         "session_id": ctx.session_id,
+        "deferred": (
+            "compactor execution pending MindStore.list_recent + driver wire"
+        ),
     }
 
 

@@ -137,6 +137,10 @@ class Session:
         mind_retriever: HybridRetriever | None = None,
         mind_store: MindStore | None = None,
         cli_agent_name: str | None = None,
+        proactive_reader: object | None = None,
+        launchd_scheduler: object | None = None,
+        resume_store: object | None = None,
+        telegram_bridge: object | None = None,
     ) -> None:
         self._session_id = session_id
         self._prd_text = prd_text
@@ -158,6 +162,13 @@ class Session:
         self._mind_retriever = mind_retriever
         self._mind_store = mind_store
         self._cli_agent_name = cli_agent_name
+        # Jr autopilot subsystem dependencies. All optional — None when
+        # the corresponding subsystem isn't wired (e.g. snappers off,
+        # non-macOS host without launchd, Telegram bridge disabled).
+        self._proactive_reader = proactive_reader
+        self._launchd_scheduler = launchd_scheduler
+        self._resume_store = resume_store
+        self._telegram_bridge = telegram_bridge
         self._state: SessionState = SessionState.IDLE
         self._failure_reason: str | None = None
 
@@ -342,6 +353,21 @@ class Session:
                 )
                 rounds_completed += 1
                 is_first_round = False
+                # Jr autopilot session-end propagation. ``mark_done`` returns
+                # the literal DONE sentinel in its payload; the tool branch
+                # otherwise consumes the reply and ``continue``s past the
+                # text-based ``is_selffork_jr_done`` check above. Without
+                # this hop, a session that ends via mark_done() runs until
+                # max_rounds.
+                if _has_mark_done_ok(raw_calls, raw_results):
+                    self._audit.emit(
+                        "agent.done",
+                        payload={
+                            "reason": "mark_done_tool",
+                            "rounds": rounds_completed,
+                        },
+                    )
+                    return
                 continue
 
             cmd = [
@@ -444,6 +470,9 @@ class Session:
             mind_retriever=self._mind_retriever,
             episodic_writer=self._episodic_writer,
             cli_agent_name=self._cli_agent_name,
+            proactive_reader=self._proactive_reader,
+            launchd_scheduler=self._launchd_scheduler,
+            resume_store=self._resume_store,
         )
         results: list[ToolResult] = []
         for call in calls:
@@ -676,6 +705,21 @@ def _convert_tool_calls(
             ),
         )
     return out
+
+
+def _has_mark_done_ok(
+    calls: list[ToolCall],
+    results: list[ToolResult],
+) -> bool:
+    """True iff one of the parsed tool calls in this round was ``mark_done``
+    AND it executed with status ``ok``. The tool branch otherwise short-
+    circuits past the literal-sentinel check; this lets ``mark_done``
+    actually end the session.
+    """
+    for call, result in zip(calls, results, strict=False):
+        if call.tool == "mark_done" and result.status == "ok":
+            return True
+    return False
 
 
 def _format_tool_results(results: list[ToolResult]) -> str:

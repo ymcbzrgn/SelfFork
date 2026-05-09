@@ -32,6 +32,7 @@ from selffork_orchestrator.telegram.inbox import (
     TelegramInbox,
     default_inbox_path,
 )
+from selffork_orchestrator.telegram.ptb import PtbTelegramBridge
 
 __all__ = [
     "AllowList",
@@ -39,6 +40,7 @@ __all__ = [
     "DeliveryAttempt",
     "NullTelegramBridge",
     "PendingMessage",
+    "PtbTelegramBridge",
     "TelegramBridge",
     "TelegramInbox",
     "TelegramMessage",

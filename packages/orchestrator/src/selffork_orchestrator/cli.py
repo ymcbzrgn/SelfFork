@@ -537,13 +537,40 @@ async def _amain(
     # passed, Jr's kanban_* tools target that project's board; without
     # it, the registry is still attached but tool calls return
     # ``unauthorized`` results (Jr learns it can't kanban an orphan run).
+    import anyio
+
     from selffork_orchestrator.projects.store import ProjectStore as _ProjectStore
+    from selffork_orchestrator.snappers import (
+        SnapperRunner,
+        SnapperRunnerConfig,
+        build_default_snappers,
+    )
     from selffork_orchestrator.tools import build_default_registry
+    from selffork_orchestrator.usage.proactive import ProactiveUsageReader
 
     tool_registry = build_default_registry()
     project_store_for_tools: _ProjectStore | None = None
     if project_slug is not None:
         project_store_for_tools = _ProjectStore(root=projects_root)
+
+    # Jr autopilot subsystem wiring. SnapperRunner spins up a background
+    # task that polls each per-CLI signal source (Claude statusline tee,
+    # Codex rollout JSONL, opencode SQLite, ...) and atomically writes
+    # ``QuotaSnapshot`` files; the autopilot's ``quota_snapshot`` /
+    # ``available_clis`` tools then read those files via
+    # ProactiveUsageReader. LaunchdScheduler + ScheduledResumeStore back
+    # the ``sleep_until`` tool. Telegram defaults to Null (Order 9 will
+    # opt-in PTB v22.7 when the operator sets a bot token).
+    proactive_reader = ProactiveUsageReader()
+    resume_store_for_tools = ScheduledResumeStore(root=_resolve_resume_dir())
+    launchd_scheduler_for_tools = LaunchdScheduler() if is_macos() else None
+    # Returns a TelegramBridge subclass at runtime; declared `object` in
+    # the helper signature so the telegram package import can stay lazy.
+    telegram_bridge_for_tools = _build_telegram_bridge()
+    snapper_runner = SnapperRunner(
+        snappers=build_default_snappers(),
+        config=SnapperRunnerConfig(),
+    )
 
     session = Session(
         session_id=session_id,
@@ -562,9 +589,46 @@ async def _amain(
         tool_registry=tool_registry,
         project_slug=project_slug,
         project_store=project_store_for_tools,
+        proactive_reader=proactive_reader,
+        launchd_scheduler=launchd_scheduler_for_tools,
+        resume_store=resume_store_for_tools,
+        telegram_bridge=telegram_bridge_for_tools,
     )
-    outcome = await session.run()
+    # Run the snapper fleet in parallel with the session; tear it down
+    # when the session returns (regardless of outcome).
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(snapper_runner.serve)
+        try:
+            outcome = await session.run()
+        finally:
+            snapper_runner.stop()
     return outcome, session.failure_reason
+
+
+def _build_telegram_bridge() -> object:
+    """Pick a Telegram bridge based on environment.
+
+    PTB v22.7 (``PtbTelegramBridge``) when ``SELFFORK_TELEGRAM_BOT_TOKEN``
+    is set AND ``~/.selffork/operators.json`` carries at least one
+    chat_id; otherwise :class:`NullTelegramBridge` (safe default,
+    ``notify_telegram`` tool calls record intent in audit only).
+    """
+    from selffork_orchestrator.telegram import (
+        AllowList,
+        NullTelegramBridge,
+        PtbTelegramBridge,
+    )
+
+    token = os.environ.get("SELFFORK_TELEGRAM_BOT_TOKEN", "").strip()
+    if not token:
+        return NullTelegramBridge()
+    allowlist = AllowList.load()
+    if not allowlist.chat_ids:
+        return NullTelegramBridge()
+    try:
+        return PtbTelegramBridge(bot_token=token, allowlist=allowlist)
+    except Exception:
+        return NullTelegramBridge()
 
 
 def _resolve_resume_dir() -> Path:

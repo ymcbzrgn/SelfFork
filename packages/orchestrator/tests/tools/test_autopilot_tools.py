@@ -21,6 +21,7 @@ def _ctx(**overrides: object) -> ToolContext:
         project_slug=overrides.get("project_slug"),  # type: ignore[arg-type]
         project_store=object(),
         cli_agent_name=overrides.get("cli_agent_name", "claude-code"),  # type: ignore[arg-type]
+        mind_store=overrides.get("mind_store"),  # type: ignore[arg-type]
         launchd_scheduler=overrides.get("launchd_scheduler"),  # type: ignore[arg-type]
         resume_store=overrides.get("resume_store"),  # type: ignore[arg-type]
     )
@@ -226,15 +227,28 @@ def test_notify_telegram_returns_placeholder_until_order_5() -> None:
 # ── compact_context ───────────────────────────────────────────────────────────
 
 
-def test_compact_context_default_strategy() -> None:
+def test_compact_context_with_mind_wired_records_intent() -> None:
+    reg = _registry()
+    result = reg.invoke(
+        ToolCall(tool="compact_context", args={}, order_in_reply=0),
+        _ctx(mind_store=object()),
+    )
+    payload = result.payload or {}
+    assert payload["compaction_requested"] is True
+    assert payload["strategy"] == "summary"
+    assert "deferred" in payload  # honest about pending real wire
+
+
+def test_compact_context_without_mind_returns_deferred_false() -> None:
+    """Without mind_store wiring, the tool refuses to claim it ran."""
     reg = _registry()
     result = reg.invoke(
         ToolCall(tool="compact_context", args={}, order_in_reply=0),
         _ctx(),
     )
     payload = result.payload or {}
-    assert payload["compaction_requested"] is True
-    assert payload["strategy"] == "summary"
+    assert payload["compaction_requested"] is False
+    assert "mind_store not wired" in payload["deferred"]
 
 
 def test_compact_context_handoff_strategy() -> None:
@@ -245,7 +259,7 @@ def test_compact_context_handoff_strategy() -> None:
             args={"strategy": "handoff", "reason": "rotating to codex"},
             order_in_reply=0,
         ),
-        _ctx(),
+        _ctx(mind_store=object()),
     )
     payload = result.payload or {}
     assert payload["strategy"] == "handoff"
@@ -260,7 +274,7 @@ def test_compact_context_truncate_strategy() -> None:
             args={"strategy": "truncate"},
             order_in_reply=0,
         ),
-        _ctx(),
+        _ctx(mind_store=object()),
     )
     payload = result.payload or {}
     assert payload["strategy"] == "truncate"
