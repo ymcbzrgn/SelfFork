@@ -88,6 +88,12 @@ class ToolContext:
     mind_retriever: object | None = None  # selffork_mind.rag.HybridRetriever
     episodic_writer: object | None = None  # selffork_mind.memory.tiers.EpisodicWriter
     cli_agent_name: str | None = None
+    # M3 Order 4 — Jr autopilot dependencies. All optional, None when the
+    # corresponding subsystem isn't wired (e.g. snappers off, non-macOS host
+    # without launchd, Telegram bridge pending Order 5).
+    proactive_reader: object | None = None  # selffork_orchestrator.usage.ProactiveUsageReader
+    launchd_scheduler: object | None = None  # selffork_orchestrator.resume.cron.LaunchdScheduler
+    resume_store: object | None = None  # selffork_orchestrator.resume.store.ScheduledResumeStore
 
 
 @dataclass(frozen=True, slots=True)

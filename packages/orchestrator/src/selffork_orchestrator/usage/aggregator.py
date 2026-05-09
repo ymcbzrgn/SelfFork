@@ -42,7 +42,8 @@ _WINDOWS: dict[ProviderName, tuple[str, int]] = {
     "claude-code": ("5h", 5 * 3600),
     "gemini-cli": ("24h", 24 * 3600),
     "opencode": ("1h", 3600),
-    "codex": ("1h", 3600),
+    "codex": ("5h", 5 * 3600),
+    "minimax-cli": ("5h", 5 * 3600),
 }
 
 
@@ -245,4 +246,6 @@ def _validate_cli_name(name: object) -> ProviderName | None:
         return "opencode"
     if name == "codex":
         return "codex"
+    if name == "minimax-cli":
+        return "minimax-cli"
     return None

@@ -8,6 +8,7 @@ from selffork_orchestrator.cli_agent.base import CLIAgent
 from selffork_orchestrator.cli_agent.claude_code import ClaudeCodeAgent
 from selffork_orchestrator.cli_agent.codex import CodexAgent
 from selffork_orchestrator.cli_agent.gemini_cli import GeminiCliAgent
+from selffork_orchestrator.cli_agent.minimax_cli import MinimaxCliAgent
 from selffork_orchestrator.cli_agent.opencode import OpenCodeAgent
 from selffork_shared.config import CLIAgentConfig
 
@@ -18,6 +19,7 @@ _AGENTS: Mapping[str, type[CLIAgent]] = {
     "claude-code": ClaudeCodeAgent,
     "codex": CodexAgent,
     "gemini-cli": GeminiCliAgent,
+    "minimax-cli": MinimaxCliAgent,
 }
 
 

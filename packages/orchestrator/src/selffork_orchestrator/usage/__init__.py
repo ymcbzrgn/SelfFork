@@ -10,8 +10,14 @@ from selffork_orchestrator.usage.aggregator import (
     UsageAggregatorConfig,
 )
 from selffork_orchestrator.usage.model import ProviderName, ProviderUsage
+from selffork_orchestrator.usage.proactive import (
+    ProactiveUsageReader,
+    ProactiveUsageReaderConfig,
+)
 
 __all__ = [
+    "ProactiveUsageReader",
+    "ProactiveUsageReaderConfig",
     "ProviderName",
     "ProviderUsage",
     "UsageAggregator",

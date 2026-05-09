@@ -178,8 +178,8 @@ async def tail_session_events(
 def infer_cli_from_binary(binary_path: str) -> str | None:
     """Map a binary path/name to the canonical CLI agent identifier.
 
-    Recognised: ``opencode``, ``claude``, ``gemini``, ``codex``. Anything
-    else returns ``None`` (no fabrication).
+    Recognised: ``opencode``, ``claude``, ``gemini``, ``codex``, ``mmx``.
+    Anything else returns ``None`` (no fabrication).
     """
     name = binary_path.rsplit("/", 1)[-1].lower()
     if name == "opencode":
@@ -190,6 +190,8 @@ def infer_cli_from_binary(binary_path: str) -> str | None:
         return "gemini-cli"
     if name == "codex":
         return "codex"
+    if name == "mmx":
+        return "minimax-cli"
     return None
 
 

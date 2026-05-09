@@ -6,6 +6,7 @@ default-tool catalog.
 
 from __future__ import annotations
 
+from selffork_orchestrator.tools.autopilot import build_autopilot_tools
 from selffork_orchestrator.tools.base import (
     ToolArgs,
     ToolCall,
@@ -18,11 +19,25 @@ from selffork_orchestrator.tools.base import (
 from selffork_orchestrator.tools.kanban import build_kanban_tools
 from selffork_orchestrator.tools.mind import build_mind_tools
 from selffork_orchestrator.tools.parser import parse_tool_calls
+from selffork_orchestrator.tools.quota import build_quota_tools
+from selffork_orchestrator.tools.session import build_session_tools
 
 
 def build_default_registry() -> ToolRegistry:
-    """The canonical registry — every tool the orchestrator wires by default."""
-    return ToolRegistry(specs=[*build_kanban_tools(), *build_mind_tools()])
+    """The canonical registry — every tool the orchestrator wires by default.
+
+    Kanban + Mind from MVP; M3 Order 4 adds the Jr autopilot fleet (quota
+    observation + session lifecycle + act tools).
+    """
+    return ToolRegistry(
+        specs=[
+            *build_kanban_tools(),
+            *build_mind_tools(),
+            *build_quota_tools(),
+            *build_session_tools(),
+            *build_autopilot_tools(),
+        ],
+    )
 
 
 __all__ = [
@@ -32,9 +47,12 @@ __all__ = [
     "ToolRegistry",
     "ToolResult",
     "ToolSpec",
+    "build_autopilot_tools",
     "build_default_registry",
     "build_kanban_tools",
     "build_mind_tools",
+    "build_quota_tools",
+    "build_session_tools",
     "parse_tool_calls",
     "raise_unauthorized",
 ]

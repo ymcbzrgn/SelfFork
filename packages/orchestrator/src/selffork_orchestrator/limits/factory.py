@@ -10,7 +10,9 @@ from collections.abc import Mapping
 
 from selffork_orchestrator.limits.base import LimitDetector
 from selffork_orchestrator.limits.claude_detector import ClaudeRateLimitDetector
+from selffork_orchestrator.limits.codex_detector import CodexRateLimitDetector
 from selffork_orchestrator.limits.gemini_detector import GeminiRateLimitDetector
+from selffork_orchestrator.limits.minimax_detector import MinimaxRateLimitDetector
 from selffork_orchestrator.limits.opencode_detector import OpenCodeRateLimitDetector
 
 __all__ = ["build_limit_detector"]
@@ -18,9 +20,9 @@ __all__ = ["build_limit_detector"]
 _DETECTORS: Mapping[str, type[LimitDetector]] = {
     "opencode": OpenCodeRateLimitDetector,
     "claude-code": ClaudeRateLimitDetector,
+    "codex": CodexRateLimitDetector,
     "gemini-cli": GeminiRateLimitDetector,
-    # codex is still a stubbed CLI agent (M2-M3); when it ships, give it
-    # its own detector here.
+    "minimax-cli": MinimaxRateLimitDetector,
 }
 
 

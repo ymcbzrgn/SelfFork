@@ -5,8 +5,10 @@ from __future__ import annotations
 import pytest
 
 from selffork_orchestrator.limits.claude_detector import ClaudeRateLimitDetector
+from selffork_orchestrator.limits.codex_detector import CodexRateLimitDetector
 from selffork_orchestrator.limits.factory import build_limit_detector
 from selffork_orchestrator.limits.gemini_detector import GeminiRateLimitDetector
+from selffork_orchestrator.limits.minimax_detector import MinimaxRateLimitDetector
 from selffork_orchestrator.limits.opencode_detector import OpenCodeRateLimitDetector
 
 
@@ -18,13 +20,21 @@ def test_claude_code_resolves() -> None:
     assert isinstance(build_limit_detector("claude-code"), ClaudeRateLimitDetector)
 
 
+def test_codex_resolves() -> None:
+    assert isinstance(build_limit_detector("codex"), CodexRateLimitDetector)
+
+
 def test_gemini_cli_resolves() -> None:
     assert isinstance(build_limit_detector("gemini-cli"), GeminiRateLimitDetector)
 
 
+def test_minimax_cli_resolves() -> None:
+    assert isinstance(build_limit_detector("minimax-cli"), MinimaxRateLimitDetector)
+
+
 def test_unknown_agent_raises() -> None:
-    with pytest.raises(ValueError, match="codex"):
-        build_limit_detector("codex")
+    with pytest.raises(ValueError, match="nonexistent-cli"):
+        build_limit_detector("nonexistent-cli")
 
 
 def test_returns_fresh_instance_each_call() -> None:

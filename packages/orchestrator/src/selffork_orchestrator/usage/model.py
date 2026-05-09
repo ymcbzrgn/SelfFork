@@ -17,7 +17,9 @@ __all__ = ["ProviderName", "ProviderUsage"]
 
 # Names match the CLIAgentConfig.agent literal values + the binary-
 # inferred names used by audit_reader._infer_cli_from_binary.
-ProviderName = Literal["claude-code", "gemini-cli", "opencode", "codex"]
+ProviderName = Literal[
+    "claude-code", "gemini-cli", "opencode", "codex", "minimax-cli",
+]
 
 
 class ProviderUsage(BaseModel):

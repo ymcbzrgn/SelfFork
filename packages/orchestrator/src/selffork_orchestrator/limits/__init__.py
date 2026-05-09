@@ -1,7 +1,7 @@
 """Subscription rate-limit detection — per-CLI detectors + scheduling.
 
-Each CLI agent (``claude``, ``gemini``, ``opencode``) has known quota
-signals; the matching :class:`LimitDetector` parses them out of the
+Each CLI agent (``claude``, ``codex``, ``gemini``, ``opencode``) has known
+quota signals; the matching :class:`LimitDetector` parses them out of the
 captured exec output and returns a :class:`LimitVerdict`. The
 orchestrator persists ``RateLimited`` verdicts as scheduled-resume
 records so a daemon (``selffork resume watch``) can reopen the session
@@ -20,16 +20,20 @@ from selffork_orchestrator.limits.base import (
     RateLimited,
 )
 from selffork_orchestrator.limits.claude_detector import ClaudeRateLimitDetector
+from selffork_orchestrator.limits.codex_detector import CodexRateLimitDetector
 from selffork_orchestrator.limits.factory import build_limit_detector
 from selffork_orchestrator.limits.gemini_detector import GeminiRateLimitDetector
+from selffork_orchestrator.limits.minimax_detector import MinimaxRateLimitDetector
 from selffork_orchestrator.limits.opencode_detector import OpenCodeRateLimitDetector
 
 __all__ = [
     "AuthRequired",
     "ClaudeRateLimitDetector",
+    "CodexRateLimitDetector",
     "GeminiRateLimitDetector",
     "LimitDetector",
     "LimitVerdict",
+    "MinimaxRateLimitDetector",
     "NoLimit",
     "OpenCodeRateLimitDetector",
     "RateLimited",

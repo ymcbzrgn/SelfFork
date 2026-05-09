@@ -11,6 +11,7 @@ See: ``docs/decisions/ADR-001_MVP_v0.md`` §17 step 8.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import re
 import shlex
@@ -31,6 +32,11 @@ from selffork_orchestrator.lifecycle.states import SessionState
 from selffork_orchestrator.limits.base import RateLimited
 from selffork_orchestrator.limits.factory import build_limit_detector
 from selffork_orchestrator.plan.factory import build_plan_store
+from selffork_orchestrator.resume.cron import (
+    LaunchdScheduler,
+    LaunchdSchedulerError,
+    is_macos,
+)
 from selffork_orchestrator.resume.store import ScheduledResume, ScheduledResumeStore
 from selffork_orchestrator.runtime.factory import build_runtime
 from selffork_orchestrator.runtime.mlx_server import MlxServerRuntime
@@ -938,6 +944,16 @@ def _resume_one(record: ScheduledResume) -> int:
         last_round_path = _resolve_resume_dir() / f"{record.session_id}.last_round.txt"
         if last_round_path.is_file():
             last_round_path.unlink()
+        # Self-uninstall the launchd plist (if any). launchd's
+        # StartCalendarInterval has no Year field — without this cleanup the
+        # job would re-fire monthly on the same day/time, producing orphan
+        # ``selffork resume now <sid>`` invocations after the session
+        # already completed. Linux/non-macOS hosts have no plist; skip.
+        # Best-effort: orphan plist is annoying but not destructive since
+        # the underlying ScheduledResume record is gone.
+        if is_macos():
+            with contextlib.suppress(LaunchdSchedulerError, OSError):
+                LaunchdScheduler().uninstall(record.session_id)
     return proc.returncode
 
 
