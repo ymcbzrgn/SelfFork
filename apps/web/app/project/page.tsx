@@ -25,7 +25,7 @@ import {
 } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowLeft, FileText, Folder, GripVertical, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, FileText, Folder, GripVertical, Loader2, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
@@ -566,7 +566,7 @@ function AddCardForm({
           Cancel
         </button>
         <Button size="sm" type="submit" disabled={busy}>
-          <Plus className="h-3 w-3" />
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
           {busy ? "Adding…" : "Add"}
         </Button>
       </div>
@@ -682,7 +682,8 @@ function KanbanCardSurface({
               onDelete();
             }}
             title="Delete card"
-            className="opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive"
+            aria-label="Delete card"
+            className="opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-destructive rounded-sm"
           >
             <Trash2 className="h-3 w-3" />
           </button>
