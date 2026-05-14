@@ -1,4 +1,5 @@
 """Tests for :class:`SnapperRunner` lifecycle."""
+
 from __future__ import annotations
 
 import json

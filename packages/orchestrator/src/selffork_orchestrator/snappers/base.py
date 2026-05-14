@@ -11,6 +11,7 @@ between write-and-replace is paranoid but cheap; SnapperRunner runs at 1 Hz, so
 the syscall cost is negligible compared to the cost of a torn read corrupting
 :class:`UsageAggregator` proactive cache.
 """
+
 from __future__ import annotations
 
 import contextlib

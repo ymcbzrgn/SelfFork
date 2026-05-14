@@ -8,6 +8,7 @@ Reset semantics: Token Plan primary window is 5h rolling (per ARGE
 2026-05-09 + Verdent guide); we fall back to ``now + 5h`` when no
 explicit retry hint is present in the error envelope.
 """
+
 from __future__ import annotations
 
 import re
@@ -84,8 +85,7 @@ class MinimaxRateLimitDetector(LimitDetector):
         if _AUTH_RE.search(combined):
             return AuthRequired(
                 reason=(
-                    "mmx CLI reports an auth failure; "
-                    "run `mmx auth login` to re-authenticate."
+                    "mmx CLI reports an auth failure; run `mmx auth login` to re-authenticate."
                 ),
             )
 

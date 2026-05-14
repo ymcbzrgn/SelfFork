@@ -1,4 +1,5 @@
 """Tests for :class:`LaunchdScheduler`."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -108,12 +109,14 @@ def test_render_resolves_executable_via_path(tmp_path: Path) -> None:
 
 def test_render_raises_when_executable_missing(tmp_path: Path) -> None:
     sched = LaunchdScheduler(launch_agents_dir=tmp_path)
-    with patch(
-        "selffork_orchestrator.resume.cron.shutil.which",
-        return_value=None,
+    with (
+        patch(
+            "selffork_orchestrator.resume.cron.shutil.which",
+            return_value=None,
+        ),
+        pytest.raises(LaunchdSchedulerError, match="selffork executable"),
     ):
-        with pytest.raises(LaunchdSchedulerError, match="selffork executable"):
-            sched.render(_record("abc"))
+        sched.render(_record("abc"))
 
 
 # ── install / uninstall ──────────────────────────────────────────────────
@@ -143,12 +146,14 @@ def test_install_raises_when_launchctl_fails(tmp_path: Path) -> None:
         selffork_executable="/usr/local/bin/selffork",
     )
     record = _record("abc")
-    with patch(
-        "selffork_orchestrator.resume.cron.subprocess.run",
-        side_effect=_fail_run("load failed: bad plist"),
+    with (
+        patch(
+            "selffork_orchestrator.resume.cron.subprocess.run",
+            side_effect=_fail_run("load failed: bad plist"),
+        ),
+        pytest.raises(LaunchdSchedulerError, match="load failed"),
     ):
-        with pytest.raises(LaunchdSchedulerError, match="load failed"):
-            sched.install(record)
+        sched.install(record)
     # Plist file IS still on disk — keep it for operator inspection.
     assert sched.plist_path("abc").exists()
 

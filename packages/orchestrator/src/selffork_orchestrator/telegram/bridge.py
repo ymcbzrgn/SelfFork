@@ -7,6 +7,7 @@ installed or Telegram is intentionally disabled — it records intent so
 M3-M6 audit logs (M7 fine-tune dataset) still capture Yamaç-style
 notify decisions.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
