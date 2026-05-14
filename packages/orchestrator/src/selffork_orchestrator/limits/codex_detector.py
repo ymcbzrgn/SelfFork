@@ -19,6 +19,7 @@ We use stderr-priority text regex because:
 Auth detection mirrors ``claude_detector.py``: look for messages telling
 the user to re-login (``codex login``).
 """
+
 from __future__ import annotations
 
 import re
@@ -107,10 +108,7 @@ class CodexRateLimitDetector(LimitDetector):
 
         if _AUTH_RE.search(combined):
             return AuthRequired(
-                reason=(
-                    "codex CLI reports an auth failure; "
-                    "run `codex login` to re-authenticate."
-                ),
+                reason=("codex CLI reports an auth failure; run `codex login` to re-authenticate."),
             )
 
         return NoLimit()

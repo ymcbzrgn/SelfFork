@@ -96,7 +96,11 @@ class CLIAgentConfig(_StrictModel):
     """CLI coding agent adapter configuration."""
 
     agent: Literal[
-        "opencode", "claude-code", "codex", "gemini-cli", "minimax-cli",
+        "opencode",
+        "claude-code",
+        "codex",
+        "gemini-cli",
+        "minimax-cli",
     ] = "opencode"
     binary_path: str | None = None
     extra_args: list[str] = Field(default_factory=list)

@@ -1,4 +1,5 @@
 """Tests for :class:`selffork_shared.quota.QuotaSnapshot` and friends."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta, timezone
@@ -103,10 +104,14 @@ def test_quota_snapshot_is_exhausted() -> None:
         source="test",
         windows={
             WindowKind.five_hour: WindowState(
-                used_pct=96.0, resets_at=_ts(60), window_seconds=18000,
+                used_pct=96.0,
+                resets_at=_ts(60),
+                window_seconds=18000,
             ),
             WindowKind.seven_day: WindowState(
-                used_pct=20.0, resets_at=_ts(60), window_seconds=604800,
+                used_pct=20.0,
+                resets_at=_ts(60),
+                window_seconds=604800,
             ),
         },
     )
@@ -123,10 +128,14 @@ def test_quota_snapshot_soonest_reset() -> None:
         source="test",
         windows={
             WindowKind.five_hour: WindowState(
-                used_pct=10.0, resets_at=far, window_seconds=18000,
+                used_pct=10.0,
+                resets_at=far,
+                window_seconds=18000,
             ),
             WindowKind.seven_day: WindowState(
-                used_pct=10.0, resets_at=near, window_seconds=604800,
+                used_pct=10.0,
+                resets_at=near,
+                window_seconds=604800,
             ),
         },
     )
@@ -157,7 +166,9 @@ def test_quota_snapshot_round_trip_json() -> None:
         context=ContextState(used_tokens=100, total_tokens=200_000, used_pct=0.05),
         windows={
             WindowKind.five_hour: WindowState(
-                used_pct=23.5, resets_at=_ts(3600), window_seconds=18000,
+                used_pct=23.5,
+                resets_at=_ts(3600),
+                window_seconds=18000,
             ),
         },
     )

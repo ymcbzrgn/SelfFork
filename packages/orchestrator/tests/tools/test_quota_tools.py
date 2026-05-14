@@ -1,4 +1,5 @@
 """Tests for quota observation tools (``quota_snapshot``, ``available_clis``)."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
