@@ -129,7 +129,7 @@ class TestCounting:
             category="sandbox.exec",
             payload={
                 "command": ["/opt/homebrew/bin/opencode", "run", "msg"],
-                "cwd": "/tmp/x",  # noqa: S108 — fixture path
+                "cwd": "/tmp/x",
                 "pid": 1,
             },
         )
@@ -201,8 +201,8 @@ class TestRateLimitRecovery:
                 resume_at=now + timedelta(hours=3),
                 cli_agent="claude-code",
                 config_path=None,
-                prd_path="/tmp/prd.md",  # noqa: S108
-                workspace_path="/tmp/ws",  # noqa: S108
+                prd_path="/tmp/prd.md",
+                workspace_path="/tmp/ws",
                 reason="test",
                 kind="rpd",
             ),
@@ -248,8 +248,8 @@ class TestRateLimitRecovery:
                 resume_at=now + timedelta(hours=2),
                 cli_agent="claude-code",
                 config_path=None,
-                prd_path="/tmp/prd.md",  # noqa: S108
-                workspace_path="/tmp/ws",  # noqa: S108
+                prd_path="/tmp/prd.md",
+                workspace_path="/tmp/ws",
                 reason="test",
                 kind="rpd",
             ),

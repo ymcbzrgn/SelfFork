@@ -39,10 +39,10 @@ class TestCreate:
 
     def test_optional_root_path_persisted(self, tmp_path: Path) -> None:
         store = _store(tmp_path)
-        project = store.create(name="Bound", root_path="/tmp/myrepo")  # noqa: S108
+        project = store.create(name="Bound", root_path="/tmp/myrepo")
         loaded = store.load("bound")
         assert loaded is not None
-        assert loaded.root_path == "/tmp/myrepo"  # noqa: S108
+        assert loaded.root_path == "/tmp/myrepo"
         assert project.root_path == loaded.root_path
 
 
@@ -109,16 +109,16 @@ class TestUpdateMeta:
     def test_unset_root_path(self, tmp_path: Path) -> None:
         # Passing root_path=None should clear the bind.
         store = _store(tmp_path)
-        store.create(name="Bound", root_path="/tmp/r")  # noqa: S108
+        store.create(name="Bound", root_path="/tmp/r")
         updated = store.update_meta("bound", root_path=None)
         assert updated.root_path is None
 
     def test_omit_root_path_keeps_value(self, tmp_path: Path) -> None:
         # NOT passing root_path should leave it alone (sentinel default).
         store = _store(tmp_path)
-        store.create(name="Bound", root_path="/tmp/r")  # noqa: S108
+        store.create(name="Bound", root_path="/tmp/r")
         updated = store.update_meta("bound", description="new desc")
-        assert updated.root_path == "/tmp/r"  # noqa: S108
+        assert updated.root_path == "/tmp/r"
         assert updated.description == "new desc"
 
     def test_unknown_slug_raises(self, tmp_path: Path) -> None:
