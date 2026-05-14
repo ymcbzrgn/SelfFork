@@ -27,8 +27,8 @@ def _record(
         resume_at=resume_at if resume_at is not None else datetime.now(UTC) + timedelta(hours=1),
         cli_agent=cli_agent,
         config_path=None,
-        prd_path="/tmp/prd.md",  # noqa: S108 — fixture path
-        workspace_path="/tmp/ws",  # noqa: S108
+        prd_path="/tmp/prd.md",
+        workspace_path="/tmp/ws",
         reason="test",
         kind=kind,
     )
@@ -137,8 +137,8 @@ class TestFromJsonDict:
                     "resume_at": "2026-05-01T19:00:00",
                     "cli_agent": "claude-code",
                     "config_path": None,
-                    "prd_path": "/tmp/p.md",  # noqa: S108
-                    "workspace_path": "/tmp/ws",  # noqa: S108
+                    "prd_path": "/tmp/p.md",
+                    "workspace_path": "/tmp/ws",
                     "reason": "test",
                     "kind": "rpd",
                 },
@@ -152,8 +152,8 @@ class TestFromJsonDict:
                 "resume_at": "2026-05-01T19:00:00Z",
                 "cli_agent": "claude-code",
                 "config_path": None,
-                "prd_path": "/tmp/p.md",  # noqa: S108
-                "workspace_path": "/tmp/ws",  # noqa: S108
+                "prd_path": "/tmp/p.md",
+                "workspace_path": "/tmp/ws",
                 "reason": "ok",
                 "kind": "rpd",
             },

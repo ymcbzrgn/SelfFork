@@ -79,7 +79,7 @@ def test_handoff_bundle_normalizes_non_utc_created_at() -> None:
 
 def test_handoff_bundle_rejects_naive_created_at() -> None:
     with pytest.raises(ValidationError):
-        _bundle(created_at=datetime(2026, 5, 9, 14, 30))  # noqa: DTZ001
+        _bundle(created_at=datetime(2026, 5, 9, 14, 30))
 
 
 def test_handoff_bundle_rejects_self_handoff() -> None:
