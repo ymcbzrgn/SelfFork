@@ -25,7 +25,7 @@ def test_window_state_rejects_naive_datetime() -> None:
     with pytest.raises(ValidationError):
         WindowState(
             used_pct=50.0,
-            resets_at=datetime(2026, 5, 9, 14, 30),  # noqa: DTZ001
+            resets_at=datetime(2026, 5, 9, 14, 30),
             window_seconds=18000,
         )
 
@@ -81,7 +81,7 @@ def test_quota_snapshot_rejects_naive_captured_at() -> None:
     with pytest.raises(ValidationError):
         QuotaSnapshot(
             cli_id="x",
-            captured_at=datetime(2026, 5, 9),  # noqa: DTZ001
+            captured_at=datetime(2026, 5, 9),
             source="test",
         )
 

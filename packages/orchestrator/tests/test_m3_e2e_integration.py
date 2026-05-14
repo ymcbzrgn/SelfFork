@@ -31,7 +31,6 @@ from selffork_shared.quota import (
     WindowState,
 )
 
-
 # ── ToolRegistry composition ──────────────────────────────────────────────────
 
 
