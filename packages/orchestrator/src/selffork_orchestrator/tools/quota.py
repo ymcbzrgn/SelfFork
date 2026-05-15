@@ -5,6 +5,7 @@ Read-only tools the autopilot calls before deciding to rotate or sleep.
 - ``quota_snapshot``: read normalized snapshot for one CLI or every CLI
 - ``available_clis``: enumerate registered CLIs + per-CLI health summary
 """
+
 from __future__ import annotations
 
 from typing import Any

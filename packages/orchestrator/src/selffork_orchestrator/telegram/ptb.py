@@ -10,6 +10,7 @@ Auth-only kuralı: the bot token is read from the ``SELFFORK_TELEGRAM_BOT_TOKEN`
 environment variable. No SelfFork-side token is hardcoded; if the env
 var is unset, callers should keep using :class:`NullTelegramBridge`.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -137,9 +138,7 @@ def _format_message(message: TelegramMessage) -> str:
     """Render a TelegramMessage as HTML-safe text within Telegram limits."""
     icon = _LEVEL_PREFIX.get(message.level, "•")
     project = (
-        f" · <code>{_html_escape(message.project_slug)}</code>"
-        if message.project_slug
-        else ""
+        f" · <code>{_html_escape(message.project_slug)}</code>" if message.project_slug else ""
     )
     head = (
         f"{icon} <b>SelfFork</b> [{_html_escape(message.level)}]"
@@ -154,6 +153,4 @@ def _format_message(message: TelegramMessage) -> str:
 
 def _html_escape(value: str) -> str:
     """Minimal Telegram HTML escape — only the documented entities."""
-    return (
-        value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    )
+    return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")

@@ -1,4 +1,5 @@
 """Tests for :class:`HandoffBundle` schema."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timezone
@@ -26,7 +27,7 @@ def _bundle(**overrides: object) -> HandoffBundle:
         "from_cli": "claude-code",
         "to_cli": "codex",
         "active_task": ActiveTask(title="Wire M3 plan"),
-        "tool_state": ToolState(cwd="/tmp/work"),
+        "tool_state": ToolState(cwd="/run/work"),
         "created_at": _ts(),
     }
     defaults.update(overrides)
@@ -72,6 +73,7 @@ def test_handoff_bundle_minimal_round_trip() -> None:
 def test_handoff_bundle_normalizes_non_utc_created_at() -> None:
     eastern = timezone.utcoffset.__self__ if False else None  # type: ignore[unreachable]
     from datetime import timedelta
+
     eastern = timezone(timedelta(hours=-5))
     b = _bundle(created_at=datetime(2026, 5, 9, 9, 30, tzinfo=eastern))
     assert b.created_at.tzinfo is UTC
@@ -79,7 +81,7 @@ def test_handoff_bundle_normalizes_non_utc_created_at() -> None:
 
 def test_handoff_bundle_rejects_naive_created_at() -> None:
     with pytest.raises(ValidationError):
-        _bundle(created_at=datetime(2026, 5, 9, 14, 30))  # noqa: DTZ001
+        _bundle(created_at=datetime(2026, 5, 9, 14, 30))
 
 
 def test_handoff_bundle_rejects_self_handoff() -> None:
@@ -180,12 +182,12 @@ def test_handoff_bundle_project_slug_optional() -> None:
 )
 def test_tool_state_rejects_secret_env_keys(secret_key: str) -> None:
     with pytest.raises(ValidationError, match="credential-keyword"):
-        ToolState(cwd="/tmp/work", env_whitelist={secret_key: "super-secret"})
+        ToolState(cwd="/run/work", env_whitelist={secret_key: "super-secret"})
 
 
 def test_tool_state_accepts_safe_env_keys() -> None:
     state = ToolState(
-        cwd="/tmp/work",
+        cwd="/run/work",
         env_whitelist={"PATH": "/usr/bin", "HOME": "/Users/op", "CARGO_HOME": "/c"},
     )
     assert state.env_whitelist["PATH"] == "/usr/bin"
@@ -195,6 +197,6 @@ def test_tool_state_rejects_secret_even_when_other_keys_clean() -> None:
     """Single bad key in a whitelist of safe ones still fails (allow-list strict)."""
     with pytest.raises(ValidationError, match="credential-keyword"):
         ToolState(
-            cwd="/tmp/work",
+            cwd="/run/work",
             env_whitelist={"PATH": "/usr/bin", "OPENAI_API_KEY": "sk-..."},
         )

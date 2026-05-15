@@ -1,4 +1,5 @@
 """Tests for :class:`CodexAgent`."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -52,27 +53,29 @@ def test_resolve_binary_raises_when_missing(monkeypatch: pytest.MonkeyPatch) -> 
         "selffork_orchestrator.cli_agent.codex._COMMON_INSTALL_PATHS",
         (),
     )
-    with patch(
-        "selffork_orchestrator.cli_agent.codex.shutil.which",
-        return_value=None,
+    with (
+        patch(
+            "selffork_orchestrator.cli_agent.codex.shutil.which",
+            return_value=None,
+        ),
+        pytest.raises(AgentBinaryNotFoundError, match="codex login"),
     ):
-        with pytest.raises(AgentBinaryNotFoundError, match="codex login"):
-            agent.resolve_binary()
+        agent.resolve_binary()
 
 
 def test_compose_initial_messages_contains_prd_and_workspace() -> None:
     agent = _make_agent()
     msgs = agent.compose_initial_messages(
         prd="add fonksiyonu yaz",
-        plan_path="/tmp/plan.md",
-        workspace="/tmp/work",
+        plan_path="/run/plan.md",
+        workspace="/run/work",
     )
     assert msgs[0]["role"] == "system"
     assert "codex" in msgs[0]["content"]
     assert msgs[1]["role"] == "user"
     assert "add fonksiyonu yaz" in msgs[1]["content"]
-    assert "/tmp/work" in msgs[1]["content"]
-    assert "/tmp/plan.md" in msgs[1]["content"]
+    assert "/run/work" in msgs[1]["content"]
+    assert "/run/plan.md" in msgs[1]["content"]
 
 
 def test_build_command_first_round() -> None:

@@ -19,6 +19,7 @@ on first run):
 
 Sources: ARGE 2026-05-09; github.com/MiniMax-AI/cli; platform.minimax.io.
 """
+
 from __future__ import annotations
 
 import os

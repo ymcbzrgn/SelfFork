@@ -17,6 +17,7 @@ are constrained to ``[A-Za-z0-9_\\-]+`` so the on-disk store
 (``HandoffBundleStore``) cannot be tricked into writing outside its
 root via path traversal.
 """
+
 from __future__ import annotations
 
 import re
@@ -152,8 +153,7 @@ class HandoffBundle(BaseModel):
     def _safe_path_component(cls, v: str) -> str:
         if not _PATH_COMPONENT_RE.fullmatch(v):
             raise ValueError(
-                f"identifier {v!r} must match [A-Za-z0-9_-]+ "
-                f"(no slashes, dots, or whitespace).",
+                f"identifier {v!r} must match [A-Za-z0-9_-]+ (no slashes, dots, or whitespace).",
             )
         return v
 
@@ -164,8 +164,7 @@ class HandoffBundle(BaseModel):
             return None
         if not _PATH_COMPONENT_RE.fullmatch(v):
             raise ValueError(
-                f"project_slug {v!r} must match [A-Za-z0-9_-]+ "
-                f"(no slashes, dots, or whitespace).",
+                f"project_slug {v!r} must match [A-Za-z0-9_-]+ (no slashes, dots, or whitespace).",
             )
         return v
 
@@ -184,7 +183,6 @@ class HandoffBundle(BaseModel):
         # so the check is robust regardless of field declaration order.
         if self.from_cli == self.to_cli:
             raise ValueError(
-                f"HandoffBundle.to_cli must differ from from_cli "
-                f"(both = {self.from_cli!r})",
+                f"HandoffBundle.to_cli must differ from from_cli (both = {self.from_cli!r})",
             )
         return self

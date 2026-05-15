@@ -3,6 +3,7 @@
 Mirrors :func:`selffork_orchestrator.cli_agent.factory.build_cli_agent` and
 :func:`selffork_orchestrator.limits.factory.build_limit_detector`.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
@@ -51,8 +52,7 @@ def build_snapper(cli_agent_name: str) -> Snapper:
     cls = _SNAPPERS.get(cli_agent_name)
     if cls is None:
         raise ValueError(
-            f"no snapper for cli agent {cli_agent_name!r}; "
-            f"known: {sorted(_SNAPPERS)}",
+            f"no snapper for cli agent {cli_agent_name!r}; known: {sorted(_SNAPPERS)}",
         )
     return cls()
 
