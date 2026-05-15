@@ -693,7 +693,7 @@ M5 scope DIŞINDA, ileride alınacak (15 madde — ADR-004 §Sınırlamalar 9 ma
 - Ajan 8 — examples_crucial/browser-use deep (CDP-first + DOM tree dual-mode + 14 watchdogs + BaseChatModel Protocol + Ollama integration ready; cloud sandbox + telemetry reddedilen; MIT).
 - Ajan 9 — examples_crucial/Skyvern-AI/skyvern deep (AGPL-3.0 KOD KOPYALAMA YASAK; SCRAPE_TYPE_ORDER + failure_classifier + PermissionChecker ABC + ScrapedPage hybrid feed pattern alınır; 25+ block + CodeBlock sandbox + litellm reddedilenler).
 - Ajan 10 — examples_crucial/minitap-ai/mobile-use deep (Apache 2.0; LangGraph multi-agent reddedilen — tek-model rol prompt; iOS sim CI working macos-14 + iOS 17.2; real iOS "not yet supported" README:169; minitap proprietary provider reddedilen).
-- Ajan 11 — examples_crucial/felixrieseberg/clippy deep (MIT; Electron + @electron/llm + node-llama-cpp + GGUF; Gemma 3 listed NOT Gemma 4; vision/screenshot/desktopCapturer SIFIR — bizim eklememiz gerek; forge.config build matrix Metal/CUDA/Vulkan alınır).
+- Ajan 11 — examples_crucial/felixrieseberg/clippy deep (MIT; Electron + @electron/llm + node-llama-cpp + GGUF; earlier Gemma generation listed (NOT Gemma 4) — bizim Gemma 4 hedefimize uyum için clippy adapter override gerekir; vision/screenshot/desktopCapturer SIFIR — bizim eklememiz gerek; forge.config build matrix Metal/CUDA/Vulkan alınır).
 - Ajan 12 — packages/body + sandbox + tools state (skeleton ADR-001 §4 + §14.9 hazır; ROADMAP §7 conflict tespit; ChatMessage = dict[str,str] migration; AuditCategory closed Literal extension; mlx_vlm hardcoded mlx_server.py:129; Sandbox ABC subprocess+Docker; permission warden = NEW; ToolContext extension geriye uyumlu).
 
 **1 audit-god:**

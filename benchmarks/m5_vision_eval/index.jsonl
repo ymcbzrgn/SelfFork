@@ -1,0 +1,4 @@
+# M5 R1 Vision Eval index. Her satır bir görev — operator 30 satıra çıkarır.
+# Format: {"task_id", "surface", "dir", "instruction_summary"}
+# Sample placeholder gerçek eval koşmaz (1x1 PNG); harness wiring smoke için.
+{"task_id":"sample_001_placeholder","surface":"web","dir":"tasks/sample_001_placeholder","instruction_summary":"PLACEHOLDER — operator replaces with real task"}

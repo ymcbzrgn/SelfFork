@@ -114,6 +114,9 @@ ignore = [
 "packages/orchestrator/src/selffork_orchestrator/dashboard/provider_router.py" = ["ASYNC240"]
 "packages/orchestrator/src/selffork_orchestrator/tools/body.py" = ["E501", "S110", "RUF100"]
 "packages/body/tests/vision/test_preprocess.py" = ["E402"]
+# Eval harness + dataset validator: asserts inside pytest functions are
+# canonical (R1 gate); per-file-ignores keep ruff S101 muted there.
+"benchmarks/**" = ["S101"]
 
 
 [tool.ruff.lint.isort]

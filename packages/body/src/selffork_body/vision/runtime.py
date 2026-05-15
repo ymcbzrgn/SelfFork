@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from selffork_body.vision.prompt import Tier, build_prompt, parse_decision
+from selffork_shared.config import VisionConfig
 
 __all__ = [
     "MlxVlmAdapter",
@@ -62,10 +63,40 @@ class MlxVlmAdapter:
 
     Compatible with the OpenAI chat-completions schema. Sends image as
     ``image_url`` with ``data:image/png;base64,…`` payload.
+
+    The model itself is loaded by the external ``mlx_vlm.server --model <id>``
+    process; this adapter only talks HTTP. ``model_id`` is metadata used by
+    the audit log and the Cockpit Settings → Vision dropdown.
     """
 
-    def __init__(self, server_url: str = "http://127.0.0.1:8080") -> None:
+    def __init__(
+        self,
+        server_url: str = "http://127.0.0.1:8080",
+        *,
+        model_id: str = "mlx-community/gemma-4-E2B-it-4bit",
+    ) -> None:
         self.server_url = server_url.rstrip("/")
+        self.model_id = model_id
+
+    @classmethod
+    def from_config(cls, config: VisionConfig) -> "MlxVlmAdapter":  # noqa: UP037
+        """Build adapter from :class:`selffork_shared.config.VisionConfig`."""
+        return cls(server_url=config.mlx_server_url, model_id=config.mlx_model_id)
+
+    async def list_models(self) -> list[str]:
+        """Probe ``GET /v1/models`` (OpenAI-compat) for available IDs.
+
+        Raises ``httpx.HTTPError`` subclasses on network / non-2xx response so
+        the caller (Cockpit auto-detect endpoint) can map them to user-facing
+        error messages.
+        """
+        import httpx
+
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{self.server_url}/v1/models")
+            r.raise_for_status()
+            data = r.json().get("data", [])
+            return [m["id"] for m in data if isinstance(m, dict) and "id" in m]
 
     async def invoke_with_images(
         self,
@@ -127,9 +158,28 @@ class OllamaVisionAdapter:
     chat endpoint. Linux server-side fallback when MLX is unavailable.
     """
 
-    def __init__(self, host: str = "http://127.0.0.1:11434", model: str = "gemma3") -> None:
+    def __init__(self, host: str = "http://127.0.0.1:11434", model: str = "gemma4:e2b-q4_K_M") -> None:
         self.host = host.rstrip("/")
         self.model = model
+
+    @classmethod
+    def from_config(cls, config: VisionConfig) -> "OllamaVisionAdapter":  # noqa: UP037
+        """Build adapter from :class:`selffork_shared.config.VisionConfig`."""
+        return cls(host=config.ollama_host, model=config.ollama_model_tag)
+
+    async def list_models(self) -> list[str]:
+        """Probe ``GET /api/tags`` for available Ollama model tags.
+
+        Raises ``httpx.HTTPError`` subclasses; caller maps to user-facing
+        error.
+        """
+        import httpx
+
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{self.host}/api/tags")
+            r.raise_for_status()
+            models = r.json().get("models", [])
+            return [m["name"] for m in models if isinstance(m, dict) and "name" in m]
 
     async def invoke_with_images(
         self,

@@ -1,0 +1,7 @@
+{
+  "action": "click",
+  "target": "Sign in",
+  "bbox": [1750, 80, 80, 32],
+  "tolerance_px": 8,
+  "notes": "PLACEHOLDER — operator replaces screenshot.png + this file with a real task. Used only to exercise harness wiring."
+}

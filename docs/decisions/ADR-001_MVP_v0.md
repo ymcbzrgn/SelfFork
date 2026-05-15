@@ -300,7 +300,11 @@ class LLMRuntime(ABC):
     @property
     @abstractmethod
     def model_id(self) -> str:
-        """Model identifier the runtime is serving, e.g. 'gemma-3-e2b-it-q4_0'."""
+        """Model identifier the runtime is serving (HF slug or local path).
+
+        Apple Silicon MLX: e.g. ``FakeRockert543/gemma-4-e2b-it-MLX-4bit``.
+        Linux/GGUF Q4_0: e.g. ``bartowski/google_gemma-4-E2B-it-GGUF``.
+        """
 
     @abstractmethod
     async def health(self) -> bool:
@@ -598,7 +602,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class RuntimeConfig(BaseModel):
     backend: Literal["mlx-server", "ollama", "llama-cpp", "vllm"] = "mlx-server"
-    model_id: str = "google/gemma-3-e2b-it-q4_0"
+    model_id: str = "FakeRockert543/gemma-4-e2b-it-MLX-4bit"
     host: str = "127.0.0.1"
     port: int = Field(default=8001, ge=0, le=65535)  # 0 = auto-allocate
     startup_timeout_seconds: int = Field(default=120, ge=1)
@@ -910,7 +914,7 @@ Concrete, machine-verifiable checklist. Code is not "done" until every item pass
 
 - [ ] `selffork run <prd-path>` (default `--mode subprocess`) on macOS Apple Silicon produces a working project from a PRD that exercises ≥3 SubTasks.
 - [ ] `selffork run <prd-path> --mode docker` on a Linux server (Ubuntu 22.04 reference) runs end-to-end, container is auto-removed on completion.
-- [ ] mlx-server backend loads `gemma-3-e2b-it-q4_0`, exposes `/v1/chat/completions`, opencode connects via env-injected base URL.
+- [ ] mlx-server backend loads `FakeRockert543/gemma-4-e2b-it-MLX-4bit` (Gemma 4 E2B Q4 family — MLX 4-bit on Apple Silicon, GGUF Q4_0 on Linux), exposes `/v1/chat/completions`, opencode connects via env-injected base URL.
 - [ ] `<workspace>/.selffork/plan.json` is updated by opencode at least once during the session.
 - [ ] `~/.selffork/audit/<session_id>.jsonl` exists, contains all expected categories in order, secrets are redacted.
 - [ ] Session reaches `COMPLETED` on the happy path; reaches `FAILED` cleanly with a typed error and teardown completed on every failure mode tested.

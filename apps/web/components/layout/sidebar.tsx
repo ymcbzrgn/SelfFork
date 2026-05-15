@@ -23,6 +23,7 @@ import {
   PlayCircle,
   ScrollText,
   Server,
+  Settings,
 } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 
@@ -46,6 +47,8 @@ const PRIMARY_NAV: NavItem[] = [
   { href: "/cockpit/fleet", label: "Fleet", icon: Server },
   { href: "/cockpit/providers", label: "Providers", icon: KeyRound },
   { href: "/cockpit/body", label: "Body", icon: Bot },
+  // M5+ — Vision adapter config (model swap without YAML hand-editing).
+  { href: "/cockpit/settings/vision", label: "Settings", icon: Settings },
 ];
 
 const FOOTER_NAV: NavItem[] = [

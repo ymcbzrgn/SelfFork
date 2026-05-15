@@ -124,6 +124,10 @@ class DashboardConfig(BaseModel):
     # ``~/.selffork/chat/branches.db`` (Order 4). Tests point this at a
     # tmp_path file so each test starts from a clean branch tree.
     chat_db_path: Path | None = None
+    # Path to ``selffork.yaml``. Cockpit Settings → Vision writes the
+    # ``vision:`` section back here. ``None`` disables persistent
+    # updates (``POST /api/settings/vision`` returns 503).
+    config_path: Path | None = None
 
 
 def build_app(config: DashboardConfig) -> FastAPI:
@@ -202,6 +206,14 @@ def build_app(config: DashboardConfig) -> FastAPI:
     app.include_router(build_fleet_router(registry=fleet_registry))
     app.include_router(build_provider_router(registry=provider_registry))
     app.include_router(build_body_router(watchdog=body_watchdog))
+
+    # Cockpit Settings → Vision (M5+) — operator-driven vision adapter
+    # config without YAML hand-editing.
+    from selffork_orchestrator.dashboard.settings_router import (
+        build_settings_router,
+    )
+
+    app.include_router(build_settings_router(config_path=config.config_path))
 
     _register_static_mount(app, config)
 

@@ -61,7 +61,7 @@ uv run selffork run docs/PRD.md --mode subprocess
 **What happens under the hood**:
 
 1. `mlx-server` is spawned as a subprocess on `localhost:8001`, serving
-   `gemma-3-e2b-it-q4_0` over an OpenAI-compatible HTTP API.
+   Gemma 4 E2B Q4 (MLX 4-bit on Apple Silicon, GGUF Q4_0 on Linux) over an OpenAI-compatible HTTP API.
 2. A workspace dir is created at `~/.selffork/workspaces/<session_id>/`.
 3. `opencode` is spawned in that workspace, env-redirected to talk to the
    local mlx-server (`OPENAI_BASE_URL`).

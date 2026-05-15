@@ -161,6 +161,39 @@ class MindConfig(_StrictModel):
     provenance_path: str = "~/.selffork/mind/provenance.jsonl"
 
 
+class VisionConfig(_StrictModel):
+    """Body pillar vision adapter configuration (M5).
+
+    Defaults assume Apple Silicon with ``mlx_vlm.server`` running on port
+    8080 serving Gemma 4 E2B 4-bit. Linux fallback via Ollama Gemma 4.
+
+    Override precedence (lowest → highest):
+
+    1. Defaults below.
+    2. ``selffork.yaml`` ``vision:`` section.
+    3. Env vars ``SELFFORK_VISION__MLX_MODEL_ID`` etc.
+    4. Cockpit Settings → Vision page (writes back to YAML).
+    """
+
+    mlx_model_id: str = "mlx-community/gemma-4-E2B-it-4bit"
+    """Hugging Face slug served by the external ``mlx_vlm.server`` process.
+    Adapter does not load the model itself; field is metadata for audit/UI."""
+
+    mlx_server_url: str = "http://127.0.0.1:8080"
+    """HTTP base of the running ``mlx_vlm.server`` (OpenAI-compat schema)."""
+
+    ollama_model_tag: str = "gemma4:e2b-q4_K_M"
+    """Linux fallback Ollama tag. Q4_K_M is the closest available to MLX 4-bit;
+    Ollama registry does not currently ship classic Q4_0 for Gemma 4 E2B."""
+
+    ollama_host: str = "http://127.0.0.1:11434"
+    """HTTP base of ``ollama serve``."""
+
+    auto_detect: bool = True
+    """When true, Cockpit Settings/Vision populates dropdowns by probing the
+    running ``mlx_vlm.server`` and Ollama daemon via :meth:`list_models`."""
+
+
 class SelfForkSettings(BaseSettings):
     """Top-level SelfFork settings.
 
@@ -176,6 +209,7 @@ class SelfForkSettings(BaseSettings):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     audit: AuditConfig = Field(default_factory=AuditConfig)
     mind: MindConfig = Field(default_factory=MindConfig)
+    vision: VisionConfig = Field(default_factory=VisionConfig)
 
     model_config = SettingsConfigDict(
         env_prefix="SELFFORK_",
