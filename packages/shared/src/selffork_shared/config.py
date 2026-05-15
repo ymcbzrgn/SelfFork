@@ -83,7 +83,7 @@ class RuntimeConfig(_StrictModel):
 class SandboxConfig(_StrictModel):
     """Isolation environment configuration."""
 
-    mode: Literal["subprocess", "docker"] = "subprocess"
+    mode: Literal["subprocess", "docker", "seatbelt", "bubblewrap"] = "subprocess"
     workspace_root: str = "~/.selffork/workspaces"
     docker_image: str = "selffork/opencode-runtime:latest"
     docker_run_extra_args: list[str] = Field(default_factory=list)

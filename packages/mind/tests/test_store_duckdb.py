@@ -776,6 +776,104 @@ class TestRetrieve:
 # ── concurrency ────────────────────────────────────────────────────────────
 
 
+# ── count_by_tier (Order 3) ──────────────────────────────────────────────────
+
+
+class TestCountByTier:
+    @pytest.mark.anyio
+    async def test_empty_store_returns_empty_dict(self, tmp_path: Path) -> None:
+        async with open_store(tmp_path / "mind.duckdb") as store:
+            stats = await store.count_by_tier(StoreScope())
+            assert stats == {}
+
+    @pytest.mark.anyio
+    async def test_counts_by_tier_excluding_superseded(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        async with open_store(tmp_path / "mind.duckdb") as store:
+            # 2 working, 3 episodic, 1 superseded reflection.
+            notes = [
+                Note(tier="working", kind="pointer", content="w1"),
+                Note(tier="working", kind="pointer", content="w2"),
+                Note(tier="episodic", kind="observation", content="e1"),
+                Note(tier="episodic", kind="observation", content="e2"),
+                Note(tier="episodic", kind="observation", content="e3"),
+                Note(tier="reflection", kind="reflection", content="r1"),
+            ]
+            await store.upsert_notes(notes)
+            await store.supersede(notes[-1].id)
+
+            stats = await store.count_by_tier(StoreScope())
+            assert stats["working"].count == 2
+            assert stats["episodic"].count == 3
+            assert "reflection" not in stats  # all rows superseded
+            # Last-updated is non-None for any present tier.
+            assert stats["working"].last_updated is not None
+            assert stats["episodic"].last_updated is not None
+
+    @pytest.mark.anyio
+    async def test_scope_filters_by_project_slug(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        async with open_store(tmp_path / "mind.duckdb") as store:
+            await store.upsert_notes(
+                [
+                    Note(
+                        tier="episodic",
+                        kind="observation",
+                        content="alpha-1",
+                        project_slug="alpha",
+                    ),
+                    Note(
+                        tier="episodic",
+                        kind="observation",
+                        content="alpha-2",
+                        project_slug="alpha",
+                    ),
+                    Note(
+                        tier="episodic",
+                        kind="observation",
+                        content="beta-1",
+                        project_slug="beta",
+                    ),
+                ],
+            )
+            stats_alpha = await store.count_by_tier(
+                StoreScope(project_slug="alpha"),
+            )
+            stats_beta = await store.count_by_tier(
+                StoreScope(project_slug="beta"),
+            )
+            stats_all = await store.count_by_tier(StoreScope())
+            assert stats_alpha["episodic"].count == 2
+            assert stats_beta["episodic"].count == 1
+            assert stats_all["episodic"].count == 3
+
+    @pytest.mark.anyio
+    async def test_scope_filters_by_session_id(self, tmp_path: Path) -> None:
+        async with open_store(tmp_path / "mind.duckdb") as store:
+            await store.upsert_notes(
+                [
+                    Note(
+                        tier="episodic",
+                        kind="observation",
+                        content="s1-a",
+                        session_id="s1",
+                    ),
+                    Note(
+                        tier="episodic",
+                        kind="observation",
+                        content="s2-a",
+                        session_id="s2",
+                    ),
+                ],
+            )
+            stats_s1 = await store.count_by_tier(StoreScope(session_id="s1"))
+            assert stats_s1["episodic"].count == 1
+
+
 class TestConcurrency:
     @pytest.mark.anyio
     async def test_parallel_upserts_serialise_safely(self, tmp_path: Path) -> None:

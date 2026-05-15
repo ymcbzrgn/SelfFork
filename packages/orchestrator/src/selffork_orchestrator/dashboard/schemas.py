@@ -15,12 +15,23 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 __all__ = [
+    "ActiveBranchPayload",
     "AuditEvent",
+    "BranchResponse",
     "CardCreatePayload",
     "CardMovePayload",
     "CardUpdatePayload",
+    "ChatMessageEditPayload",
+    "ChatMessagePayload",
+    "ChatMessageResponse",
     "KanbanCardResponse",
     "KanbanResponse",
+    "MindNoteCreatePayload",
+    "MindRecallRequestPayload",
+    "MindRecallResponse",
+    "MindStatsResponse",
+    "MindTierStatsRow",
+    "NoteResponse",
     "PausedSession",
     "PlanSnapshot",
     "ProjectCreatePayload",
@@ -210,3 +221,154 @@ class RunRequestResponse(_StrictResponse):
     status: str
     pid: int | None
     detail: str | None
+
+
+# ── Mind HTTP surface — Order 3 ──────────────────────────────────────────────
+
+
+class NoteResponse(_StrictResponse):
+    """One Mind note projected to the wire format.
+
+    UUIDs serialise to strings; timestamps to ISO-8601. Mirrors
+    :class:`selffork_mind.memory.model.Note` but flattens private
+    schema fields (``identity_fields``) and omits the embedding side
+    channel — those belong to the storage layer, not the operator's
+    cockpit view.
+    """
+
+    id: str
+    tier: str
+    kind: str
+    content: str
+    intent: str
+    importance: float
+    pinned: bool
+    project_slug: str | None
+    session_id: str | None
+    valid_from: datetime
+    valid_until: datetime | None
+    tag_keys: list[str]
+    path_scope: list[str]
+    always_apply: bool
+
+
+class MindTierStatsRow(_StrictResponse):
+    count: int
+    last_updated: datetime | None
+
+
+class MindStatsResponse(_StrictResponse):
+    """Body of ``GET /api/projects/<slug>/mind/stats``.
+
+    ``tiers`` only includes tiers with at least one currently-valid
+    note for the requested scope. UI surfaces decide how to render
+    absent tiers (typically: collapsed section with placeholder).
+    """
+
+    tiers: dict[str, MindTierStatsRow]
+
+
+class MindNoteCreatePayload(BaseModel):
+    """Body of ``POST /api/projects/<slug>/mind/notes``.
+
+    Fields with no default are required; the others fall back to the
+    Note model defaults. Tag pairs are encoded as ``[[k, v], ...]`` so
+    the wire format stays JSON-friendly (tuples roundtrip as lists).
+    """
+
+    content: str
+    tier: str = "episodic"
+    kind: str = "observation"
+    intent: str = ""
+    importance: float = 1.0
+    pinned: bool = False
+    tag_pairs: list[tuple[str, str]] = []
+    session_id: str | None = None
+
+
+class MindRecallRequestPayload(BaseModel):
+    """Body of ``POST /api/projects/<slug>/mind/recall``.
+
+    A projection of :class:`selffork_mind.store.base.RetrieveConfig` —
+    the cockpit doesn't expose every retriever knob; query + tier +
+    optional tag-pair predicate covers the M4 Context tab use cases.
+    Filter DSL + bi-temporal ``valid_at`` are stretch goals (M5+).
+    """
+
+    query: str = ""
+    tier: str | None = None
+    """Restrict to a single tier; ``None`` queries all tiers."""
+
+    tag_pairs: list[tuple[str, str]] = []
+    top_k: int = 20
+    threshold: float = 0.0
+    session_id: str | None = None
+
+
+class MindRecallResponse(_StrictResponse):
+    """Body of ``POST /api/projects/<slug>/mind/recall``.
+
+    Hits and scores are aligned by index. The cockpit renders both
+    arrays as a sorted table; absent fields are an empty list (never
+    ``None``) so the UI can iterate without null-guards.
+    """
+
+    hits: list[NoteResponse]
+    scores: list[float]
+
+
+# ── Chat surface — Order 4 ──────────────────────────────────────────────────
+
+
+class BranchResponse(_StrictResponse):
+    """One conversation branch projected to the wire format."""
+
+    id: str
+    session_id: str
+    parent_branch_id: str | None
+    fork_message_id: str | None
+    label: str
+    is_active: bool
+    created_at: datetime
+
+
+class ChatMessageResponse(_StrictResponse):
+    """One chat message projected to the wire format."""
+
+    id: str
+    branch_id: str
+    role: str
+    content: str
+    parent_message_id: str | None
+    created_at: datetime
+
+
+class ChatMessagePayload(BaseModel):
+    """Body of ``POST /api/sessions/<id>/messages``.
+
+    ``branch_id`` is optional — when omitted the message is appended
+    to the session's currently-active branch (or to a freshly minted
+    ``main`` branch when the session has none yet).
+    """
+
+    content: str
+    role: str = "user"
+    branch_id: str | None = None
+
+
+class ChatMessageEditPayload(BaseModel):
+    """Body of ``POST /api/sessions/<id>/messages/<msg_id>/edit``.
+
+    The edit always creates a *new* branch (assistant-ui semantics —
+    edits are immutable; previous branches stay queryable).
+    ``branch_label`` defaults to ``alt-<short-uuid>`` server-side.
+    """
+
+    content: str
+    branch_label: str | None = None
+
+
+class ActiveBranchPayload(BaseModel):
+    """Body of ``PATCH /api/sessions/<id>/active-branch``."""
+
+    branch_id: str

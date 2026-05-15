@@ -143,11 +143,24 @@ class CodexAgent(CLIAgent):
     def build_command(self, *, message: str, is_first_round: bool) -> list[str]:
         # ``codex exec`` is the headless single-shot subcommand.
         # ``--resume-last`` continues the most recent rollout session in cwd
-        # (DeepWiki 4.4 Session Resumption). Order: exec / resume-last /
-        # extra_args / msg. exec mode is non-interactive by design — no
-        # explicit permission flag needed (unlike ``claude
-        # --dangerously-skip-permissions``).
-        args: list[str] = ["exec"]
+        # (DeepWiki 4.4 Session Resumption).
+        #
+        # Auto-approve flags (M4 close-out E2E smoke 2026-05-09):
+        # * ``--skip-git-repo-check`` — codex refuses to write outside a
+        #   git repo by default; orchestrator workspaces are not always
+        #   git-init'd (`sandbox.workspace_root` may be a fresh temp dir).
+        # * ``--dangerously-bypass-approvals-and-sandbox`` — codex's
+        #   default sandbox policy is read-only, which makes file writes
+        #   fail silently from Jr's perspective. Codex CLI ships this
+        #   flag specifically for environments that are externally
+        #   sandboxed (which we are: see `sandbox.mode` in selffork.yaml).
+        #
+        # Order: exec / skip-git / bypass / resume-last / extra_args / msg.
+        args: list[str] = [
+            "exec",
+            "--skip-git-repo-check",
+            "--dangerously-bypass-approvals-and-sandbox",
+        ]
         if not is_first_round:
             args.append("--resume-last")
         args.extend(self._config.extra_args)

@@ -258,26 +258,203 @@ export function listProviderUsage(): Promise<ProviderUsage[]> {
 
 // ── Live audit ───────────────────────────────────────────────────────────────
 
-export function openSessionStream(sessionId: string): WebSocket {
+// String-only URL builder — never opens a socket. Used by
+// ``useWebsocketSubscription`` (which is the sole owner of the
+// connection). Order 6/8 audit caught a leak where ``open*Stream``
+// factories were called for their ``.url`` and the spawned socket
+// was orphaned.
+function _wsBase(): string {
   const httpBase =
     API_BASE !== ""
       ? API_BASE
       : typeof window !== "undefined"
         ? window.location.origin
         : "";
-  const wsBase = httpBase.replace(/^http/, "ws");
-  return new WebSocket(`${wsBase}/api/sessions/${sessionId}/stream`);
+  return httpBase.replace(/^http/, "ws");
+}
+
+export function sessionStreamUrl(sessionId: string): string {
+  return `${_wsBase()}/api/sessions/${sessionId}/stream`;
+}
+
+export function kanbanStreamUrl(slug: string): string {
+  return `${_wsBase()}/api/projects/${slug}/kanban/stream`;
+}
+
+// Legacy factories — they DO open a real socket and the caller is
+// responsible for ``close()``. Used by the pre-cockpit
+// ``apps/web/app/session/page.tsx`` and ``app/project/page.tsx`` which
+// own their own lifecycle. New cockpit surfaces (Order 6+) must use
+// the URL builders + ``useWebsocketSubscription``, never these.
+export function openSessionStream(sessionId: string): WebSocket {
+  return new WebSocket(sessionStreamUrl(sessionId));
 }
 
 export function openKanbanStream(slug: string): WebSocket {
-  const httpBase =
-    API_BASE !== ""
-      ? API_BASE
-      : typeof window !== "undefined"
-        ? window.location.origin
-        : "";
-  const wsBase = httpBase.replace(/^http/, "ws");
-  return new WebSocket(`${wsBase}/api/projects/${slug}/kanban/stream`);
+  return new WebSocket(kanbanStreamUrl(slug));
+}
+
+// ── Chat surface — Order 4 / Order 8 ─────────────────────────────────────────
+
+export interface BranchResponse {
+  id: string;
+  session_id: string;
+  parent_branch_id: string | null;
+  fork_message_id: string | null;
+  label: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ChatMessageResponse {
+  id: string;
+  branch_id: string;
+  role: "user" | "assistant" | "tool";
+  content: string;
+  parent_message_id: string | null;
+  created_at: string;
+}
+
+export function listBranches(sessionId: string): Promise<BranchResponse[]> {
+  return request<BranchResponse[]>(`/api/sessions/${sessionId}/branches`);
+}
+
+export function listMessages(
+  sessionId: string,
+  branchId?: string,
+): Promise<ChatMessageResponse[]> {
+  const qs = branchId ? `?branch_id=${encodeURIComponent(branchId)}` : "";
+  return request<ChatMessageResponse[]>(
+    `/api/sessions/${sessionId}/messages${qs}`,
+  );
+}
+
+export function postChatMessage(
+  sessionId: string,
+  payload: { content: string; role?: "user" | "assistant" | "tool"; branch_id?: string },
+): Promise<ChatMessageResponse> {
+  return request<ChatMessageResponse>(`/api/sessions/${sessionId}/messages`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function editChatMessage(
+  sessionId: string,
+  messageId: string,
+  payload: { content: string; branch_label?: string },
+): Promise<BranchResponse> {
+  return request<BranchResponse>(
+    `/api/sessions/${sessionId}/messages/${messageId}/edit`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function setActiveBranch(
+  sessionId: string,
+  branchId: string,
+): Promise<BranchResponse> {
+  return request<BranchResponse>(
+    `/api/sessions/${sessionId}/active-branch`,
+    {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ branch_id: branchId }),
+    },
+  );
+}
+
+export function chatStreamUrl(sessionId: string): string {
+  return `${_wsBase()}/api/sessions/${sessionId}/chat/stream`;
+}
+
+export function openChatStream(sessionId: string): WebSocket {
+  return new WebSocket(chatStreamUrl(sessionId));
+}
+
+// ── Mind HTTP surface — Order 3 / Order 9 ───────────────────────────────────
+
+export interface MindTierStatsRow {
+  count: number;
+  last_updated: string | null;
+}
+
+export interface MindStatsResponse {
+  tiers: Record<string, MindTierStatsRow>;
+}
+
+export interface NoteResponse {
+  id: string;
+  tier: string;
+  kind: string;
+  content: string;
+  intent: string;
+  importance: number;
+  pinned: boolean;
+  project_slug: string | null;
+  session_id: string | null;
+  valid_from: string;
+  valid_until: string | null;
+  tag_keys: string[];
+  path_scope: string[];
+  always_apply: boolean;
+}
+
+export interface MindRecallResponse {
+  hits: NoteResponse[];
+  scores: number[];
+}
+
+export function getMindStats(slug: string): Promise<MindStatsResponse> {
+  return request<MindStatsResponse>(
+    `/api/projects/${slug}/mind/stats`,
+  );
+}
+
+export function listMindNotes(
+  slug: string,
+  tier?: string,
+  limit = 50,
+): Promise<NoteResponse[]> {
+  const params = new URLSearchParams();
+  if (tier) params.set("tier", tier);
+  params.set("limit", String(limit));
+  return request<NoteResponse[]>(
+    `/api/projects/${slug}/mind/notes?${params.toString()}`,
+  );
+}
+
+export function recallMind(
+  slug: string,
+  payload: {
+    query: string;
+    tier?: string;
+    top_k?: number;
+    threshold?: number;
+    session_id?: string;
+  },
+): Promise<MindRecallResponse> {
+  return request<MindRecallResponse>(
+    `/api/projects/${slug}/mind/recall`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function mindProvenanceStreamUrl(slug: string): string {
+  return `${_wsBase()}/api/projects/${slug}/mind/provenance/stream`;
+}
+
+export function openMindProvenanceStream(slug: string): WebSocket {
+  return new WebSocket(mindProvenanceStreamUrl(slug));
 }
 
 export interface ProvenanceEntry {

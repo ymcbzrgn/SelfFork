@@ -5,7 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from selffork_orchestrator.sandbox.base import Sandbox
+from selffork_orchestrator.sandbox.bubblewrap_sandbox import BubblewrapSandbox
 from selffork_orchestrator.sandbox.docker_sandbox import DockerSandbox
+from selffork_orchestrator.sandbox.seatbelt_sandbox import SeatbeltSandbox
 from selffork_orchestrator.sandbox.subprocess_sandbox import SubprocessSandbox
 from selffork_shared.config import SandboxConfig
 
@@ -14,6 +16,8 @@ __all__ = ["build_sandbox"]
 _BACKENDS: Mapping[str, type[Sandbox]] = {
     "subprocess": SubprocessSandbox,
     "docker": DockerSandbox,
+    "seatbelt": SeatbeltSandbox,
+    "bubblewrap": BubblewrapSandbox,
 }
 
 

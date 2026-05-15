@@ -94,6 +94,15 @@ class ToolContext:
     proactive_reader: object | None = None  # selffork_orchestrator.usage.ProactiveUsageReader
     launchd_scheduler: object | None = None  # selffork_orchestrator.resume.cron.LaunchdScheduler
     resume_store: object | None = None  # selffork_orchestrator.resume.store.ScheduledResumeStore
+    # M5 Body pillar — vision-driven UI control (ADR-005 §M5-G). Optional, None
+    # when the body pillar isn't wired into this session (e.g. legacy text-only
+    # round-loop). Tools that require these fields (body_click, body_screenshot,
+    # ...) return an "unauthorized" :class:`ToolResult` rather than raise.
+    body_driver: object | None = None  # selffork_body.drivers protocol (web/android/ios/desktop/tmux)
+    vision_runtime: object | None = None  # selffork_orchestrator.runtime.base.MultimodalLLMRuntime
+    permission_warden: object | None = None  # selffork_body.sandbox.PermissionWarden
+    screenshot_store: object | None = None  # selffork_body.storage.ScreenshotStore
+    audit_logger: object | None = None  # selffork_shared.audit.AuditLogger (body.* emit)
 
 
 @dataclass(frozen=True, slots=True)

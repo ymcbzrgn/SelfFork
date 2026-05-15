@@ -28,7 +28,23 @@ __all__ = [
     "RetrievalHit",
     "RetrieveConfig",
     "StoreScope",
+    "TierStats",
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class TierStats:
+    """Per-tier counts + recency for surfaces like the cockpit Context tab.
+
+    ``last_updated`` is the most recent ``written_at`` of any
+    currently-valid note in the tier; ``None`` when the tier holds no
+    rows for the requested scope (the entire dict entry is omitted in
+    that case — callers receive an explicit "not present" instead of a
+    zero-count row that must be rendered).
+    """
+
+    count: int
+    last_updated: datetime | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,6 +192,15 @@ class MindStore(Protocol):
         optional vector cosine ranking → cap at ``top_k * rerank_overfetch``.
         Caller is responsible for the rerank stage (it may not run a
         reranker at all).
+        """
+
+    async def count_by_tier(self, scope: StoreScope) -> dict[TierName, TierStats]:
+        """Per-tier counts + recency, scoped by ``scope`` (M4 cockpit Context tab).
+
+        Only currently-valid notes (``valid_until IS NULL``) are
+        counted. The dict only contains tiers that have at least one
+        matching note — UI surfaces decide how to render zero-count
+        tiers (typically: collapsed section with placeholder).
         """
 
     # ── embeddings ─────────────────────────────────────────────────────

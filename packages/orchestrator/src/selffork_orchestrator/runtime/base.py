@@ -21,10 +21,78 @@ from collections.abc import Sequence
 
 from selffork_shared.config import RuntimeConfig
 
-__all__ = ["ChatMessage", "LLMRuntime"]
+__all__ = [
+    "ChatMessage",
+    "ContentPart",
+    "ContentPartImageBytes",
+    "ContentPartImageURL",
+    "ContentPartText",
+    "LLMRuntime",
+    "MultimodalChatMessage",
+    "MultimodalLLMRuntime",
+]
 
 ChatMessage = dict[str, str]
 """One chat-completion message: ``{"role": "user|assistant|system", "content": "..."}``."""
+
+# M5 Body pillar — multimodal content (ADR-005 §M5-B). Kept additive: existing
+# text-only ``ChatMessage`` and ``LLMRuntime`` ABC remain untouched. Body's
+# vision pipeline uses ``MultimodalLLMRuntime`` Protocol below; backends opt in
+# by implementing it (currently ``MlxServerRuntime`` via ``mlx_vlm.server``).
+from typing import Literal, Protocol, TypedDict
+
+
+class ContentPartText(TypedDict):
+    type: Literal["text"]
+    text: str
+
+
+class ContentPartImageURL(TypedDict):
+    type: Literal["image_url"]
+    image_url: dict[str, str]
+    """OpenAI-compatible: ``{"url": "data:image/png;base64,..."}`` or HTTP URL."""
+
+
+class ContentPartImageBytes(TypedDict):
+    type: Literal["image_bytes"]
+    data: bytes
+    mime: Literal["image/png", "image/jpeg"]
+    """Raw bytes path; runtimes that accept multipart upload native (Ollama)."""
+
+
+ContentPart = ContentPartText | ContentPartImageURL | ContentPartImageBytes
+
+
+class MultimodalChatMessage(TypedDict, total=False):
+    role: Literal["system", "user", "assistant", "tool"]
+    content: str | list[ContentPart]
+    name: str  # tool messages
+    tool_call_id: str  # tool result messages
+
+
+class MultimodalLLMRuntime(Protocol):
+    """Vision-aware runtime contract. Body pipeline expects ``invoke_with_images``.
+
+    Backends may implement this in addition to :class:`LLMRuntime`. ``MlxServerRuntime``
+    routes through ``mlx_vlm.server`` (Apple Silicon); Linux server-side fallback
+    is vLLM (OpenAI-compat image_url) or Ollama (``images=[bytes]``).
+    """
+
+    async def invoke_with_images(
+        self,
+        messages: Sequence[MultimodalChatMessage],
+        images: Sequence[bytes],
+        max_tokens: int = 256,
+        temperature: float = 0.0,
+        stop: Sequence[str] | None = None,
+    ) -> str:
+        """Run a multimodal chat completion. Returns assistant content string.
+
+        ``messages`` may carry ``content`` as a list of :class:`ContentPart`
+        items; ``images`` is the parallel raw bytes channel for backends that
+        require it (Ollama). When both are populated, the runtime decides
+        which to forward (text-only fallback path supported)."""
+        ...
 
 
 class LLMRuntime(ABC):

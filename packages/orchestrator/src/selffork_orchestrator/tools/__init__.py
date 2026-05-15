@@ -16,6 +16,7 @@ from selffork_orchestrator.tools.base import (
     ToolSpec,
     raise_unauthorized,
 )
+from selffork_orchestrator.tools.body import build_body_tools
 from selffork_orchestrator.tools.kanban import build_kanban_tools
 from selffork_orchestrator.tools.mind import build_mind_tools
 from selffork_orchestrator.tools.parser import parse_tool_calls
@@ -27,7 +28,8 @@ def build_default_registry() -> ToolRegistry:
     """The canonical registry — every tool the orchestrator wires by default.
 
     Kanban + Mind from MVP; M3 Order 4 adds the Jr autopilot fleet (quota
-    observation + session lifecycle + act tools).
+    observation + session lifecycle + act tools); M5 Order 4 adds the body
+    pillar surface (10 ``body_*`` tools — driver actions gated by warden).
     """
     return ToolRegistry(
         specs=[
@@ -36,6 +38,7 @@ def build_default_registry() -> ToolRegistry:
             *build_quota_tools(),
             *build_session_tools(),
             *build_autopilot_tools(),
+            *build_body_tools(),
         ],
     )
 
@@ -48,6 +51,7 @@ __all__ = [
     "ToolResult",
     "ToolSpec",
     "build_autopilot_tools",
+    "build_body_tools",
     "build_default_registry",
     "build_kanban_tools",
     "build_mind_tools",

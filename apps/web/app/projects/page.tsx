@@ -4,7 +4,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, FolderPlus, Plus } from "lucide-react";
+import { ArrowUpRight, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { EmptyState } from "@/components/empty-state";

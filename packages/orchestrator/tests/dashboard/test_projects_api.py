@@ -160,6 +160,39 @@ class TestKanban:
         assert r.json()["title"] == "new"
         assert r.json()["body"] == "filled"
 
+    def test_update_card_partial_patch_preserves_order(self, tmp_path: Path) -> None:
+        # Order 1 #1.A regression: title-only PATCH used to silently
+        # clear ``order`` to None because the endpoint always passed
+        # ``order=None`` into the store. Now the Pydantic v2
+        # ``model_fields_set`` filter keeps ``order`` untouched.
+        client, config = _client(tmp_path)
+        store = ProjectStore(root=config.projects_root)
+        store.create(name="X")
+        card = store.add_card("x", title="t", order=42)
+        r = client.patch(
+            f"/api/projects/x/kanban/cards/{card.id}",
+            json={"title": "renamed"},
+        )
+        assert r.status_code == 200
+        assert r.json()["title"] == "renamed"
+        assert r.json()["order"] == 42
+
+        # Explicit ``order=null`` still clears the value (sentinel intact).
+        r2 = client.patch(
+            f"/api/projects/x/kanban/cards/{card.id}",
+            json={"order": None},
+        )
+        assert r2.status_code == 200
+        assert r2.json()["order"] is None
+
+        # Explicit ``order=7`` updates the value.
+        r3 = client.patch(
+            f"/api/projects/x/kanban/cards/{card.id}",
+            json={"order": 7},
+        )
+        assert r3.status_code == 200
+        assert r3.json()["order"] == 7
+
     def test_delete_card(self, tmp_path: Path) -> None:
         client, config = _client(tmp_path)
         store = ProjectStore(root=config.projects_root)

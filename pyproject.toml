@@ -93,9 +93,27 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = [
     "S101", "S105", "S106", "S107",  # asserts and hardcoded secrets allowed in tests
+    "S108",                            # /tmp literals allowed in tests
     "ASYNC240",                        # tests may do sync I/O inside async test functions
 ]
 "**/__init__.py" = ["F401"]            # re-exports allowed
+# M5 Body pillar adapter modules: pragmatic line-length exceptions inside
+# error messages / prompt templates / SBPL / bwrap argv where breaking
+# would obscure intent. ASYNC240 Path-methods inside async helpers is a
+# design choice (no anyio/trio dependency yet); explicitly allowed.
+"packages/body/src/**" = [
+    "E501", "ASYNC240",
+    "TRY300",  # try/except/else split makes import-fallback patterns awkward
+    "SIM105", "SIM115",  # contextlib.suppress / context manager — minor cosmetic
+    "S110",  # defensive try/except: pass on browser teardown / autosave paths
+    "ASYNC109",  # ``timeout`` param name is the de-facto pattern in our async API
+]
+"packages/body/src/selffork_body/vision/prompt.py" = ["E501", "TRY004"]
+"packages/orchestrator/src/selffork_orchestrator/sandbox/seatbelt_sandbox.py" = ["ASYNC240"]
+"packages/orchestrator/src/selffork_orchestrator/sandbox/bubblewrap_sandbox.py" = ["S108"]
+"packages/orchestrator/src/selffork_orchestrator/dashboard/provider_router.py" = ["ASYNC240"]
+"packages/orchestrator/src/selffork_orchestrator/tools/body.py" = ["E501", "S110", "RUF100"]
+"packages/body/tests/vision/test_preprocess.py" = ["E402"]
 
 
 [tool.ruff.lint.isort]
@@ -203,6 +221,15 @@ markers = [
 filterwarnings = [
     "error",
     "ignore::DeprecationWarning:pydantic.*",
+    # ``asyncio.create_subprocess_exec`` is used in fire-and-forget mode
+    # by ``POST /api/sessions/run``; the dashboard hands the spawned
+    # ``selffork run`` PID to the operator and never awaits it. Under
+    # pytest the loop tears down between tests and the still-alive
+    # transport's ``__del__`` fires ``ResourceWarning``. In production
+    # the loop is long-running and the OS reaps the child on exit.
+    # M4 Order 1 audit confirmed this is a test-runtime artefact only.
+    "ignore::ResourceWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
 ]
 
 # ──────────────────────────────────────────────────────────────────────────────

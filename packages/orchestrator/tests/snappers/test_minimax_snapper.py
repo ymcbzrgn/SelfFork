@@ -63,6 +63,7 @@ async def test_returns_none_on_invalid_json(tmp_path: Path) -> None:
 async def test_http_probe_populates_windows(tmp_path: Path) -> None:
     """Successful Minimax /v1/token_plan/remains probe → 5h+daily windows."""
     import httpx
+
     from selffork_shared.quota import WindowKind
 
     creds = tmp_path / "credentials.json"
@@ -119,6 +120,7 @@ async def test_falls_back_to_access_field_when_access_token_missing(
 ) -> None:
     """OAuth library variations may use ``access`` instead of ``access_token``."""
     import httpx
+
     from selffork_shared.quota import WindowKind
 
     creds = tmp_path / "credentials.json"

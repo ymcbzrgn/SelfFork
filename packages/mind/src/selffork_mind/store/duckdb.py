@@ -23,7 +23,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import anyio
@@ -36,13 +36,14 @@ from selffork_mind.memory.filters import (
     FilterCondition,
     FilterNot,
 )
-from selffork_mind.memory.model import Note
+from selffork_mind.memory.model import Note, TierName
 from selffork_mind.memory.tags import Tag, TagMatchMode
 from selffork_mind.store.base import (
     MindStore,
     RetrievalHit,
     RetrieveConfig,
     StoreScope,
+    TierStats,
 )
 
 __all__ = ["DuckDBMindStore"]
@@ -339,6 +340,42 @@ class DuckDBMindStore(MindStore):
 
             rows = await anyio.to_thread.run_sync(_fetch)
         return [Tag(note_id=r[0], key=r[1], value=r[2], created_at=r[3]) for r in rows]
+
+    async def count_by_tier(self, scope: StoreScope) -> dict[TierName, TierStats]:
+        """Per-tier counts + recency. Order 3 — M4 cockpit Context tab."""
+        async with self._lock:
+            self._require_open()
+
+            def _count() -> dict[TierName, TierStats]:
+                assert self._conn is not None  # noqa: S101
+                clauses = ["valid_until IS NULL"]
+                params: list[object] = []
+                if scope.project_slug is not None:
+                    clauses.append("project_slug = ?")
+                    params.append(scope.project_slug)
+                if scope.session_id is not None:
+                    clauses.append("session_id = ?")
+                    params.append(scope.session_id)
+                where = " AND ".join(clauses)
+                # ``where`` is composed only from constant clause strings
+                # above — user input is bound through ``params``. No
+                # injection surface; S608 is a false positive on the
+                # f-string composition.
+                base = "SELECT tier, COUNT(*), MAX(written_at) FROM notes"
+                sql = f"{base} WHERE {where} GROUP BY tier"
+                cursor = self._conn.execute(sql, params)
+                # ``tier`` column is constrained at the model layer
+                # (Note.tier is a Literal); cast satisfies mypy without
+                # adding a runtime check that would never fire.
+                return {
+                    cast("TierName", row[0]): TierStats(
+                        count=int(row[1]),
+                        last_updated=row[2],
+                    )
+                    for row in cursor.fetchall()
+                }
+
+            return await anyio.to_thread.run_sync(_count)
 
     async def retrieve(self, config: RetrieveConfig) -> list[RetrievalHit]:
         async with self._lock:

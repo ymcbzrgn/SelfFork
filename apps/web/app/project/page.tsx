@@ -23,7 +23,11 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { useSortable } from "@dnd-kit/sortable";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowLeft, FileText, Folder, GripVertical, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -470,17 +474,22 @@ function Column({
             </EmptyHeader>
           </Empty>
         ) : (
-          cards.map((card) => (
-            <KanbanCard
-              key={card.id}
-              slug={slug}
-              card={card}
-              focused={focusedCardId === card.id}
-              onChanged={onChanged}
-              onOpen={() => onOpenCard(card.id)}
-              onFocus={() => onFocusCard(card.id)}
-            />
-          ))
+          <SortableContext
+            items={cards.map((c) => c.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {cards.map((card) => (
+              <KanbanCard
+                key={card.id}
+                slug={slug}
+                card={card}
+                focused={focusedCardId === card.id}
+                onChanged={onChanged}
+                onOpen={() => onOpenCard(card.id)}
+                onFocus={() => onFocusCard(card.id)}
+              />
+            ))}
+          </SortableContext>
         )}
       </div>
 

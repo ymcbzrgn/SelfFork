@@ -13,13 +13,16 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
+  Bot,
   Folder,
   FolderPlus,
+  KeyRound,
   LayoutDashboard,
   ListTree,
   PauseCircle,
   PlayCircle,
   ScrollText,
+  Server,
 } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 
@@ -38,6 +41,11 @@ const PRIMARY_NAV: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/?tab=paused", label: "Paused", icon: PauseCircle },
   { href: "/?tab=recent", label: "Sessions", icon: ListTree },
+  // M5 Order 9 — Body pillar surfaces (Fleet daemons + OAuth providers +
+  // Body action stream / permission prompts).
+  { href: "/cockpit/fleet", label: "Fleet", icon: Server },
+  { href: "/cockpit/providers", label: "Providers", icon: KeyRound },
+  { href: "/cockpit/body", label: "Body", icon: Bot },
 ];
 
 const FOOTER_NAV: NavItem[] = [

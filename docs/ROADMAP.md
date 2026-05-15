@@ -573,9 +573,17 @@ If M4 slips beyond 7 weeks, suspect 4-tab simultaneous delivery overload. Cut: s
 
 ---
 
-### M5 — Body Daemon (3–4 weeks)
+### M5 — Body (Cross-Platform Daemon + Vision Drivers + Provider Auth UI, 6–8 weeks)
 
-**Goal:** The brain on the home Mac extends into work machines via Tailscale.
+> **Revised 2026-05-10 by ADR-005.** Scope merged: original daemon (3–4 wk) +
+> handoff vision drivers (4–6 wk) = combined 6–8 wk. Vision tier requirement
+> dropped from "Full Vision 26B A4B" to "Nano + E2B vision"; see §7 Driver
+> Roadmap revision below.
+
+**Goal:** The brain on the home Mac extends into work machines via Tailscale **and**
+gains vision-driven cross-UI control (mobile/web/desktop) through Gemma 4 E2B
+multimodal. Plus a cockpit Provider Auth UI orchestrating browser-driven OAuth
+flows.
 
 **Scope:**
 
@@ -904,10 +912,10 @@ All deferred to v2.0+:
 | M1 | 3 wk | 2026-05 | 2026-06 |
 | M2 | 4 wk | 2026-06 | 2026-07 |
 | M3 ∥ M4 | 4 wk (max of pair) | 2026-07 | 2026-08 |
-| M5 | 3 wk | 2026-09 | 2026-09 |
-| M6 | 3 wk | 2026-10 | 2026-10 |
-| M7 | 5 wk + 1 wk operator review | 2026-11 | 2027-01 |
-| **Nano v1.0 ship** | — | — | **~2027-01** |
+| M5 | **6-8 wk** *(revised — daemon + vision drivers, ADR-005)* | 2026-09 | **2026-10** |
+| M6 | 3 wk | 2026-11 | 2026-11 |
+| M7 | 5 wk + 1 wk operator review | 2026-12 | 2027-02 |
+| **Nano v1.0 ship** | — | — | **~2027-02** |
 
 Adjusted for slippage budget (+30%): **~2027-04**.
 
@@ -967,13 +975,19 @@ Starts the day M0 lands. Runs every working day until M7 ingests it.
 
 Vision-grounded UI control depends on Speaker tier.
 
+> **Revised 2026-05-10 by ADR-005 §"Eski karar".** Gemma 4 E2B native pointing +
+> JSON bbox (HF blog gemma4, Datature CV guide) makes vision drivers viable on
+> the Nano tier; the "Full Vision 26B A4B" gate was conservative and is dropped.
+> If R1 (held-out vision eval) fails, vision drivers regress to M6 per the
+> bouncing-back path in ADR-005.
+
 | Driver | Tier required | Earliest Milestone | Notes |
 |---|---|---|---|
 | `desktop/` (CLI control via tmux) | Nano | M5 | All v1 surfaces |
-| `web/` (browser-use / skyvern reference) | Full Vision | post-v2.0 | Needs 26B A4B vision |
-| `android/` (mobile-mcp + docker-android) | Full Vision | post-v2.0 | Needs 26B A4B vision |
-| `ios/` (appium-mcp) | Full Vision | post-v2.0 | Needs 26B A4B vision |
-| `desktop-vision/` (OS click + type) | Full Vision | post-v2.0 | Bonus driver |
+| `web/` (Playwright + browser-use referans) | Nano + E2B vision | **M5** | DOM-first + screenshot fallback |
+| `android/` (mobile-mcp + docker-android + uiautomator2) | Nano + E2B vision | **M5** | docker-android container |
+| `ios/` (Appium XCUITest + WDA, simulator only) | Nano + E2B vision | **M5** (real device M6+) | Apple Dev `$99/yr` for real device |
+| `desktop-vision/` (macOS AX + screenshot fallback) | Nano + E2B vision | **M5** (macOS) / M6 (Linux+Win) | PyObjC ApplicationServices |
 
 ---
 

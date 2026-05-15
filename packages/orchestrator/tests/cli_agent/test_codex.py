@@ -55,9 +55,8 @@ def test_resolve_binary_raises_when_missing(monkeypatch: pytest.MonkeyPatch) -> 
     with patch(
         "selffork_orchestrator.cli_agent.codex.shutil.which",
         return_value=None,
-    ):
-        with pytest.raises(AgentBinaryNotFoundError, match="codex login"):
-            agent.resolve_binary()
+    ), pytest.raises(AgentBinaryNotFoundError, match="codex login"):
+        agent.resolve_binary()
 
 
 def test_compose_initial_messages_contains_prd_and_workspace() -> None:
@@ -75,28 +74,41 @@ def test_compose_initial_messages_contains_prd_and_workspace() -> None:
     assert "/tmp/plan.md" in msgs[1]["content"]
 
 
+_AUTO_APPROVE = (
+    "--skip-git-repo-check",
+    "--dangerously-bypass-approvals-and-sandbox",
+)
+
+
 def test_build_command_first_round() -> None:
     agent = _make_agent()
     cmd = agent.build_command(message="hello", is_first_round=True)
-    assert cmd == ["exec", "hello"]
+    assert cmd == ["exec", *_AUTO_APPROVE, "hello"]
 
 
 def test_build_command_continuation() -> None:
     agent = _make_agent()
     cmd = agent.build_command(message="hello", is_first_round=False)
-    assert cmd == ["exec", "--resume-last", "hello"]
+    assert cmd == ["exec", *_AUTO_APPROVE, "--resume-last", "hello"]
 
 
 def test_build_command_includes_extra_args() -> None:
     agent = _make_agent(extra_args=["--profile", "fast"])
     cmd = agent.build_command(message="hi", is_first_round=True)
-    assert cmd == ["exec", "--profile", "fast", "hi"]
+    assert cmd == ["exec", *_AUTO_APPROVE, "--profile", "fast", "hi"]
 
 
 def test_build_command_extra_args_with_continuation() -> None:
     agent = _make_agent(extra_args=["--profile", "fast"])
     cmd = agent.build_command(message="hi", is_first_round=False)
-    assert cmd == ["exec", "--resume-last", "--profile", "fast", "hi"]
+    assert cmd == [
+        "exec",
+        *_AUTO_APPROVE,
+        "--resume-last",
+        "--profile",
+        "fast",
+        "hi",
+    ]
 
 
 def test_build_env_disables_color() -> None:

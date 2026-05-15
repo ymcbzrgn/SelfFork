@@ -3,7 +3,7 @@ import "./globals.css";
 
 import { CommandPalette } from "@/components/command-palette";
 import { KeyboardShortcutsOverlay } from "@/components/keyboard-shortcuts-overlay";
-import { SidebarProvider } from "@/components/layout/sidebar-context";
+import { CockpitProviders } from "@/components/providers";
 
 export const metadata: Metadata = {
   title: "SelfFork Dashboard",
@@ -19,11 +19,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="min-h-screen bg-background text-foreground antialiased">
-        <SidebarProvider>
+        <CockpitProviders>
           {children}
           <CommandPalette />
           <KeyboardShortcutsOverlay />
-        </SidebarProvider>
+        </CockpitProviders>
       </body>
     </html>
   );

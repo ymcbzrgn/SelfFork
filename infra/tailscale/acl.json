@@ -1,0 +1,24 @@
+{
+  "groups": {
+    "group:selffork-orchestrator": ["operator@selffork.dev"],
+    "group:selffork-daemon": ["tag:selffork-daemon"]
+  },
+  "tagOwners": {
+    "tag:selffork-daemon": ["group:selffork-orchestrator"]
+  },
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["group:selffork-orchestrator"],
+      "dst": ["tag:selffork-daemon:*"]
+    }
+  ],
+  "ssh": [
+    {
+      "action": "accept",
+      "src": ["group:selffork-orchestrator"],
+      "dst": ["tag:selffork-daemon"],
+      "users": ["root", "operator"]
+    }
+  ]
+}

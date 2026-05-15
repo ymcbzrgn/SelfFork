@@ -62,6 +62,69 @@ def _seed_paused_record(
     return rec
 
 
+def _build_run_config(
+    tmp_path: Path,
+) -> tuple[DashboardConfig, Path, Path]:
+    """Stage a real bash recorder for the run endpoint to spawn.
+
+    Returns ``(config, fake_script, argv_log)``. The recorder writes
+    each positional argument on its own line so the test can grep for
+    ``--project`` and ``<slug>`` independently.
+    """
+    import os
+
+    argv_log = tmp_path / "argv.log"
+    fake_script = tmp_path / "fake-selffork"
+    fake_script.write_text(
+        f'#!/usr/bin/env bash\nprintf "%s\\n" "$@" > {argv_log}\n',
+        encoding="utf-8",
+    )
+    # Test-only: shell script must be executable for the dashboard's
+    # subprocess.create_subprocess_exec to spawn it.
+    os.chmod(fake_script, 0o755)  # noqa: S103
+
+    config = DashboardConfig(
+        audit_dir=tmp_path / "audit",
+        resume_dir=tmp_path / "scheduled",
+        projects_root=tmp_path / "projects",
+        selffork_script=fake_script,
+    )
+    config.audit_dir.mkdir(parents=True, exist_ok=True)
+    config.resume_dir.mkdir(parents=True, exist_ok=True)
+    config.projects_root.mkdir(parents=True, exist_ok=True)
+    return config, fake_script, argv_log
+
+
+def _wait_for_argv(argv_log: Path, pid: int, timeout: float = 2.0) -> list[str]:
+    """Wait for the bash recorder to write its argv, then reap the child.
+
+    Without explicit reap the asyncio subprocess transport leaks, which
+    triggers ``ResourceWarning``s during pytest teardown — the warnings
+    are ``-W error``-promoted in CI and turn passing tests red.
+    """
+    import errno
+    import os
+    import time
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if argv_log.is_file() and argv_log.stat().st_size > 0:
+            break
+        time.sleep(0.05)
+    assert argv_log.is_file(), "fake-selffork never executed"
+
+    # Reap the zombie left behind by the dashboard's fire-and-forget
+    # subprocess.create_subprocess_exec. Any error here means the child
+    # was already reaped by asyncio's child watcher — that's fine.
+    try:
+        os.waitpid(pid, 0)
+    except OSError as exc:
+        if exc.errno != errno.ECHILD:
+            raise
+
+    return argv_log.read_text(encoding="utf-8").splitlines()
+
+
 def _seed_audit_log(
     tmp_path: Path,
     *,
@@ -256,6 +319,46 @@ class TestEvents:
         r = client.get("/api/sessions/never-existed/events")
         assert r.status_code == 404
 
+    def test_resolves_project_audit_dir(self, tmp_path: Path) -> None:
+        # Order 1 #1.B regression: events for a session stored under
+        # a project's audit dir used to 404 because the endpoint only
+        # looked in the orphan audit dir. _resolve_audit_dir now walks
+        # both layouts.
+        from selffork_orchestrator.projects.store import ProjectStore
+
+        project_store = ProjectStore(root=tmp_path / "projects")
+        project_store.create(name="My", slug="myproj")
+        project_audit = project_store.audit_dir("myproj")
+        project_audit.mkdir(parents=True, exist_ok=True)
+
+        project_jsonl = project_audit / "01HJPROJEVENT.jsonl"
+        project_jsonl.write_text(
+            json.dumps(
+                {
+                    "ts": "2026-05-01T12:00:00+00:00",
+                    "correlation_id": "x",
+                    "session_id": "01HJPROJEVENT",
+                    "category": "agent.invoke",
+                    "level": "INFO",
+                    "event": "test",
+                    "payload": {
+                        "round": 0,
+                        "binary": "/x/opencode",
+                        "args_count": 1,
+                    },
+                },
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        client = _build_test_client(tmp_path)
+        r = client.get("/api/sessions/01HJPROJEVENT/events")
+        assert r.status_code == 200
+        events = r.json()
+        assert len(events) == 1
+        assert events[0]["category"] == "agent.invoke"
+
 
 # ── /api/sessions/<id>/plan ───────────────────────────────────────────────────
 
@@ -344,6 +447,50 @@ class TestRunEndpoint:
         r = client.post("/api/sessions/paused/never/resume")
         assert r.status_code == 404
 
+    def test_run_with_project_slug_passes_to_cli(self, tmp_path: Path) -> None:
+        # Order 1 #1.C regression: the dashboard accepted ``project_slug``
+        # in the request payload but never forwarded it to the CLI, so
+        # project-aware runs fell back to orphan audit dirs. Real
+        # subprocess (no mocks) — the ``selffork`` script is replaced
+        # with a bash recorder that writes its argv to a log file.
+        config, _, argv_log = _build_run_config(tmp_path)
+        prd = tmp_path / "prd.md"
+        prd.write_text("# Test PRD\n", encoding="utf-8")
+
+        client = TestClient(build_app(config))
+        r = client.post(
+            "/api/sessions/run",
+            json={"prd_path": str(prd), "project_slug": "myproj"},
+        )
+        assert r.status_code == 200
+        assert r.json()["status"] == "started"
+
+        argv_lines = _wait_for_argv(argv_log, r.json()["pid"])
+        assert "run" in argv_lines
+        assert str(prd) in argv_lines
+        assert "--project" in argv_lines
+        assert "myproj" in argv_lines
+
+    def test_run_without_project_slug_omits_project_flag(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        # Sanity check: omitting project_slug must not inject --project.
+        config, _, argv_log = _build_run_config(tmp_path)
+        prd = tmp_path / "prd.md"
+        prd.write_text("# Test PRD\n", encoding="utf-8")
+
+        client = TestClient(build_app(config))
+        r = client.post(
+            "/api/sessions/run",
+            json={"prd_path": str(prd)},
+        )
+        assert r.status_code == 200
+
+        argv_lines = _wait_for_argv(argv_log, r.json()["pid"])
+        assert "run" in argv_lines
+        assert "--project" not in argv_lines
+
 
 # ── WebSocket stream ──────────────────────────────────────────────────────────
 
@@ -351,7 +498,8 @@ class TestRunEndpoint:
 class TestWebSocketStream:
     def test_streams_existing_events_then_appended_ones(self, tmp_path: Path) -> None:
         # Seed an audit file with two events, then connect the WebSocket,
-        # then append a third event — the WebSocket must surface all three.
+        # then append a third event — the WebSocket must surface all three
+        # wrapped in M-1 envelopes (Order 2).
         _seed_audit_log(
             tmp_path,
             session_id="01HJSTREAM",
@@ -360,11 +508,15 @@ class TestWebSocketStream:
         )
         client = _build_test_client(tmp_path)
         with client.websocket_connect("/api/sessions/01HJSTREAM/stream") as ws:
-            # Phase 2 drain — receive initial events.
+            # Phase 2 drain — receive initial envelopes.
             first = json.loads(ws.receive_text())
             second = json.loads(ws.receive_text())
-            assert first["category"] == "session.state"
-            assert second["category"] == "session.state"
+            assert first["event_type"] == "audit"
+            assert first["payload"]["category"] == "session.state"
+            assert first["seq"] == 1
+            assert second["event_type"] == "audit"
+            assert second["payload"]["category"] == "session.state"
+            assert second["seq"] == 2
 
             # Append a third event to disk.
             audit_path = tmp_path / "audit" / "01HJSTREAM.jsonl"
@@ -380,9 +532,69 @@ class TestWebSocketStream:
             with audit_path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(new_event) + "\n")
 
-            # Phase 3 tail — receive the new event.
+            # Phase 3 tail — receive the new envelope.
             third = json.loads(ws.receive_text())
-            assert third["category"] == "agent.invoke"
+            assert third["event_type"] == "audit"
+            assert third["payload"]["category"] == "agent.invoke"
+            assert third["seq"] == 3
+            assert third["session_id"] == "01HJSTREAM"
+
+    def test_resolves_project_audit_dir(self, tmp_path: Path) -> None:
+        # Order 1 #1.B regression: WS stream used to read only the
+        # orphan audit_dir. Project sessions must also stream — wrapped
+        # in M-1 envelopes (Order 2).
+        from selffork_orchestrator.projects.store import ProjectStore
+
+        project_store = ProjectStore(root=tmp_path / "projects")
+        project_store.create(name="My", slug="myproj")
+        project_audit = project_store.audit_dir("myproj")
+        project_audit.mkdir(parents=True, exist_ok=True)
+
+        project_jsonl = project_audit / "01HJPROJWS.jsonl"
+        project_jsonl.write_text(
+            json.dumps(
+                {
+                    "ts": "2026-05-01T12:00:00+00:00",
+                    "correlation_id": "x",
+                    "session_id": "01HJPROJWS",
+                    "category": "session.state",
+                    "level": "INFO",
+                    "event": "test",
+                    "payload": {"from": "idle", "to": "preparing"},
+                },
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        client = _build_test_client(tmp_path)
+        with client.websocket_connect(
+            "/api/sessions/01HJPROJWS/stream",
+        ) as ws:
+            first = json.loads(ws.receive_text())
+            assert first["event_type"] == "audit"
+            assert first["seq"] == 1
+            assert first["payload"]["category"] == "session.state"
+            assert first["payload"]["payload"] == {
+                "from": "idle",
+                "to": "preparing",
+            }
+
+    def test_unknown_session_closes_with_4404(self, tmp_path: Path) -> None:
+        # Without a matching audit file in either layout the WS
+        # closes with HTTP-mirror code 4404 (mirrors REST 404).
+        import pytest
+        from starlette.websockets import WebSocketDisconnect
+
+        client = _build_test_client(tmp_path)
+        with (
+            pytest.raises(WebSocketDisconnect) as exc_info,
+            client.websocket_connect(
+                "/api/sessions/never-was/stream",
+            ) as ws,
+        ):
+            ws.receive_text()
+        assert exc_info.value.code == 4404
 
 
 # ── /api/projects/<slug>/kanban/stream ────────────────────────────────────────

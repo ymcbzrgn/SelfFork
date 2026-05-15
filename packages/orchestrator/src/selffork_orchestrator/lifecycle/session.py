@@ -15,6 +15,7 @@ See: ``docs/decisions/ADR-001_MVP_v0.md`` §6.
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 from typing import Protocol
 
@@ -486,6 +487,11 @@ class Session:
                 },
             )
             result = await self._tool_registry.invoke_async(call, ctx)
+            # Order 4 / M-7 — ``payload_keys`` stays for backwards
+            # compatibility with audit-derived consumers (UsageAggregator,
+            # M3 audit-fix tooling). ``result_payload_preview`` is the
+            # additive field the cockpit Chat tab inlines for tool calls
+            # — redaction-safe, capped to 5 KB per result.
             self._audit.emit(
                 "tool.result",
                 payload={
@@ -494,6 +500,7 @@ class Session:
                     "status": result.status,
                     "error": result.error,
                     "payload_keys": list(result.payload or {}),
+                    "result_payload_preview": _redact_preview(result.payload),
                 },
             )
             results.append(result)
@@ -720,6 +727,172 @@ def _has_mark_done_ok(
         if call.tool == "mark_done" and result.status == "ok":
             return True
     return False
+
+
+# M-7 (Order 4) — ``tool.result`` audit payload preview.
+
+# Maximum size of ``result_payload_preview`` after JSON serialisation.
+# Big enough for ``mind_recall`` hits + ``available_clis`` lists, small
+# enough that an audit JSONL line stays under typical 64 KB log shipper
+# limits even when several tool calls fire per round.
+_RESULT_PREVIEW_MAX_CHARS = 5_000
+
+# Substring patterns that mark a key whose value should be redacted.
+# Conservative — false-positive redaction is fine; false-negative leak
+# of a credential into the audit log is a P0. List is post-Order-4
+# audit-driven (cookie / client_id / signature / pin / otp / nonce
+# were missing on first pass — credential-bearing keys an HTTP / OAuth
+# / 2FA tool result might carry).
+_SECRET_KEY_PATTERNS: tuple[str, ...] = (
+    "api_key",
+    "apikey",
+    "token",
+    "password",
+    "passwd",
+    "secret",
+    "credential",
+    "auth",
+    "authorization",
+    "session_key",
+    "private_key",
+    "bearer",
+    "cookie",
+    "set-cookie",
+    "client_id",
+    "client-id",
+    "signature",
+    "signed",
+    "pin",
+    "otp",
+    "nonce",
+    "csrf",
+    "xsrf",
+    "x-api-key",
+    "refresh",
+    # M5 Body pillar — vision payload redaction (ADR-005 §M5-D3). Screenshot
+    # binary must NEVER be inlined into audit JSONL; persistence is a disk
+    # path reference. These keys catch accidental inline base64 / bytes.
+    "screenshot_b64",
+    "image_b64",
+    "image_url",
+    "after_screenshot_b64",
+    "before_screenshot_b64",
+)
+
+
+# M5 Body pillar — image payload redaction layer (ADR-005 §M5-D3).
+# Catches inline base64 / raw bytes that slip past dict-key matching above.
+# Path strings (~/.selffork/.../*.png) pass through unchanged.
+_IMAGE_BASE64_PREFIXES: tuple[str, ...] = (
+    "iVBORw0KG",  # PNG magic bytes base64
+    "/9j/",  # JPEG magic bytes base64
+    "data:image/",  # data URL
+)
+
+
+def _redact_image_payload(value: bytes | str) -> bytes | str:
+    """Replace inline image content with a length-tagged sentinel.
+
+    ``bytes`` are always replaced (raw screenshot inline is policy violation).
+    Strings starting with a known base64 image prefix are replaced; strings
+    that look like disk paths (``~/.selffork/...png``) are kept intact since
+    audit references are paths by design.
+    """
+    if isinstance(value, bytes):
+        return f"<redacted_image:{len(value)}_bytes>"
+    if isinstance(value, str):
+        if value.startswith(_IMAGE_BASE64_PREFIXES):
+            return f"<redacted_image_base64:{len(value)}_chars>"
+    return value
+
+
+def _redact_preview(payload: object) -> object:
+    """Return a redacted, length-capped projection of a tool result payload.
+
+    Order 4 / M-7. The cockpit Chat tab renders this field inline so
+    operators can see what a tool returned without reopening the run.
+    Four guarantees:
+
+    1. Secret-looking keys are replaced with the literal ``"<redacted>"``
+       at any depth (recursive).
+    2. Custom objects are coerced through ``__repr__`` BEFORE serialisation
+       so any secrets in their stringification go through the same
+       key-pattern scan via the wrapping dict.
+    3. The serialised JSON is truncated to ``_RESULT_PREVIEW_MAX_CHARS``;
+       overflow is signalled with ``"<truncated:N>"`` (N = original size).
+    4. Recursion is depth-capped at ``_REDACT_MAX_DEPTH`` so a pathological
+       payload never crashes the audit emit (``RecursionError`` would
+       fall outside the ``json.dumps`` try/except below).
+    """
+    redacted = _redact_recursive(payload, depth=0)
+    try:
+        wire = json.dumps(redacted, ensure_ascii=False, default=repr)
+    except (TypeError, ValueError):
+        # Last-resort fallback — should be unreachable thanks to ``default=repr``.
+        wire = repr(redacted)
+    if len(wire) <= _RESULT_PREVIEW_MAX_CHARS:
+        return redacted
+    return {
+        "preview_truncated": True,
+        "original_chars": len(wire),
+        "head": wire[: _RESULT_PREVIEW_MAX_CHARS],
+    }
+
+
+# 16 deep is generous for tool output (mind_recall hits ~3 deep, quota
+# snapshots ~4 deep). Anything deeper smells like accidental cycle or
+# malicious payload — collapse to a marker.
+_REDACT_MAX_DEPTH = 16
+
+
+def _redact_recursive(value: object, *, depth: int) -> object:
+    if depth >= _REDACT_MAX_DEPTH:
+        return "<depth-capped>"
+    if isinstance(value, dict):
+        return {
+            k: (
+                "<redacted>"
+                if _is_secret_key(str(k))
+                else _redact_recursive(v, depth=depth + 1)
+            )
+            for k, v in value.items()
+        }
+    if isinstance(value, list | tuple):
+        return [_redact_recursive(v, depth=depth + 1) for v in value]
+    if isinstance(value, bytes):
+        # M5 Body pillar — raw bytes (screenshot binary) must never inline.
+        return _redact_image_payload(value)
+    if isinstance(value, str):
+        # M5 Body pillar — catch inline base64 image strings that slipped
+        # past key-pattern matching (e.g. tool result with ``image: <b64>``).
+        return _redact_image_payload(value)
+    if isinstance(value, int | float | bool | type(None)):
+        return value
+    # Custom object — coerce through ``__repr__`` and re-scan as a string.
+    # This catches the case where ``Custom.__repr__`` includes credential
+    # material (boto3 clients, requests Session, etc.). The wrapping dict
+    # key check on the parent already redacts the value if the *key*
+    # was secret-looking; here we additionally scrub the *content* of the
+    # repr against the same pattern list.
+    rendered = repr(value)
+    return _scrub_string(rendered)
+
+
+def _scrub_string(text: str) -> str:
+    """Replace ``key='value'`` substrings whose key matches a secret pattern.
+
+    Only kicks in for keys we already redact at the dict level — the same
+    threat surface, just expressed through a custom object's ``__repr__``.
+    """
+    lowered = text.lower()
+    if not any(pattern in lowered for pattern in _SECRET_KEY_PATTERNS):
+        return text
+    return "<redacted-repr>"
+
+
+def _is_secret_key(key: str) -> bool:
+    lowered = key.lower()
+    return any(pattern in lowered for pattern in _SECRET_KEY_PATTERNS)
 
 
 def _format_tool_results(results: list[ToolResult]) -> str:

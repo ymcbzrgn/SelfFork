@@ -53,6 +53,25 @@ AuditCategory = Literal[
     "plan.load",
     "plan.save",
     "plan.update",
+    # M5 Body pillar — driver lifecycle (ADR-005 §M5-D3)
+    "body.driver.start",  # Body driver session opened (web/android/ios/desktop/tmux)
+    "body.driver.stop",  # Body driver session closed
+    # M5 Body pillar — action surface
+    "body.action.invoke",  # Action requested, warden has not yet decided
+    "body.action.executed",  # Driver completed action successfully
+    "body.action.failed",  # Action failed (exception/timeout/kill)
+    # M5 Body pillar — permission warden
+    "body.permission.requested",  # Warden awaiting operator decision
+    "body.permission.deny",  # Warden denied / operator denied
+    # M5 Body pillar — vision pipeline
+    "body.vision.query",  # Gemma 4 vision call (Tier-1/2/3)
+    "body.observation",  # Screenshot/AX-tree snapshot (path ref, never inline binary)
+    # M5 Provider Auth UI (cockpit Providers tab)
+    "provider.auth.requested",  # Operator initiated sign-in flow
+    "provider.auth.success",  # OAuth callback received, storage_state saved
+    "provider.auth.failed",  # Sign-in flow errored (network/CAPTCHA/MFA)
+    "provider.token.refreshed",  # Proactive token refresh (per-provider)
+    "provider.token.expired",  # Runtime detection of expired credential
     "error",
 ]
 
