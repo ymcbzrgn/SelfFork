@@ -1,4 +1,5 @@
 """Tests for :class:`MinimaxCliAgent`."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -49,10 +50,13 @@ def test_resolve_binary_raises_when_missing(monkeypatch: pytest.MonkeyPatch) -> 
         "selffork_orchestrator.cli_agent.minimax_cli._COMMON_INSTALL_PATHS",
         (),
     )
-    with patch(
-        "selffork_orchestrator.cli_agent.minimax_cli.shutil.which",
-        return_value=None,
-    ), pytest.raises(AgentBinaryNotFoundError, match="mmx auth login"):
+    with (
+        patch(
+            "selffork_orchestrator.cli_agent.minimax_cli.shutil.which",
+            return_value=None,
+        ),
+        pytest.raises(AgentBinaryNotFoundError, match="mmx auth login"),
+    ):
         agent.resolve_binary()
 
 

@@ -8,6 +8,7 @@ auto-pilot's quota awareness chain.
 These tests are intentionally end-to-end (no per-component mocking
 beyond what's strictly necessary for isolation) — Order 9 deliverable.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta

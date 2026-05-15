@@ -22,6 +22,7 @@ https://code.claude.com/docs/en/statusline):
 the first API call of the session. API-key-auth and pre-first-API sessions
 yield empty ``windows`` but populated ``context``.
 """
+
 from __future__ import annotations
 
 import json

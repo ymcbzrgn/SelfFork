@@ -11,6 +11,7 @@ layers coexist by design — see ``project_provider_usage_source.md``.
 This module provides a thin reader; it does NOT manage snapper lifecycle
 (see :class:`selffork_orchestrator.snappers.runner.SnapperRunner`).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

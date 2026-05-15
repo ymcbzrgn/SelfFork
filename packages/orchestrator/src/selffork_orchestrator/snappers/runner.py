@@ -20,6 +20,7 @@ Lifecycle:
 Or use as a daemon entry point: ``await runner.serve()`` blocks forever
 (or until another task signals ``runner.stop()``).
 """
+
 from __future__ import annotations
 
 import contextlib

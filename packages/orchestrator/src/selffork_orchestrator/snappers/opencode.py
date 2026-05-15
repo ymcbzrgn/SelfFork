@@ -38,6 +38,7 @@ per-provider quota.
 WAL mode allows concurrent reads while OpenCode writes — we open with
 ``mode=ro`` for read-only safety.
 """
+
 from __future__ import annotations
 
 import json
@@ -61,9 +62,7 @@ def default_opencode_db_path() -> Path:
 
     Picks the macOS path if it exists, otherwise the Linux XDG default.
     """
-    macos_path = (
-        Path.home() / "Library" / "Application Support" / "opencode" / "opencode.db"
-    )
+    macos_path = Path.home() / "Library" / "Application Support" / "opencode" / "opencode.db"
     if macos_path.exists():
         return macos_path
     return Path.home() / ".local" / "share" / "opencode" / "opencode.db"

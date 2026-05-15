@@ -20,6 +20,7 @@ on the metering endpoint itself), we still emit a snapshot with empty
 decide rather than silently routing real work to a CLI whose quota is
 unknown.
 """
+
 from __future__ import annotations
 
 import json
@@ -55,13 +56,7 @@ def default_opencode_auth_path() -> Path:
     Linux falls back to ``~/.local/share/opencode/auth.json``. Snapper picks
     whichever exists at call time so the same code works on both.
     """
-    macos_path = (
-        Path.home()
-        / "Library"
-        / "Application Support"
-        / "opencode"
-        / "auth.json"
-    )
+    macos_path = Path.home() / "Library" / "Application Support" / "opencode" / "auth.json"
     if macos_path.exists():
         return macos_path
     return Path.home() / ".local" / "share" / "opencode" / "auth.json"
@@ -87,9 +82,7 @@ class ZaiSnapper(Snapper):
     ) -> None:
         super().__init__(cli_id="zai")
         self._auth_path = (
-            opencode_auth_path
-            if opencode_auth_path is not None
-            else default_opencode_auth_path()
+            opencode_auth_path if opencode_auth_path is not None else default_opencode_auth_path()
         )
         self._usage_url = usage_url
         self._client = http_client

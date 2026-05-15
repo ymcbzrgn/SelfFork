@@ -14,6 +14,7 @@ intent into the audit log regardless of whether PTB is installed; the
 orchestrator round-loop drains the audit log and routes through whatever
 bridge is wired (Null in M3-M5 dev, PTB in production).
 """
+
 from __future__ import annotations
 
 from selffork_orchestrator.telegram.allowlist import (

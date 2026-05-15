@@ -12,6 +12,7 @@ For orphan sessions (no project)::
 
 Atomic write (tempfile + os.replace) to prevent torn reads.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -45,14 +46,7 @@ class HandoffBundleStore:
 
     def session_dir(self, *, session_id: str, project_slug: str | None) -> Path:
         if project_slug:
-            return (
-                self._root
-                / "projects"
-                / project_slug
-                / "sessions"
-                / session_id
-                / "handoff"
-            )
+            return self._root / "projects" / project_slug / "sessions" / session_id / "handoff"
         return self._root / "sessions" / session_id / "handoff"
 
     def bundle_path(
@@ -62,10 +56,13 @@ class HandoffBundleStore:
         bundle_id: str,
         project_slug: str | None,
     ) -> Path:
-        return self.session_dir(
-            session_id=session_id,
-            project_slug=project_slug,
-        ) / f"bundle-{bundle_id}.json"
+        return (
+            self.session_dir(
+                session_id=session_id,
+                project_slug=project_slug,
+            )
+            / f"bundle-{bundle_id}.json"
+        )
 
     # ── CRUD ─────────────────────────────────────────────────────────────
 

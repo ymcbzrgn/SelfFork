@@ -14,6 +14,7 @@ operator cancels), :meth:`LaunchdScheduler.uninstall` calls
 Linux/Windows scheduling is a follow-up patch within Order 3 (systemd
 user timer for Linux; Windows is M5+ scope).
 """
+
 from __future__ import annotations
 
 import shutil
