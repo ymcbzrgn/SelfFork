@@ -1,179 +1,67 @@
 /**
- * Top bar: shows backend connectivity + audit paths so the user knows
- * which on-disk artifacts the dashboard is reading from. Polls
- * /api/health every 10s; switches to a clear "offline" state when the
- * backend goes away.
+ * SelfFork v2 topbar — Stitch-verbatim port.
+ *
+ * surface background (one tonal step above the page), heading-typed
+ * workspace title on the left, a small primary-container avatar on the
+ * right. No search, no audit-dir pills. Backend health is polled
+ * silently — only when /api/health drops do we surface a subtle hint.
  */
 "use client";
 
-import {
-  CircleHelp,
-  FolderOpen,
-  PanelLeft,
-  PanelLeftClose,
-  Search,
-  Wifi,
-  WifiOff,
-} from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { useSidebar } from "@/components/layout/sidebar-context";
-import { type DashboardHealth, getHealth } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { getHealth } from "@/lib/api";
 
-type HealthState =
-  | { status: "loading" }
-  | { status: "online"; data: DashboardHealth }
-  | { status: "offline"; error: string };
+interface TopBarProps {
+  /** Title displayed left — falls back to the default workspace label. */
+  title?: string;
+}
 
-export function TopBar({ title }: { title: string }) {
-  const [health, setHealth] = useState<HealthState>({ status: "loading" });
-  const { collapsed, toggle } = useSidebar();
+export function TopBar({ title = "Personal Space" }: TopBarProps) {
+  const [online, setOnline] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    const poll = async () => {
+    const tick = async () => {
       try {
-        const data = await getHealth();
-        if (!cancelled) setHealth({ status: "online", data });
-      } catch (e) {
-        if (!cancelled) {
-          setHealth({
-            status: "offline",
-            error: e instanceof Error ? e.message : String(e),
-          });
-        }
+        await getHealth();
+        if (!cancelled) setOnline(true);
+      } catch {
+        if (!cancelled) setOnline(false);
       }
     };
-    void poll();
-    const t = setInterval(() => void poll(), 10_000);
+    void tick();
+    const id = window.setInterval(() => void tick(), 15_000);
     return () => {
       cancelled = true;
-      clearInterval(t);
+      window.clearInterval(id);
     };
   }, []);
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background px-4 md:px-6">
-      <button
-        type="button"
-        onClick={toggle}
-        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        className="hidden h-8 w-8 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground md:inline-flex"
-      >
-        {collapsed ? (
-          <PanelLeft className="h-4 w-4" />
-        ) : (
-          <PanelLeftClose className="h-4 w-4" />
-        )}
-      </button>
-
-      <h1 className="truncate text-base font-semibold tracking-tight">
-        {title}
-      </h1>
-
-      <div className="ml-auto flex items-center gap-3 text-xs">
-        <SearchTrigger />
-        <PathPill label="audit" path={pathFromHealth(health, "audit_dir")} />
-        <PathPill
-          label="scheduled"
-          path={pathFromHealth(health, "resume_dir")}
-        />
-        <ConnectivityPill state={health} />
+    <header className="h-topbar-height w-full sticky top-0 z-40 bg-surface flex items-center justify-between px-gutter-desktop">
+      <div className="flex items-center gap-3">
+        <h2 className="font-heading text-heading font-semibold text-on-surface">
+          {title}
+        </h2>
+        {!online ? (
+          <span
+            className="font-caption text-caption font-semibold text-tertiary uppercase tracking-wider"
+            aria-label="backend offline"
+          >
+            offline
+          </span>
+        ) : null}
+      </div>
+      <div className="flex items-center gap-4">
+        {/* No auth/user system yet — soft primary marker. */}
+        <span
+          aria-label="Local instance"
+          className="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container font-caption text-caption font-semibold"
+        >
+          ·
+        </span>
       </div>
     </header>
   );
-}
-
-function SearchTrigger() {
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        if (typeof window === "undefined") return;
-        window.dispatchEvent(new Event("selffork:open-palette"));
-      }}
-      title="Open command palette (⌘K)"
-      className="hidden items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground sm:inline-flex"
-    >
-      <Search className="h-3.5 w-3.5" />
-      <span className="hidden md:inline">Search</span>
-      <kbd className="rounded border border-border bg-background px-1 py-0.5 font-mono text-[10px] uppercase">
-        ⌘K
-      </kbd>
-    </button>
-  );
-}
-
-function PathPill({ label, path }: { label: string; path: string | null }) {
-  if (path === null) {
-    return (
-      <span className="hidden items-center gap-1.5 text-muted-foreground lg:inline-flex">
-        <FolderOpen className="h-3.5 w-3.5" />
-        <span className="text-[10px] uppercase tracking-wider">{label}</span>
-        <span className="font-mono">…</span>
-      </span>
-    );
-  }
-  return (
-    <span
-      title={path}
-      className="hidden items-center gap-1.5 text-muted-foreground lg:inline-flex"
-    >
-      <FolderOpen className="h-3.5 w-3.5" />
-      <span className="text-[10px] uppercase tracking-wider">{label}</span>
-      <span className="max-w-[18ch] truncate font-mono">{shortenPath(path)}</span>
-    </span>
-  );
-}
-
-function ConnectivityPill({ state }: { state: HealthState }) {
-  if (state.status === "loading") {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1">
-        <CircleHelp className="h-3.5 w-3.5 text-muted-foreground" />
-        <span>connecting</span>
-      </span>
-    );
-  }
-  if (state.status === "online") {
-    return (
-      <span
-        className={cn(
-          "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1",
-          "border-success/40 bg-success/10 text-success",
-        )}
-      >
-        <Wifi className="h-3.5 w-3.5" />
-        <span>online</span>
-      </span>
-    );
-  }
-  return (
-    <span
-      title={state.error}
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1",
-        "border-destructive/40 bg-destructive/10 text-destructive",
-      )}
-    >
-      <WifiOff className="h-3.5 w-3.5" />
-      <span>offline</span>
-    </span>
-  );
-}
-
-function pathFromHealth(state: HealthState, key: keyof DashboardHealth): string | null {
-  if (state.status !== "online") return null;
-  return state.data[key] as string;
-}
-
-function shortenPath(p: string): string {
-  // Replace the user's home directory with ~ for legibility, then
-  // collapse any leading ``/Users/<name>`` so the topbar stays compact
-  // even on screens that aren't full-width.
-  const homeMatch = p.match(/^\/(?:Users|home)\/([^/]+)/);
-  if (!homeMatch) return p;
-  return p.replace(homeMatch[0], "~");
 }

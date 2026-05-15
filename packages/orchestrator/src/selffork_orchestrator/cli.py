@@ -850,6 +850,7 @@ def ui(
         projects_root=projects_root,
         selffork_script=selffork_script,
         static_dir=static_dir,
+        config_path=config,
     )
     fastapi_app = build_app(dashboard_config)
 

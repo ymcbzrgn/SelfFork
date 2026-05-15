@@ -1,9 +1,12 @@
 /**
- * Three-column-ish app shell: sidebar (fixed) + main column (topbar + page).
+ * AppShell v2 — fixed sidebar + main column that respects sidebar width.
  *
- * The page passes a ``title`` rendered into the topbar so the user
- * always sees where they are without us hardcoding it inside each
- * page module.
+ * Matches the Stitch reference layout: sidebar is `position: fixed` so
+ * pages can scroll their own content without affecting nav, and the
+ * main column carries `md:ml-sidebar-width` so the content never slides
+ * under the rail. No outer page padding or max-width — each route owns
+ * its own gutter via `px-gutter-desktop` so Stitch-faithful spacing
+ * stays consistent.
  */
 import { Sidebar } from "./sidebar";
 import { TopBar } from "./topbar";
@@ -16,14 +19,12 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="min-h-screen bg-background">
       <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <main className="md:ml-sidebar-width min-h-screen flex flex-col">
         <TopBar title={title} />
-        <main className="flex-1 overflow-y-auto px-6 py-6 lg:px-8 lg:py-8 scrollbar-thin">
-          <div className="mx-auto max-w-7xl">{children}</div>
-        </main>
-      </div>
+        <div className="flex-1">{children}</div>
+      </main>
     </div>
   );
 }

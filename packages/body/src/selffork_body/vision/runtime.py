@@ -242,12 +242,59 @@ class VisionOrchestrator:
         tier2_threshold: float = 0.5,
         audit_emit=None,  # type: ignore[no-untyped-def]
         clock=None,  # type: ignore[no-untyped-def]
+        model_id: str | None = None,
+        backend: str | None = None,
     ) -> None:
         self.runtime = runtime
         self.tier1_threshold = tier1_threshold
         self.tier2_threshold = tier2_threshold
         self.audit_emit = audit_emit
         self.clock = clock or time.monotonic
+        # Audit traceability — UI-TARS AGIO pattern. When the orchestrator
+        # is built via ``VisionOrchestrator.from_config(...)``, both fields
+        # are populated automatically; legacy callers default to None which
+        # emits as ``"unknown"`` in the audit payload.
+        if model_id is None:
+            model_id = getattr(runtime, "model_id", None) or getattr(
+                runtime, "model", None,
+            )
+        if backend is None:
+            # Heuristic: class name → backend tag (mlx | ollama | other).
+            cls = type(runtime).__name__.lower()
+            if "mlx" in cls:
+                backend = "mlx"
+            elif "ollama" in cls:
+                backend = "ollama"
+        self.model_id = model_id
+        self.backend = backend
+
+    @classmethod
+    def from_config(
+        cls,
+        config: VisionConfig,
+        *,
+        adapter: str = "mlx",
+        audit_emit=None,  # type: ignore[no-untyped-def]
+    ) -> "VisionOrchestrator":  # noqa: UP037
+        """Build orchestrator from :class:`VisionConfig` with traceability tagged.
+
+        ``adapter`` selects the Tier-1 runtime: ``"mlx"`` (Apple Silicon
+        default) or ``"ollama"`` (Linux fallback).
+        """
+        if adapter == "mlx":
+            runtime: MlxVlmAdapter | OllamaVisionAdapter = MlxVlmAdapter.from_config(config)
+            model_id, backend = config.mlx_model_id, "mlx"
+        elif adapter == "ollama":
+            runtime = OllamaVisionAdapter.from_config(config)
+            model_id, backend = config.ollama_model_tag, "ollama"
+        else:
+            raise ValueError(f"unknown adapter: {adapter!r} (expected mlx|ollama)")
+        return cls(
+            runtime=runtime,
+            audit_emit=audit_emit,
+            model_id=model_id,
+            backend=backend,
+        )
 
     async def _invoke(self, prompt: str, screenshot: bytes, *, tier: Tier) -> VisionDecision:
         messages = [
@@ -267,6 +314,8 @@ class VisionOrchestrator:
                     "confidence": decision.confidence,
                     "action": decision.action,
                     "target": decision.target,
+                    "model_id": self.model_id or "unknown",
+                    "backend": self.backend or "unknown",
                     "ts": datetime.now(UTC).isoformat(),
                 },
             )

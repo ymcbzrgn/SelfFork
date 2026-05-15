@@ -9,6 +9,7 @@
 
 import { useEffect } from "react";
 
+import { API_BASE } from "@/lib/api";
 import {
   useCockpitStore,
   type ProviderName,
@@ -119,7 +120,7 @@ export default function ProvidersPage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/providers")
+    fetch(`${API_BASE}/api/providers`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))))
       .then((data: ProviderState[]) => {
         if (!cancelled) setProviders(data);
@@ -133,7 +134,7 @@ export default function ProvidersPage() {
   }, [setProviders]);
 
   const signIn = async (name: ProviderName) => {
-    const r = await fetch(`/api/providers/${name}/sign_in_start`, {
+    const r = await fetch(`${API_BASE}/api/providers/${name}/sign_in_start`, {
       method: "POST",
     });
     if (!r.ok) {
@@ -145,11 +146,11 @@ export default function ProvidersPage() {
   };
 
   const refresh = async (name: ProviderName) => {
-    await fetch(`/api/providers/${name}/refresh`, { method: "POST" });
+    await fetch(`${API_BASE}/api/providers/${name}/refresh`, { method: "POST" });
   };
 
   const disconnect = async (name: ProviderName) => {
-    const r = await fetch(`/api/providers/${name}/disconnect`, {
+    const r = await fetch(`${API_BASE}/api/providers/${name}/disconnect`, {
       method: "POST",
     });
     if (r.ok) {

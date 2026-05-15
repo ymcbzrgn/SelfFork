@@ -14,6 +14,8 @@
 
 import { useEffect, useId, useState } from "react";
 
+import { API_BASE } from "@/lib/api";
+
 type VisionConfig = {
   mlx_model_id: string;
   mlx_server_url: string;
@@ -70,7 +72,7 @@ export default function VisionSettingsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/settings/vision")
+    fetch(`${API_BASE}/api/settings/vision`)
       .then((r) =>
         r.ok ? r.json() : Promise.reject(new Error(`GET ${r.status}`)),
       )
@@ -94,15 +96,20 @@ export default function VisionSettingsPage() {
   const runDetect = async () => {
     setDetecting(true);
     setError(null);
+    let cancelled = false;
     try {
-      const r = await fetch("/api/settings/vision/detect", { method: "POST" });
+      const r = await fetch(`${API_BASE}/api/settings/vision/detect`, { method: "POST" });
       if (!r.ok) throw new Error(`POST detect ${r.status}`);
-      setDetect((await r.json()) as DetectResponse);
+      const payload = (await r.json()) as DetectResponse;
+      if (!cancelled) setDetect(payload);
     } catch (e) {
-      setError(`detect: ${(e as Error).message}`);
+      if (!cancelled) setError(`detect: ${(e as Error).message}`);
     } finally {
-      setDetecting(false);
+      if (!cancelled) setDetecting(false);
     }
+    return () => {
+      cancelled = true;
+    };
   };
 
   const handleSave = async () => {
@@ -111,7 +118,7 @@ export default function VisionSettingsPage() {
     setError(null);
     setInfo(null);
     try {
-      const r = await fetch("/api/settings/vision", {
+      const r = await fetch(`${API_BASE}/api/settings/vision`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(cfg),
@@ -156,12 +163,20 @@ export default function VisionSettingsPage() {
       </header>
 
       {error && (
-        <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm"
+        >
           {error}
         </div>
       )}
       {info && (
-        <div className="rounded bg-green-50 text-green-800 px-3 py-2 text-sm">
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded bg-green-50 text-green-800 px-3 py-2 text-sm"
+        >
           {info}
         </div>
       )}
@@ -234,7 +249,7 @@ export default function VisionSettingsPage() {
         <button
           type="button"
           className="rounded px-4 py-2 bg-zinc-100 hover:bg-zinc-200 disabled:opacity-50 text-sm"
-          disabled={detecting}
+          disabled={detecting || saving}
           onClick={() => void runDetect()}
           data-testid="detect-button"
         >
@@ -243,7 +258,7 @@ export default function VisionSettingsPage() {
         <button
           type="button"
           className="rounded px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 text-sm"
-          disabled={saving}
+          disabled={saving || detecting}
           onClick={() => void handleSave()}
           data-testid="save-button"
         >

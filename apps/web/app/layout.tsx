@@ -1,14 +1,20 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
-import { CommandPalette } from "@/components/command-palette";
-import { KeyboardShortcutsOverlay } from "@/components/keyboard-shortcuts-overlay";
 import { CockpitProviders } from "@/components/providers";
 
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter",
+  weight: ["400", "500", "600", "700", "800"],
+});
+
 export const metadata: Metadata = {
-  title: "SelfFork Dashboard",
+  title: "SelfFork",
   description:
-    "Live view over real SelfFork sessions. Reads only on-disk artifacts; no mock data.",
+    "An autonomous coding partner you actually trust.",
 };
 
 export default function RootLayout({
@@ -17,13 +23,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className="min-h-screen bg-background text-foreground antialiased">
-        <CockpitProviders>
-          {children}
-          <CommandPalette />
-          <KeyboardShortcutsOverlay />
-        </CockpitProviders>
+    <html lang="en" className={inter.variable}>
+      <body className="min-h-screen bg-background text-on-surface antialiased font-body">
+        <CockpitProviders>{children}</CockpitProviders>
       </body>
     </html>
   );

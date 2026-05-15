@@ -10,40 +10,52 @@
  */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 4%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 4%;
-    --primary: 240 6% 10%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 5% 96%;
-    --secondary-foreground: 240 6% 10%;
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 4% 46%;
-    --accent: 240 5% 96%;
-    --accent-foreground: 240 6% 10%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --success: 142 71% 45%;
-    --success-foreground: 0 0% 98%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 240 10% 4%;
-    --info: 217 91% 60%;
-    --info-foreground: 0 0% 98%;
-    --border: 240 6% 90%;
-    --input: 240 6% 90%;
-    --ring: 240 5% 65%;
-    --radius: 0.625rem;
-
     /*
-     * Sidebar tokens. Linear "structure felt not seen" — sidebar
-     * should feel slightly dimmer than the main content surface so
-     * the eye lands on the working area, not the chrome.
+     * SelfFork Design System v2 — tokens aligned with Stitch-generated
+     * design system (asset 9d2751c7cf544707904ba33bfce4602c).
+     * Light mode only; Lovable.dev / Cursor / Notion-light vocabulary.
      */
-    --sidebar: 240 6% 96%;
-    --sidebar-foreground: 240 10% 4%;
-    --sidebar-border: 240 6% 88%;
-    --sidebar-accent: 240 5% 92%;
+    --background: 0 0% 99%;
+    --foreground: 228 16% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 228 16% 12%;
+
+    /* `primary` = the single CTA blue. One per screen. */
+    /* Stitch primary #004ac6 ≈ HSL 221.4 100% 38.8% (sync with raw hex
+       in tailwind.config.ts "primary-container" + "surface-tint"). */
+    --primary: 221 100% 39%;
+    --primary-foreground: 0 0% 100%;
+
+    /* `secondary` = neutral fill, less common than `muted`. */
+    --secondary: 240 14% 96%;
+    --secondary-foreground: 228 16% 12%;
+
+    /* `muted` = surface-muted (sidebar, hover, soft fills). */
+    --muted: 240 14% 96%;
+    --muted-foreground: 240 8% 53%;
+
+    /* `accent` is reserved for shadcn hover bg use; same as muted. */
+    --accent: 240 22% 93%;
+    --accent-foreground: 228 16% 12%;
+
+    --destructive: 0 78% 56%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 146 71% 41%;
+    --success-foreground: 0 0% 100%;
+    --warning: 35 96% 53%;
+    --warning-foreground: 228 16% 12%;
+    --info: 220 100% 39%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 228 17% 93%;
+    --input: 228 17% 93%;
+    --ring: 220 100% 39%;
+    --radius: 0.75rem;
+
+    --sidebar: 240 14% 96%;
+    --sidebar-foreground: 228 16% 12%;
+    --sidebar-border: 228 17% 93%;
+    --sidebar-accent: 240 22% 93%;
   }
 
   .dark {

@@ -5,7 +5,7 @@
  * for everything on screen. We never hardcode mock data here.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 export interface DashboardHealth {
   status: string;

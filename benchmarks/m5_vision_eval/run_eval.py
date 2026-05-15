@@ -81,17 +81,18 @@ def _bbox_iou(a: list[int], b: list[int]) -> float:
     return inter / union if union > 0 else 0.0
 
 
-def evaluate_decision(decision: VisionDecision, expected: dict) -> dict:
+def evaluate_decision(
+    decision: VisionDecision,
+    expected: dict,
+    *,
+    target_match_mode: str = "lenient",
+) -> dict:
     """Apply the R1 pass rule and return per-criterion + overall pass flag."""
     action_ok = decision.action == expected.get("action")
 
     expected_target = (expected.get("target") or "").lower().strip()
     predicted_target = (decision.target or "").lower().strip()
-    target_ok = (
-        not expected_target
-        or expected_target in predicted_target
-        or predicted_target in expected_target
-    )
+    target_ok = _target_match(predicted_target, expected_target, target_match_mode)
 
     bbox_iou: float | None = None
     bbox_ok = True
@@ -125,6 +126,23 @@ def _build_adapter(kind: str):  # type: ignore[no-untyped-def]
     raise ValueError(f"unknown adapter kind: {kind!r} (expected mlx|ollama)")
 
 
+def _target_match(predicted: str, expected: str, mode: str) -> bool:
+    """Compare predicted target against expected target.
+
+    ``mode`` selects matcher:
+      * ``"lenient"`` (default) — bidirectional substring (model verbose
+        like ``"Sign in button"`` ⊇ expected ``"Sign in"`` passes).
+      * ``"strict"``            — one-way: expected ⊆ predicted only
+        (rejects degenerate short predictions like ``"in"`` ⊆ ``"Sign in"``).
+    """
+    if not expected:
+        return True
+    if mode == "strict":
+        return expected in predicted
+    # lenient (default, historical behavior — see audit-god finding #2)
+    return expected in predicted or predicted in expected
+
+
 @pytest.mark.asyncio
 async def test_r1_gate() -> None:
     """R1 acceptance gate — pass rate ≥ 85% across the dataset."""
@@ -134,12 +152,25 @@ async def test_r1_gate() -> None:
             "dataset index missing or empty; see benchmarks/m5_vision_eval/README.md "
             "for the 30-task seeding protocol",
         )
+    # Skip when only placeholder ``sample_*`` rows exist — these carry a
+    # 1x1 PNG that no real adapter can score. CI / dev runs should pass
+    # silently; the operator's real 30-task corpus has no ``sample_*`` IDs.
+    real = [r for r in dataset if not r["task_id"].startswith("sample_")]
+    if not real:
+        pytest.skip(
+            "dataset only contains 'sample_*' placeholder rows; seed real "
+            "tasks per benchmarks/m5_vision_eval/README.md §30-Task Seeding",
+        )
+    dataset = real
 
     kind = _adapter_kind()
+    target_mode = os.environ.get("SELFFORK_R1_TARGET_MATCH", "lenient").lower()
     adapter, model_id = _build_adapter(kind)
     orchestrator = VisionOrchestrator(
-        tier1=adapter,
+        runtime=adapter,
         audit_emit=lambda c, p: None,
+        model_id=model_id,
+        backend=kind,
     )
 
     report: list[dict] = []
@@ -149,7 +180,7 @@ async def test_r1_gate() -> None:
         goal = (task_dir / "goal.txt").read_text().strip()
         expected = json.loads((task_dir / "expected_action.json").read_text())
         decision = await orchestrator.decide(screenshot=screenshot, goal=goal)
-        result = evaluate_decision(decision, expected)
+        result = evaluate_decision(decision, expected, target_match_mode=target_mode)
         report.append({
             "task_id": entry["task_id"],
             "surface": entry.get("surface", "unknown"),
@@ -177,7 +208,7 @@ async def test_r1_gate() -> None:
     total = len(report)
     accuracy = pass_count / total if total else 0.0
 
-    print(f"\n[R1] adapter={kind} model={model_id}")
+    print(f"\n[R1] adapter={kind} model={model_id} target_match={target_mode}")
     print(f"[R1] pass={pass_count}/{total} ({accuracy:.2%})")
     print(f"[R1] report={out}")
 

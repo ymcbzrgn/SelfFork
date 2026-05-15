@@ -95,6 +95,91 @@ asyncio.run(main())
 
 ---
 
+### 1b. Vision Tier-2/3 fallback (ax_tree + Set-of-Mark)
+
+**Bağlam:** Senaryo 1 sadece Tier-1'i probe eder. Tier-2 düşük confidence + ax_tree, Tier-3 set-of-mark — production fallback ladder'ı bu senaryoda smoke edilir.
+
+```bash
+.venv/bin/python -c "
+import asyncio
+from selffork_body.vision.runtime import VisionOrchestrator
+from selffork_shared.config import load_settings
+
+async def main():
+    cfg = load_settings().vision
+    orch = VisionOrchestrator.from_config(cfg, adapter='mlx', audit_emit=lambda c, p: print(c, p['tier'], p['confidence']))
+    with open('docs/screenshots/m5_smoke_fixture.png', 'rb') as f:
+        png = f.read()
+    # Tier-2 path: ax_tree_text dolu → Tier-1 yetersiz confidence dönerse Tier-2 invoke
+    d = await orch.decide(
+        screenshot=png,
+        goal='locate Submit button',
+        ax_tree_text='AXButton: Submit\\nAXButton: Cancel',
+        marks_summary='1: Submit (bbox 400,500,80,32) | 2: Cancel (bbox 500,500,80,32)',
+    )
+    print('final tier', d.tier, 'conf', d.confidence)
+
+asyncio.run(main())
+"
+```
+
+**Pass:** Audit emit'te birden fazla `body.vision.query` event (her tier için) + final decision tier ∈ {1,2,3}.
+**Fail:** Tier escalation hiç tetiklenmez (her durum Tier-1'de kalır) — confidence threshold misconfigured.
+
+---
+
+### 1c. Audit JSONL write doğrulama
+
+**Bağlam:** Smoke süresince `body.vision.query` event'leri `~/.selffork/audit/<session>.jsonl`'a düşmeli (forensic trail).
+
+```bash
+ls -la ~/.selffork/audit/ | head -5
+# Beklenen: bugünün tarihiyle JSONL dosyası mevcut
+
+# En son JSONL'ı incele:
+LATEST=$(ls -t ~/.selffork/audit/*.jsonl | head -1)
+echo "checking $LATEST"
+grep '"category": "body.vision.query"' "$LATEST" | wc -l
+# Beklenen: senaryo 1 + 1b'de invoke ettiğin sayısı (≥ 2)
+
+# Payload'ında model_id + backend var mı?
+grep '"category": "body.vision.query"' "$LATEST" | head -1 | .venv/bin/python -m json.tool
+# Beklenen anahtarlar: tier, duration_ms, confidence, action, target, model_id, backend, ts
+```
+
+**Pass:** model_id + backend mevcut + her tier query count log'da görünür.
+**Fail:** JSONL yok → audit dir misconfigured; payload'ında model_id yok → orchestrator from_config wiring eksik.
+
+---
+
+### 0a. PermissionWarden default-deny smoke
+
+**Bağlam:** `body.py:_gate` permission_warden=None ise `denied{no_warden_wired}` döner (M5 audit-fix, security regression önleme). Bu davranışı production'a deploy etmeden önce confirm et.
+
+```bash
+.venv/bin/python -c "
+import asyncio
+from selffork_orchestrator.tools.body import _gate
+from selffork_orchestrator.tools.base import ToolContext
+
+class _NoWardenCtx:
+    permission_warden = None
+    audit_emit = lambda *a, **kw: None
+    body_driver = None
+
+async def main():
+    result = await _gate(_NoWardenCtx(), 'body.screenshot', {})
+    print(result)
+
+asyncio.run(main())
+"
+```
+
+**Pass:** Output `{'status': 'denied', 'reason': 'no_warden_wired', ...}` veya benzeri kalıp.
+**Fail:** Silent True döner (eski regression). M5+ patch acil gerekli — `feedback_warden_default_deny.md` memory referansı.
+
+---
+
 ## 2. macOS Desktop Driver (AX + screencapture)
 
 **Entry:** `packages/body/src/selffork_body/drivers/desktop/macos/driver.py:28` — `MacOSDesktopDriver`
