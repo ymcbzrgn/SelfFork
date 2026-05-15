@@ -60,14 +60,14 @@ def test_compose_initial_messages_contains_prd_and_workspace() -> None:
     agent = _make_agent()
     msgs = agent.compose_initial_messages(
         prd="add fonksiyonu",
-        plan_path="/tmp/plan.md",
-        workspace="/tmp/work",
+        plan_path="/run/plan.md",
+        workspace="/run/work",
     )
     assert msgs[0]["role"] == "system"
     assert "mmx" in msgs[0]["content"]
     assert msgs[1]["role"] == "user"
     assert "add fonksiyonu" in msgs[1]["content"]
-    assert "/tmp/work" in msgs[1]["content"]
+    assert "/run/work" in msgs[1]["content"]
 
 
 def test_build_command_first_round() -> None:

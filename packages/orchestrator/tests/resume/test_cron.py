@@ -24,8 +24,8 @@ def _record(session_id: str = "session-1") -> ScheduledResume:
         resume_at=datetime.now(tz=UTC) + timedelta(hours=5),
         cli_agent="claude-code",
         config_path=None,
-        prd_path="/tmp/prd.md",
-        workspace_path="/tmp/work",
+        prd_path="/run/prd.md",
+        workspace_path="/run/work",
         reason="test rate-limit",
         kind="five_hour",
     )

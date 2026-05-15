@@ -26,7 +26,7 @@ def _bundle(**overrides: object) -> HandoffBundle:
         "from_cli": "claude-code",
         "to_cli": "codex",
         "active_task": ActiveTask(title="Wire M3 plan"),
-        "tool_state": ToolState(cwd="/tmp/work"),
+        "tool_state": ToolState(cwd="/run/work"),
         "created_at": _ts(),
     }
     defaults.update(overrides)
@@ -180,12 +180,12 @@ def test_handoff_bundle_project_slug_optional() -> None:
 )
 def test_tool_state_rejects_secret_env_keys(secret_key: str) -> None:
     with pytest.raises(ValidationError, match="credential-keyword"):
-        ToolState(cwd="/tmp/work", env_whitelist={secret_key: "super-secret"})
+        ToolState(cwd="/run/work", env_whitelist={secret_key: "super-secret"})
 
 
 def test_tool_state_accepts_safe_env_keys() -> None:
     state = ToolState(
-        cwd="/tmp/work",
+        cwd="/run/work",
         env_whitelist={"PATH": "/usr/bin", "HOME": "/Users/op", "CARGO_HOME": "/c"},
     )
     assert state.env_whitelist["PATH"] == "/usr/bin"
@@ -195,6 +195,6 @@ def test_tool_state_rejects_secret_even_when_other_keys_clean() -> None:
     """Single bad key in a whitelist of safe ones still fails (allow-list strict)."""
     with pytest.raises(ValidationError, match="credential-keyword"):
         ToolState(
-            cwd="/tmp/work",
+            cwd="/run/work",
             env_whitelist={"PATH": "/usr/bin", "OPENAI_API_KEY": "sk-..."},
         )

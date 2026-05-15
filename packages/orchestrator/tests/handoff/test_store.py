@@ -32,7 +32,7 @@ def _bundle(
             "from_cli": from_cli,
             "to_cli": to_cli,
             "active_task": ActiveTask(title="task"),
-            "tool_state": ToolState(cwd="/tmp/work"),
+            "tool_state": ToolState(cwd="/run/work"),
             "created_at": datetime.now(tz=UTC),
         },
     )
