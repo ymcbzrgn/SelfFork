@@ -120,6 +120,7 @@ def test_default_opencode_auth_path_returns_a_path() -> None:
 async def test_http_probe_populates_windows(tmp_path: Path) -> None:
     """Successful Z.AI /v1/usage probe → populated 5h + daily windows."""
     import httpx
+
     from selffork_shared.quota import WindowKind
 
     auth = tmp_path / "auth.json"
@@ -176,6 +177,7 @@ async def test_http_probe_failure_collapses_to_empty_windows(tmp_path: Path) -> 
 async def test_http_probe_skips_malformed_window_entries(tmp_path: Path) -> None:
     """Schema drift in one window doesn't disable the other."""
     import httpx
+
     from selffork_shared.quota import WindowKind
 
     auth = tmp_path / "auth.json"

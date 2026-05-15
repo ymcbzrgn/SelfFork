@@ -55,9 +55,8 @@ def test_resolve_binary_raises_when_missing(monkeypatch: pytest.MonkeyPatch) -> 
     with patch(
         "selffork_orchestrator.cli_agent.codex.shutil.which",
         return_value=None,
-    ):
-        with pytest.raises(AgentBinaryNotFoundError, match="codex login"):
-            agent.resolve_binary()
+    ), pytest.raises(AgentBinaryNotFoundError, match="codex login"):
+        agent.resolve_binary()
 
 
 def test_compose_initial_messages_contains_prd_and_workspace() -> None:
