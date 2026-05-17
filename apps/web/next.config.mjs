@@ -1,12 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Static export so the FastAPI backend can serve the bundle from one
-  // process. ``selffork ui`` mounts apps/web/out at /. Static export
-  // disallows runtime rewrites — dev proxying happens via the
-  // ``NEXT_PUBLIC_API_BASE_URL`` env var (set in ``.env.development``)
-  // pointing fetch() at the FastAPI dev port (default 8765). Production
-  // builds leave it empty (same-origin).
-  output: "export",
+  // Static export ONLY in production builds. `next dev` runs in SSR
+  // mode so dynamic routes (`/workspaces/[slug]`) render on demand
+  // against the orchestrator — required because workspace slugs are
+  // user-created at runtime and not known at build time.
+  //
+  // `next build && next export` (production) reads the project list
+  // at build time via `generateStaticParams` in
+  // `app/workspaces/[slug]/page.tsx` and pre-renders one HTML shell
+  // per known workspace; new workspaces created post-deploy require
+  // a rebuild (acceptable for a self-hosted single-operator app).
+  ...(process.env.NODE_ENV === "production" ? { output: "export" } : {}),
   trailingSlash: true,
   images: { unoptimized: true },
 };
