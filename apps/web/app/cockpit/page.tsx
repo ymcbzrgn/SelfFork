@@ -33,6 +33,9 @@ const TAB_LABEL: Record<CockpitTab, string> = {
   run: "Run",
   chat: "Chat",
   context: "Context",
+  providers: "Providers",
+  fleet: "Fleet",
+  body: "Body",
 };
 
 function isCockpitTab(value: string | null): value is CockpitTab {

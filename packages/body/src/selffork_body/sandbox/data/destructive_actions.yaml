@@ -1,0 +1,108 @@
+# SelfFork destructive-action whitelist (ADR-006 §4.5).
+#
+# Self Jr runs full-autonomy on day-to-day work; for the categories
+# listed here, the action is *paused* and a Telegram message goes to
+# the operator. Silence after `confirm_window_hours` = automatic
+# cancel (fail-safe NO). Explicit "approve" = proceed.
+#
+# Schema (parsed by selffork_body.sandbox.destructive_whitelist):
+#
+#   destructive_actions:
+#     - id: <category_id>          # snake_case, unique
+#       description: <human text>
+#       confirm_window_hours: <int>
+#       match_any:
+#         - tool: <bin name>
+#           args_contains: [<token>, ...]   # all tokens must appear
+#         - env_var_set: [<KEY=VAL>, ...]
+#         - sql_keyword: [<keyword>, ...]
+#         - url_contains: [<substr>, ...]
+#         - http_method: <METHOD>
+#           url_contains: [<substr>, ...]
+#
+# Editing this file rebuilds the matcher at next orchestrator reload.
+# UI editor (Settings → Telegram bridge → "Open editor") writes here.
+
+destructive_actions:
+  - id: prod_deploy
+    description: "Production deploy / push to main"
+    confirm_window_hours: 4
+    match_any:
+      - tool: git
+        args_contains: ["push", "origin", "main"]
+      - tool: git
+        args_contains: ["push", "origin", "master"]
+      - tool: gh
+        args_contains: ["release", "create"]
+      - tool: vercel
+        args_contains: ["--prod"]
+      - env_var_set: ["NODE_ENV=production", "PROD=1"]
+
+  - id: db_destructive
+    description: "Destructive database operation"
+    confirm_window_hours: 4
+    match_any:
+      - sql_keyword: ["DROP TABLE", "DROP DATABASE", "TRUNCATE", "DELETE FROM"]
+      - tool: prisma
+        args_contains: ["migrate", "reset"]
+      - tool: alembic
+        args_contains: ["downgrade", "base"]
+
+  - id: force_push
+    description: "Force push (rewrites history)"
+    confirm_window_hours: 4
+    match_any:
+      - tool: git
+        args_contains: ["push", "--force"]
+      - tool: git
+        args_contains: ["push", "-f"]
+      - tool: git
+        args_contains: ["push", "--force-with-lease"]
+
+  - id: file_destructive
+    description: "Bulk filesystem delete"
+    confirm_window_hours: 4
+    match_any:
+      - tool: rm
+        args_contains: ["-rf"]
+      - tool: rm
+        args_contains: ["-fr"]
+      - tool: find
+        args_contains: ["-delete"]
+
+  - id: account_destructive
+    description: "Third-party account / critical config change"
+    confirm_window_hours: 4
+    match_any:
+      - url_contains:
+          - "/settings/delete"
+          - "/account/close"
+          - "/api/users/delete"
+      - http_method: DELETE
+        url_contains: ["/api/users/", "/api/accounts/"]
+
+  - id: financial
+    description: "Payment / fund transfer / crypto transaction"
+    confirm_window_hours: 4
+    match_any:
+      - url_contains:
+          - "stripe.com/payments"
+          - "checkout.stripe.com"
+          - "paypal.com/transfer"
+      - tool: cast
+        args_contains: ["send"]
+      - tool: forge
+        args_contains: ["script", "--broadcast"]
+
+  - id: social_outbound
+    description: "Public social-media post (irreversible)"
+    confirm_window_hours: 1
+    match_any:
+      - url_contains:
+          - "twitter.com/intent/tweet"
+          - "x.com/intent/tweet"
+          - "linkedin.com/feed/update"
+      - tool: telegram
+        args_contains: ["@channel"]
+      - tool: telegram
+        args_contains: ["@everyone"]

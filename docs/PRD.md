@@ -1,5 +1,23 @@
 # SelfFork — Product Requirements Document
 
+> **⚠ Partial supersession — ADR-006 (2026-05-17 v3 pivot).**
+> The following sections are revised by
+> [`docs/decisions/ADR-006_v2_Pivot.md`](decisions/ADR-006_v2_Pivot.md):
+> - **§5.1 (persona):** "Single senior operator" widens to "P+Prompt
+>   Engineer" — senior operator OR computer-literate non-engineer.
+> - **§8.5 (Cockpit IA):** Vite + 4-tab Workspace replaced by Next.js
+>   sidebar-driven 5-screen layout (Dashboard / Workspace / Talk /
+>   Connections / Settings); Workspace inner-tabs (Kanban / Live Run /
+>   Notes / About). See ADR-006 §5.
+> - **§15 (threshold table):** Static threshold matrix replaced by
+>   destructive whitelist + 4h fail-safe-NO soft confirmation. See
+>   ADR-006 §4.5.
+> - **§19.1 (audit log surface):** Demoted to power-user advanced
+>   toggle; default Dashboard is clean. See ADR-006 §5.3.
+>
+> The Reflex / Body / Mind pillar contracts and the locked decisions
+> elsewhere in this PRD remain authoritative.
+
 > **Codename:** Yamaç Jr. Nano
 > **Version:** 1.0.0 (Draft, expanded)
 > **Owner:** Yamaç Bezirgan (arketic.tools@gmail.com)

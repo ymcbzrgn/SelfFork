@@ -83,3 +83,18 @@ export type {
   ProvidersSlice,
   RunSlice,
 };
+
+// v3 — additional type re-exports for cockpit pages + tests (unblock TS build).
+export type {
+  BodyEvent,
+  BodySession,
+  PermissionPrompt,
+  RiskTier,
+  WardenDecision,
+} from "./body-slice";
+export type { DaemonView, LocationTier } from "./fleet-slice";
+export type {
+  ProviderName,
+  ProviderState,
+  ProviderStatus,
+} from "./providers-slice";

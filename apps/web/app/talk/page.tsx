@@ -1,282 +1,296 @@
-/**
- * Talk — Stitch-verbatim port (split chat + canvas).
- *
- * Left pane: alternating chat bubbles (user right, agent left) with a
- * big send-style input at the bottom. Right pane: a canvas preview
- * card that shows what's being built, or an empty state when no
- * workspace is active.
- *
- * Real backend wiring: lists real recent sessions when no workspace
- * is set so the operator can resume a thread. The intent input is
- * honest: it acknowledges the message and surfaces an inline empty-
- * canvas state until the orchestrator's live agent loop wires up
- * to a single endpoint we can call from here.
- *
- * Stitch design reference: screen a758e4d349474230b55530d83139016b.
- */
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { ArrowRight, FolderOpen, Maximize2, Sparkles } from "lucide-react";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowRight,
+  ChevronDown,
+  History,
+  MessageCircle,
+  Paperclip,
+  Plus,
+} from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { listRecentSessions, type RecentSession } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { listProjects, type ProjectResponse } from "@/lib/api";
 
-interface Message {
-  role: "you" | "selffork";
-  body: string;
-  streaming?: boolean;
+interface ChatMessage {
+  id: string;
+  role: "operator" | "self-jr" | "system";
+  workspace?: string;
+  cli?: string;
+  text: string;
+  ts: string;
+  actions?: Array<{ label: string; href: string }>;
 }
 
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  const now = Date.now();
-  const diff = Math.max(0, Math.floor((now - then) / 1000));
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
+const SLASH_CHIPS = ["/cli", "/workspace", "/pause", "/note", "/finetune"];
 
-function TalkBody() {
-  const params = useSearchParams();
-  const workspace = params.get("workspace");
-  const [intent, setIntent] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [recent, setRecent] = useState<RecentSession[] | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+const PROVIDER_PILL: Record<string, string> = {
+  claude: "bg-amber-50 text-amber-700",
+  codex: "bg-green-50 text-green-700",
+  gemini: "bg-blue-50 text-blue-700",
+  minimax: "bg-violet-50 text-violet-700",
+  glm: "bg-red-50 text-red-700",
+  system: "bg-surface-container text-on-surface-variant",
+};
+
+export default function TalkPage() {
+  const [projects, setProjects] = useState<ProjectResponse[]>([]);
+  const [contextSlug, setContextSlug] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [messages] = useState<ChatMessage[]>([]); // backend wire: GET /api/talk + WS
+  const [openContextMenu, setOpenContextMenu] = useState(false);
 
   useEffect(() => {
-    inputRef.current?.focus();
-    if (workspace) return; // No need to list recents when in a workspace.
-    let cancelled = false;
-    listRecentSessions()
-      .then((data) => {
-        if (!cancelled) setRecent(data);
+    listProjects()
+      .then((p) => {
+        setProjects(p);
+        if (p[0]) setContextSlug(p[0].slug);
       })
       .catch(() => {
-        if (!cancelled) setRecent([]);
+        /* graceful */
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [workspace]);
+  }, []);
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const raw = intent.trim();
-    if (!raw) return;
-    setMessages((prev) => [
-      ...prev,
-      { role: "you", body: raw },
-      {
-        role: "selffork",
-        body:
-          "I hear you. The live agent loop wires up next — when it lands, this is the message it acts on.",
-        streaming: true,
-      },
-    ]);
-    setIntent("");
+  const contextLabel = useMemo(() => {
+    if (!contextSlug) return "All projects";
+    const p = projects.find((x) => x.slug === contextSlug);
+    return p?.name ?? contextSlug;
+  }, [contextSlug, projects]);
+
+  const onSend = () => {
+    if (!draft.trim()) return;
+    // TODO: backend wire — POST /api/talk/send { workspace: contextSlug, text: draft }
+    setDraft("");
   };
 
   return (
-    <div className="ml-0 md:ml-0 h-[calc(100vh-64px)] flex">
-      {/* Left pane — chat. */}
-      <section className="w-full md:w-3/5 flex flex-col bg-surface-container-low/30 relative">
-        <div className="flex-1 overflow-y-auto px-12 py-8 space-y-8">
-          {messages.length === 0 ? (
-            workspace ? (
-              <p className="font-body text-body text-foreground-muted text-center mt-12">
-                Say something to your agent. The live loop wires up next.
-              </p>
-            ) : recent === null ? (
-              <p className="font-body text-body text-foreground-muted text-center mt-12">
-                Loading recent…
-              </p>
-            ) : recent.length === 0 ? (
-              <p className="font-body text-body text-foreground-muted text-center mt-12">
-                Nothing yet. Send something below to begin.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                <span className="font-caption text-caption text-foreground-muted uppercase tracking-wider">
-                  Recent threads
-                </span>
-                {recent.slice(0, 8).map((s) => (
-                  <div
-                    key={s.session_id}
-                    className="bg-surface rounded-xl p-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)] flex items-center justify-between"
+    <AppShell title="Talk">
+      <div className="flex flex-col min-h-[calc(100vh-theme(spacing.topbar-height))] bg-background relative">
+        <header className="px-gutter-desktop pt-vertical-gap max-w-3xl mx-auto w-full">
+          <div className="flex items-start justify-between flex-wrap gap-3">
+            <div>
+              <h1 className="font-display text-display text-on-surface">Talk</h1>
+              <div className="font-body text-caption text-on-surface-variant mt-1 flex items-center gap-2 flex-wrap">
+                <span>Speaker: Self Jr · Context:</span>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setOpenContextMenu((x) => !x)}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-surface-container-low rounded-md font-medium text-on-surface hover:bg-surface-container transition-colors"
+                    aria-haspopup="listbox"
+                    aria-expanded={openContextMenu}
                   >
-                    <div className="flex items-center gap-3">
-                      <FolderOpen
-                        className="h-4 w-4 text-foreground-muted"
-                        strokeWidth={1.75}
-                      />
-                      <div>
-                        <p className="font-body text-body text-on-surface">
-                          {s.cli_agent ?? "session"} · {s.session_id.slice(0, 8)}
-                        </p>
-                        <p className="font-caption text-caption text-foreground-muted">
-                          {s.rounds_observed} rounds ·{" "}
-                          {relativeTime(s.last_event_at)}
-                        </p>
-                      </div>
-                    </div>
-                    <span
-                      className={cn(
-                        "font-caption text-caption font-medium",
-                        s.final_state === "done"
-                          ? "text-success"
-                          : s.final_state == null
-                            ? "text-primary"
-                            : "text-foreground-muted",
-                      )}
+                    {`Auto-detect (${contextLabel})`}
+                    <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  </button>
+                  {openContextMenu && (
+                    <div
+                      role="listbox"
+                      className="absolute top-full left-0 mt-1 w-64 bg-surface rounded-lg shadow-lg border border-outline-variant/30 py-1 z-30 max-h-72 overflow-y-auto"
                     >
-                      {s.final_state ?? "running"}
-                    </span>
+                      <button
+                        role="option"
+                        aria-selected={contextSlug === null}
+                        onClick={() => {
+                          setContextSlug(null);
+                          setOpenContextMenu(false);
+                        }}
+                        className="w-full text-left px-3 py-1.5 text-caption hover:bg-surface-container-low"
+                      >
+                        All projects
+                      </button>
+                      {projects.map((p) => (
+                        <button
+                          key={p.slug}
+                          role="option"
+                          aria-selected={contextSlug === p.slug}
+                          onClick={() => {
+                            setContextSlug(p.slug);
+                            setOpenContextMenu(false);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-caption hover:bg-surface-container-low"
+                        >
+                          {p.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="px-3 py-1.5 border border-outline-variant text-caption font-medium rounded-lg hover:bg-surface-container-low flex items-center gap-1"
+              >
+                <Plus className="h-4 w-4" strokeWidth={1.75} />
+                New chat
+              </button>
+              <button
+                type="button"
+                className="px-3 py-1.5 text-on-surface-variant hover:bg-surface-container-low text-caption font-medium rounded-lg flex items-center gap-1"
+              >
+                <History className="h-4 w-4" strokeWidth={1.75} />
+                History
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto px-gutter-desktop py-vertical-gap">
+          <div className="max-w-3xl mx-auto space-y-6 pb-32">
+            {messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center gap-3">
+                <MessageCircle
+                  className="h-16 w-16 text-on-surface-variant/30"
+                  strokeWidth={1.5}
+                />
+                <h3 className="text-heading font-semibold text-on-surface">
+                  Talk to Self Jr
+                </h3>
+                <p className="text-caption text-on-surface-variant max-w-md">
+                  Project-context-aware. Ask about progress, redirect the active
+                  CLI, or queue work for the next session.
+                </p>
+                <div className="flex flex-wrap gap-2 justify-center mt-4">
+                  {[
+                    "What did Self Jr ship today?",
+                    "Switch ProjectX to Codex",
+                    "Pause everything for an hour",
+                  ].map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      onClick={() => setDraft(prompt)}
+                      className="px-3 py-1.5 bg-surface-container-low hover:bg-surface-container text-caption text-on-surface-variant rounded-full transition-colors"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              messages.map((m) => {
+                const isOp = m.role === "operator";
+                return (
+                  <div
+                    key={m.id}
+                    className={`flex ${isOp ? "justify-end" : "justify-start"}`}
+                  >
+                    <div className={isOp ? "max-w-md" : "max-w-2xl"}>
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            isOp ? "bg-primary" : "bg-success"
+                          }`}
+                        />
+                        <span className="text-caption font-semibold text-on-surface">
+                          {m.role === "operator" ? "operator" : "Self Jr"}
+                        </span>
+                        <span className="text-[11px] text-on-surface-variant tabular-nums">
+                          · {m.ts}
+                        </span>
+                        {m.workspace && (
+                          <span className="bg-surface-variant text-on-surface-variant px-2 py-0.5 rounded text-[10px] font-bold uppercase">
+                            {m.workspace}
+                          </span>
+                        )}
+                        {m.cli && (
+                          <span
+                            className={`${
+                              PROVIDER_PILL[m.cli] ?? PROVIDER_PILL.system
+                            } px-2 py-0.5 rounded text-[10px] font-bold uppercase`}
+                          >
+                            {m.cli}
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        className={`${
+                          isOp
+                            ? "bg-surface-container-low border border-outline-variant/30"
+                            : "bg-surface border border-outline-variant/20 shadow-sm"
+                        } p-4 rounded-xl text-body text-on-surface whitespace-pre-wrap`}
+                      >
+                        {m.text}
+                      </div>
+                      {m.actions && m.actions.length > 0 && (
+                        <div className="flex gap-2 mt-2">
+                          {m.actions.map((a) => (
+                            <a
+                              key={a.label}
+                              href={a.href}
+                              className="text-caption text-primary hover:underline font-medium"
+                            >
+                              {a.label} →
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div className="sticky bottom-0 bg-background border-t border-outline-variant/30 px-gutter-desktop py-4">
+          <div className="max-w-3xl mx-auto bg-surface rounded-xl shadow-md border border-outline-variant/30 overflow-hidden">
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  onSend();
+                }
+              }}
+              placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
+              className="w-full bg-transparent border-none focus:ring-0 outline-none text-body placeholder:text-on-surface-variant/60 resize-none min-h-[44px] max-h-40 px-4 py-3"
+              rows={1}
+              aria-label="Message"
+            />
+            <div className="flex items-center justify-between border-t border-outline-variant/20 px-3 py-2 flex-wrap gap-2">
+              <div className="flex items-center gap-1 flex-wrap">
+                <button
+                  type="button"
+                  className="p-1.5 hover:bg-surface-container-low rounded transition-colors"
+                  aria-label="Attach file"
+                >
+                  <Paperclip
+                    className="h-4 w-4 text-on-surface-variant"
+                    strokeWidth={1.75}
+                  />
+                </button>
+                <span className="h-4 w-px bg-outline-variant mx-1" />
+                {SLASH_CHIPS.map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() =>
+                      setDraft((d) => d + (d ? " " : "") + chip + " ")
+                    }
+                    className="px-2 py-1 text-[11px] font-mono text-on-surface-variant hover:bg-surface-container-low rounded transition-colors"
+                  >
+                    {chip}
+                  </button>
                 ))}
               </div>
-            )
-          ) : (
-            messages.map((m, i) =>
-              m.role === "you" ? (
-                <div
-                  key={i}
-                  className="flex flex-col items-end gap-2 max-w-[85%] ml-auto"
-                >
-                  <span className="font-caption text-caption text-foreground-muted px-2">
-                    You
-                  </span>
-                  <div className="bg-surface p-4 rounded-2xl shadow-[0_2px_8px_rgba(15,23,42,0.04)]">
-                    <p className="font-body text-body text-on-surface">
-                      {m.body}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  key={i}
-                  className="flex flex-col items-start gap-2 max-w-[85%]"
-                >
-                  <span className="font-caption text-caption text-primary px-2">
-                    SelfFork
-                  </span>
-                  <div
-                    className={cn(
-                      "bg-surface-container-low p-4 rounded-2xl",
-                      m.streaming && "border-l-2 border-primary/20",
-                    )}
-                  >
-                    <p className="font-body text-body text-on-surface">
-                      {m.body}
-                    </p>
-                  </div>
-                </div>
-              ),
-            )
-          )}
-        </div>
-
-        {/* Big input shell */}
-        <div className="p-8 bg-gradient-to-t from-surface to-transparent">
-          <form
-            onSubmit={submit}
-            className="max-w-3xl mx-auto relative flex items-center group"
-          >
-            <input
-              ref={inputRef}
-              type="text"
-              value={intent}
-              onChange={(e) => setIntent(e.target.value)}
-              placeholder={workspace ? "What are we building?" : "What are you building?"}
-              aria-label="Message"
-              className={cn(
-                "w-full bg-surface border-none rounded-2xl py-6 px-8",
-                "font-display-mobile text-[28px] leading-[1.2] tracking-[-0.02em] font-semibold",
-                "text-on-surface placeholder:text-outline-variant",
-                "shadow-[0_4px_12px_rgba(15,23,42,0.06)]",
-                "transition-all focus:outline-none focus:ring-1 focus:ring-primary/20",
-              )}
-            />
-            <button
-              type="submit"
-              disabled={!intent.trim()}
-              className="absolute right-6 p-3 text-primary hover:bg-primary/10 rounded-xl transition-colors active:scale-95 disabled:opacity-30"
-              aria-label="Send"
-            >
-              <ArrowRight className="h-8 w-8" strokeWidth={1.75} />
-            </button>
-          </form>
-        </div>
-      </section>
-
-      {/* Right pane — canvas preview. */}
-      <section className="hidden md:flex w-2/5 bg-surface-muted/50 p-10 items-center justify-center">
-        <div className="w-full h-full max-h-[800px] bg-surface rounded-[32px] shadow-[0_12px_40px_rgba(15,23,42,0.04)] overflow-hidden flex flex-col">
-          <div className="h-12 border-b border-surface-muted flex items-center px-6 justify-between bg-surface-bright">
-            <div className="flex gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-outline-variant/30" />
-              <div className="w-2.5 h-2.5 rounded-full bg-outline-variant/30" />
-              <div className="w-2.5 h-2.5 rounded-full bg-outline-variant/30" />
-            </div>
-            <span className="font-caption text-caption text-foreground-muted">
-              {workspace ? `${workspace}.preview` : "preview"}
-            </span>
-            <Maximize2
-              className="h-[18px] w-[18px] text-foreground-muted"
-              strokeWidth={1.75}
-            />
-          </div>
-          <div className="flex-1 p-8 overflow-hidden relative">
-            <div className="grid grid-cols-2 grid-rows-3 gap-4 h-full animate-pulse opacity-60">
-              <div className="col-span-2 bg-surface-container-low rounded-2xl" />
-              <div className="bg-surface-container-low rounded-2xl" />
-              <div className="bg-surface-container-low rounded-2xl" />
-              <div className="col-span-2 bg-surface-container-low rounded-2xl" />
-            </div>
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-12 bg-surface/40 backdrop-blur-[2px]">
-              <div className="w-16 h-16 bg-surface rounded-2xl shadow-sm flex items-center justify-center mb-4">
-                <Sparkles className="h-8 w-8 text-primary" strokeWidth={1.75} />
-              </div>
-              <h3 className="font-heading text-heading text-on-surface mb-2">
-                {messages.length > 0 ? "Generating Interface" : "Idle Canvas"}
-              </h3>
-              <p className="font-body text-body text-foreground-muted">
-                {messages.length > 0
-                  ? "SelfFork is composing your idea. Watch this space."
-                  : "Send a prompt on the left to wake the canvas."}
-              </p>
-              {messages.length > 0 ? (
-                <div className="mt-8 flex items-center gap-2 px-3 py-1 bg-success/10 rounded-full">
-                  <span className="w-2 h-2 rounded-full bg-success" />
-                  <span className="font-caption text-caption text-success">
-                    active stream
-                  </span>
-                </div>
-              ) : null}
+              <button
+                type="button"
+                onClick={onSend}
+                disabled={!draft.trim()}
+                aria-label="Send message"
+                className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center disabled:opacity-40 hover:bg-primary-container transition-colors"
+              >
+                <ArrowRight className="h-4 w-4" strokeWidth={2} />
+              </button>
             </div>
           </div>
         </div>
-      </section>
-    </div>
-  );
-}
-
-export default function TalkPage() {
-  return (
-    <AppShell title="Personal Space">
-      <Suspense
-        fallback={
-          <p className="font-body text-caption text-foreground-muted px-gutter-desktop py-vertical-gap">
-            Loading…
-          </p>
-        }
-      >
-        <TalkBody />
-      </Suspense>
+      </div>
     </AppShell>
   );
 }

@@ -483,3 +483,196 @@ export function listOrphanProvenance(limit = 100): Promise<ProvenanceEntry[]> {
 }
 
 export { ApiError };
+
+// ── M6 Live Run Theater + Active Loop ──────────────────────────────────────
+
+export interface TheaterCLIOutputChunk {
+  id: string;
+  kind: "stdout" | "stderr" | "system" | "jr-prompt" | "info";
+  text: string;
+}
+
+export interface TheaterScreenshotResponse {
+  id: string;
+  at: string;
+  source: "browser" | "mobile-emu" | "desktop";
+  vision_tier: 1 | 2 | 3;
+  thumbnail_url: string | null;
+  preview_url: string | null;
+  active: boolean;
+}
+
+export interface TheaterThoughtResponse {
+  id: string;
+  summary: string;
+  raw: string | null;
+}
+
+export interface TheaterSnapshotResponse {
+  active: boolean;
+  cli: string | null;
+  turn: number;
+  duration_seconds: number;
+  output: TheaterCLIOutputChunk[];
+  screenshots: TheaterScreenshotResponse[];
+  thoughts: TheaterThoughtResponse[];
+  next_prompt: string | null;
+}
+
+export interface ActiveLoopResponse {
+  workspace_slug: string;
+  workspace_name: string;
+  cli: string;
+  turn: number;
+  started_at: string;
+  duration_seconds: number;
+  last_thought: string | null;
+}
+
+export function getTheaterSnapshot(slug: string): Promise<TheaterSnapshotResponse> {
+  return request<TheaterSnapshotResponse>(
+    `/api/workspaces/${encodeURIComponent(slug)}/theater/snapshot`,
+  );
+}
+
+export function theaterStreamUrl(slug: string): string {
+  const base = API_BASE || (typeof window !== "undefined" ? window.location.origin : "");
+  const wsBase = base.replace(/^http/, "ws");
+  return `${wsBase}/api/workspaces/${encodeURIComponent(slug)}/theater/stream`;
+}
+
+export function openTheaterStream(slug: string): WebSocket {
+  return new WebSocket(theaterStreamUrl(slug));
+}
+
+export function getActiveLoop(): Promise<ActiveLoopResponse | null> {
+  return request<ActiveLoopResponse | null>("/api/loop/active");
+}
+
+// ── M6 Destructive-action pending confirmations (ADR-006 §4.5) ─────────────
+
+export interface PendingConfirmationResponse {
+  id: string;
+  workspace_slug: string | null;
+  category_id: string;
+  category_description: string;
+  command_summary: string;
+  asked_at: string;
+  expires_at: string;
+  time_left_seconds: number;
+  status: string;
+}
+
+export function listPendingConfirmations(
+  workspaceSlug?: string,
+): Promise<PendingConfirmationResponse[]> {
+  const path = workspaceSlug
+    ? `/api/workspaces/${encodeURIComponent(workspaceSlug)}/pending-confirmations`
+    : "/api/pending-confirmations";
+  return request<PendingConfirmationResponse[]>(path);
+}
+
+export function approvePendingConfirmation(
+  id: string,
+): Promise<PendingConfirmationResponse> {
+  return request<PendingConfirmationResponse>(
+    `/api/pending-confirmations/${encodeURIComponent(id)}/approve`,
+    { method: "POST" },
+  );
+}
+
+export function cancelPendingConfirmation(
+  id: string,
+): Promise<PendingConfirmationResponse> {
+  return request<PendingConfirmationResponse>(
+    `/api/pending-confirmations/${encodeURIComponent(id)}/cancel`,
+    { method: "POST" },
+  );
+}
+
+// ── M6 Telegram bridge surface (ADR-006 §4.7) ──────────────────────────────
+
+export interface TelegramStatusResponse {
+  state: "not_configured" | "connected" | "errored";
+  bot_username: string | null;
+  webhook_url: string | null;
+  soft_confirm_window_hours: number;
+  last_activity_at: string | null;
+  last_activity_summary: string | null;
+  detail: string | null;
+}
+
+export function getTelegramStatus(): Promise<TelegramStatusResponse> {
+  return request<TelegramStatusResponse>("/api/telegram/status");
+}
+
+export function setupTelegram(payload: {
+  bot_token: string;
+  webhook_url: string;
+}): Promise<TelegramStatusResponse> {
+  return request<TelegramStatusResponse>("/api/telegram/setup", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+// ── M6 Reflex training surface (ADR-006 §7.1) ──────────────────────────────
+
+export interface ReflexHyperParams {
+  method: "QLoRA" | "LoRA" | "Full";
+  lora_rank: number;
+  lora_alpha: number;
+  learning_rate: string;
+  epochs: number;
+  target_modules: "attention only" | "attention + MLP";
+}
+
+export interface StartTrainingPayload {
+  dataset_source: "auto" | "manual";
+  dataset_path?: string;
+  hyperparams: ReflexHyperParams;
+  training_endpoint?: string;
+}
+
+export interface TrainingJobResponse {
+  job_id: string;
+  status: "queued" | "running" | "completed" | "errored";
+  started_at: string;
+  estimated_seconds: number | null;
+  progress_percent: number;
+  log_tail: string[];
+  error: string | null;
+}
+
+export interface ReflexAdapterInfo {
+  version: string;
+  trained_at: string | null;
+  age_days: number;
+  examples: number;
+  method: string;
+}
+
+export function startTraining(
+  payload: StartTrainingPayload,
+): Promise<TrainingJobResponse> {
+  return request<TrainingJobResponse>("/api/reflex/train", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getTrainingStatus(
+  jobId: string,
+): Promise<TrainingJobResponse> {
+  return request<TrainingJobResponse>(
+    `/api/reflex/training-status/${encodeURIComponent(jobId)}`,
+  );
+}
+
+export function listTrainingJobs(): Promise<TrainingJobResponse[]> {
+  return request<TrainingJobResponse[]>("/api/reflex/training-status");
+}
+
+export function getReflexAdapterInfo(): Promise<ReflexAdapterInfo> {
+  return request<ReflexAdapterInfo>("/api/reflex/adapter");
+}

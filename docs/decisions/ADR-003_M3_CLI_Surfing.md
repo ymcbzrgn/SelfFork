@@ -1,5 +1,12 @@
 # ADR-003 — M3 CLI Surfing
 
+> **⚠ Partial supersession — ADR-006 (2026-05-17 v3 pivot).**
+> The router-strategy section (rotation-based selection) is replaced
+> by [`ADR-006_v2_Pivot.md`](./ADR-006_v2_Pivot.md) §4.6 — three
+> input signals (quota remaining + operator override + RAG project–CLI
+> affinity). The CLI fleet expansion (claude / codex / gemini / minimax
+> / glm) and the Surfer machinery in this document remain in effect.
+
 **Tarih:** 2026-05-09
 **Durum:** Kabul edildi (uygulamada)
 **Bağlam:** `docs/ROADMAP.md` §M3, ARGE 2026-05-09 (10 paralel ajan + 9 order plan)

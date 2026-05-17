@@ -102,6 +102,10 @@ const config: Config = {
           DEFAULT: "hsl(var(--info))",
           foreground: "hsl(var(--info-foreground))",
         },
+        error: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar))",
           foreground: "hsl(var(--sidebar-foreground))",
@@ -159,6 +163,15 @@ const config: Config = {
       boxShadow: {
         card: "0 2px 8px rgba(15, 23, 42, 0.04)",
         "card-hover": "0 4px 16px rgba(15, 23, 42, 0.06)",
+      },
+      keyframes: {
+        "pulse-red": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.3" },
+        },
+      },
+      animation: {
+        "pulse-red": "pulse-red 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
       },
     },
   },

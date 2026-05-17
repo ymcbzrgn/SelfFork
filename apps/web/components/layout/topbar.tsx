@@ -1,24 +1,33 @@
 /**
- * SelfFork v2 topbar — Stitch-verbatim port.
+ * SelfFork v3 topbar.
  *
- * surface background (one tonal step above the page), heading-typed
- * workspace title on the left, a small primary-container avatar on the
- * right. No search, no audit-dir pills. Backend health is polled
- * silently — only when /api/health drops do we surface a subtle hint.
+ * Sticky header above the main column. Left: page title with optional
+ * dropdown indicator. Center: Cmd+K search affordance. Right:
+ * notification bell + Live indicator + system status + help + operator
+ * marker. Backend health is polled every 15s; the Live pill flips to
+ * "Offline" when /api/health fails.
  */
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  Bell,
+  ChevronDown,
+  HelpCircle,
+  Search,
+  ServerCog,
+} from "lucide-react";
 
 import { getHealth } from "@/lib/api";
 
 interface TopBarProps {
-  /** Title displayed left — falls back to the default workspace label. */
+  /** Page title shown on the left. Defaults to "Dashboard". */
   title?: string;
 }
 
-export function TopBar({ title = "Personal Space" }: TopBarProps) {
+export function TopBar({ title = "Dashboard" }: TopBarProps) {
   const [online, setOnline] = useState(true);
+  const [pendingCount] = useState(0); // wired to destructive confirmation queue later
 
   useEffect(() => {
     let cancelled = false;
@@ -39,28 +48,102 @@ export function TopBar({ title = "Personal Space" }: TopBarProps) {
   }, []);
 
   return (
-    <header className="h-topbar-height w-full sticky top-0 z-40 bg-surface flex items-center justify-between px-gutter-desktop">
-      <div className="flex items-center gap-3">
-        <h2 className="font-heading text-heading font-semibold text-on-surface">
-          {title}
-        </h2>
-        {!online ? (
-          <span
-            className="font-caption text-caption font-semibold text-tertiary uppercase tracking-wider"
-            aria-label="backend offline"
-          >
-            offline
-          </span>
-        ) : null}
+    <header
+      className="h-topbar-height w-full sticky top-0 z-40 bg-surface-container-lowest border-b border-outline-variant/20 flex items-center justify-between px-gutter-desktop"
+      aria-label="Top navigation"
+    >
+      <div className="flex items-center gap-8 min-w-0">
+        <button
+          type="button"
+          className="flex items-center gap-2 font-heading text-body font-bold text-on-surface group whitespace-nowrap"
+          aria-label="Switch workspace"
+        >
+          <span className="truncate">{title}</span>
+          <ChevronDown
+            className="h-4 w-4 transition-transform group-hover:translate-y-0.5"
+            strokeWidth={1.75}
+          />
+        </button>
+        <div className="relative w-72 max-w-[40vw] hidden md:block">
+          <Search
+            className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-on-surface-variant"
+            strokeWidth={1.75}
+          />
+          <input
+            type="text"
+            placeholder="Search… ⌘K"
+            className="w-full bg-surface-container-high/50 border-none rounded-full pl-10 pr-4 py-1.5 text-caption focus:ring-2 focus:ring-primary/20 placeholder:text-on-surface-variant outline-none"
+            aria-label="Global search (command palette)"
+          />
+        </div>
       </div>
-      <div className="flex items-center gap-4">
-        {/* No auth/user system yet — soft primary marker. */}
-        <span
-          aria-label="Local instance"
-          className="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container font-caption text-caption font-semibold"
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full relative"
+          aria-label={
+            pendingCount
+              ? `Notifications, ${pendingCount} pending`
+              : "Notifications"
+          }
+        >
+          <Bell
+            className="h-5 w-5 text-on-surface-variant"
+            strokeWidth={1.75}
+          />
+          {pendingCount > 0 && (
+            <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 bg-error text-white text-[10px] flex items-center justify-center rounded-full font-bold tabular-nums">
+              {pendingCount}
+            </span>
+          )}
+        </button>
+
+        <div
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${
+            online ? "" : "opacity-60"
+          }`}
+          aria-live="polite"
+        >
+          <span
+            className={`w-2 h-2 rounded-full ${
+              online ? "bg-error animate-pulse-red" : "bg-on-surface-variant"
+            }`}
+            aria-hidden
+          />
+          <span className="text-caption font-bold text-on-surface-variant">
+            {online ? "Live" : "Offline"}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full"
+          aria-label="System status"
+        >
+          <ServerCog
+            className="h-5 w-5 text-on-surface-variant"
+            strokeWidth={1.75}
+          />
+        </button>
+
+        <button
+          type="button"
+          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full"
+          aria-label="Help and keyboard shortcuts"
+        >
+          <HelpCircle
+            className="h-5 w-5 text-on-surface-variant"
+            strokeWidth={1.75}
+          />
+        </button>
+
+        <div
+          aria-label="Local operator"
+          className="ml-2 w-8 h-8 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container font-caption text-caption font-semibold"
         >
           ·
-        </span>
+        </div>
       </div>
     </header>
   );

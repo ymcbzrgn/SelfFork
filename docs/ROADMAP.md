@@ -1,5 +1,15 @@
 # SelfFork — Roadmap
 
+> **⚠ M4/M5 supersession + M6 added — ADR-006 (2026-05-17 v3 pivot).**
+> The M4 Cockpit milestone (Fleet Command + 4-tab Workspace + slider +
+> emergency kill) is replaced by **M6** per
+> [`docs/decisions/ADR-006_v2_Pivot.md`](decisions/ADR-006_v2_Pivot.md)
+> §9 — sidebar + 5 screens (Dashboard / Workspace 4-tab inner / Talk /
+> Connections / Settings) + Linux server self-host deployment +
+> destructive whitelist + Telegram bridge surface + Fine-tune UI +
+> Watcher removal. M5 Body remains in effect with the patches in
+> ADR-006 §7.2. Multi-machine mesh and Watcher revival are M9+ (deferred).
+
 > **Codename:** Yamaç Jr. Nano
 > **Hardware target (v1):** 16 GB Apple Silicon MacBook Pro (operator's existing machine)
 > **Default AI:** Gemma 4 E2B-it Q4_0 — *no fine-tune until M7*

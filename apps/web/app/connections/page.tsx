@@ -1,274 +1,315 @@
-/**
- * Connections — Stitch-verbatim port. AI assistants list, real
- * /api/providers. "Connect" → POST sign_in_start (currently a
- * backend stub that returns 200 without opening a browser — UI
- * notes that honestly until the body web driver lands the OAuth
- * orchestration).
- *
- * Stitch design reference: screen fb678a31f97644fd95996e3aa4710f42.
- */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowRight,
+  Check,
+  ExternalLink,
+  SendHorizontal,
+  Settings as SettingsIcon,
+} from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { API_BASE } from "@/lib/api";
-import { cn } from "@/lib/utils";
+  getTelegramStatus,
+  listProviderUsage,
+  type ProviderUsage,
+  type TelegramStatusResponse,
+} from "@/lib/api";
 
 interface ProviderRow {
-  name: "claude_pro" | "codex" | "gemini" | "opencode" | "mmx";
-  label: string;
-  description: string;
-  letter: string;
-  swatch: string;
-}
-
-interface ProviderState {
-  name: ProviderRow["name"];
-  status: "connected" | "disconnected" | "expired" | "expiring_soon";
-  expires_at: string | null;
-  last_sign_in: string | null;
-  last_error: string | null;
-  storage_state_path: string | null;
+  canonical: "claude" | "codex" | "gemini" | "minimax" | "glm";
+  displayName: string;
+  subscription: string;
+  pillBg: string;
+  pillText: string;
 }
 
 const PROVIDERS: ProviderRow[] = [
   {
-    name: "claude_pro",
-    label: "Claude",
-    description: "Anthropic's flagship coding assistant",
-    letter: "C",
-    swatch: "bg-gradient-to-br from-orange-100 to-amber-50",
+    canonical: "claude",
+    displayName: "Claude Code (Anthropic Pro)",
+    subscription: "Pro",
+    pillBg: "bg-amber-50",
+    pillText: "text-amber-700",
   },
   {
-    name: "codex",
-    label: "ChatGPT",
-    description: "OpenAI's versatile language model",
-    letter: "G",
-    swatch: "bg-gradient-to-br from-emerald-100 to-teal-50",
+    canonical: "codex",
+    displayName: "Codex (ChatGPT Plus)",
+    subscription: "Plus",
+    pillBg: "bg-green-50",
+    pillText: "text-green-700",
   },
   {
-    name: "gemini",
-    label: "Gemini",
-    description: "Google's multi-modal AI intelligence",
-    letter: "G",
-    swatch: "bg-gradient-to-br from-blue-100 to-sky-50",
+    canonical: "gemini",
+    displayName: "Gemini CLI (Google AI Studio)",
+    subscription: "Free Tier",
+    pillBg: "bg-blue-50",
+    pillText: "text-blue-700",
   },
   {
-    name: "opencode",
-    label: "OpenCode",
-    description: "Community-driven open source models",
-    letter: "O",
-    swatch: "bg-gradient-to-br from-slate-100 to-zinc-50",
+    canonical: "minimax",
+    displayName: "Minimax",
+    subscription: "—",
+    pillBg: "bg-violet-50",
+    pillText: "text-violet-700",
   },
   {
-    name: "mmx",
-    label: "MiniMax",
-    description: "High-performance reasoning engine",
-    letter: "M",
-    swatch: "bg-gradient-to-br from-violet-100 to-indigo-50",
+    canonical: "glm",
+    displayName: "GLM (Zhipu)",
+    subscription: "—",
+    pillBg: "bg-red-50",
+    pillText: "text-red-700",
   },
 ];
 
-export default function ConnectionsPage() {
-  const [states, setStates] = useState<Record<string, ProviderState> | null>(
-    null,
-  );
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [confirmTarget, setConfirmTarget] = useState<ProviderRow | null>(null);
+function aliasToCanonical(cli: string): ProviderRow["canonical"] | null {
+  if (cli === "claude-code" || cli === "claude") return "claude";
+  if (cli === "codex") return "codex";
+  if (cli === "gemini-cli" || cli === "gemini") return "gemini";
+  if (cli === "minimax") return "minimax";
+  if (cli === "glm") return "glm";
+  return null;
+}
 
-  const refresh = async () => {
-    setError(null);
-    try {
-      const r = await fetch(`${API_BASE}/api/providers`);
-      if (!r.ok) throw new Error(`GET ${r.status}`);
-      const data = (await r.json()) as ProviderState[];
-      const map: Record<string, ProviderState> = {};
-      for (const p of data) map[p.name] = p;
-      setStates(map);
-    } catch (e) {
-      setError(`Could not load connections: ${(e as Error).message}`);
-    }
-  };
+function deriveResetLabel(resetAt: string | null): string {
+  if (!resetAt) return "—";
+  const ms = new Date(resetAt).getTime() - Date.now();
+  if (ms <= 0) return "resetting now";
+  const totalMin = Math.floor(ms / 60000);
+  const hours = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  if (hours >= 24) return `${Math.floor(hours / 24)}d ${hours % 24}h`;
+  return `${hours}h ${mins.toString().padStart(2, "0")}m`;
+}
+
+function StatusDot({ kind }: { kind: "green" | "amber" | "red" | "gray" }) {
+  const cls =
+    kind === "green"
+      ? "bg-success"
+      : kind === "amber"
+        ? "bg-amber-500"
+        : kind === "red"
+          ? "bg-error"
+          : "bg-on-surface-variant/40";
+  return <span className={`w-2.5 h-2.5 rounded-full ${cls}`} aria-hidden />;
+}
+
+export default function ConnectionsPage() {
+  const [usage, setUsage] = useState<ProviderUsage[]>([]);
+  const [tg, setTg] = useState<TelegramStatusResponse | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    void refresh();
+    Promise.all([
+      listProviderUsage().catch(() => [] as ProviderUsage[]),
+      getTelegramStatus().catch(() => null),
+    ])
+      .then(([u, t]) => {
+        setUsage(u);
+        setTg(t);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
-  const signIn = async (row: ProviderRow) => {
-    setBusy(row.name);
-    setError(null);
-    try {
-      const r = await fetch(
-        `${API_BASE}/api/providers/${row.name}/sign_in_start`,
-        { method: "POST" },
-      );
-      if (!r.ok) {
-        const body = await r.json().catch(() => ({ detail: r.statusText }));
-        throw new Error(`${r.status}: ${body.detail ?? r.statusText}`);
-      }
-      setError(
-        `Sign-in started for ${row.label}. Browser-driven OAuth lands in a near-term patch — until then state stays "not connected."`,
-      );
-      window.setTimeout(() => void refresh(), 1500);
-    } catch (e) {
-      setError(`Could not start sign-in: ${(e as Error).message}`);
-    } finally {
-      setBusy(null);
-    }
-  };
+  const tgConnected = tg?.state === "connected";
 
-  const disconnect = async (row: ProviderRow) => {
-    setBusy(row.name);
-    setError(null);
-    try {
-      const r = await fetch(
-        `${API_BASE}/api/providers/${row.name}/disconnect`,
-        { method: "POST" },
-      );
-      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-      await refresh();
-    } catch (e) {
-      setError(`Could not disconnect: ${(e as Error).message}`);
-    } finally {
-      setBusy(null);
-      setConfirmTarget(null);
+  const byCanonical = useMemo(() => {
+    const map = new Map<ProviderRow["canonical"], ProviderUsage>();
+    for (const u of usage) {
+      const c = aliasToCanonical(u.cli_agent);
+      if (c) map.set(c, u);
     }
-  };
+    return map;
+  }, [usage]);
 
   return (
-    <AppShell title="Personal Space">
-      <main className="flex-1 px-gutter-desktop py-12 max-w-5xl mx-auto w-full">
-        <div className="mb-12">
+    <AppShell title="Connections">
+      <main className="max-w-5xl mx-auto px-gutter-desktop py-vertical-gap space-y-12">
+        <section>
           <h1 className="font-display text-display text-on-surface mb-2">
             Connections
           </h1>
-          <p className="font-body text-body text-foreground-muted">
-            Add the AI assistants you want to use.
+          <p className="font-body text-caption text-on-surface-variant">
+            CLI providers + Telegram bridge + browser auth state
           </p>
-        </div>
+        </section>
 
-        {error ? (
-          <div
-            role="alert"
-            aria-live="polite"
-            className="mb-8 rounded-xl bg-primary/5 border border-primary/10 px-card-padding py-4 font-body text-caption text-on-surface-variant"
-          >
-            {error}
-          </div>
-        ) : null}
-
-        <div className="flex flex-col gap-6">
+        <section className="space-y-3">
+          <h2 className="text-[11px] uppercase tracking-wider font-bold text-on-surface-variant">
+            CLI Providers
+          </h2>
+          {loading && (
+            <p className="text-caption text-on-surface-variant">Loading…</p>
+          )}
           {PROVIDERS.map((row) => {
-            const state = states?.[row.name];
-            const active = state?.status === "connected";
-            const isBusy = busy === row.name;
+            const u = byCanonical.get(row.canonical);
+            const signedIn = !!u;
+            const resetLabel = u ? deriveResetLabel(u.next_reset_at) : null;
+            const dotKind: "green" | "amber" | "red" | "gray" = !signedIn
+              ? "gray"
+              : "green";
+
             return (
               <div
-                key={row.name}
-                className="bg-surface p-card-padding rounded-xl shadow-[0_2px_8px_rgba(15,23,42,0.04)] flex items-center justify-between hover:-translate-y-[2px] transition-all duration-300"
+                key={row.canonical}
+                className={`bg-surface p-5 rounded-xl shadow-sm border ${
+                  signedIn
+                    ? "border-outline-variant/20"
+                    : "border-dashed border-outline-variant/40"
+                } flex items-center gap-4 flex-wrap`}
               >
-                <div className="flex items-center gap-5">
-                  <div
-                    className={cn(
-                      "w-12 h-12 rounded-lg flex items-center justify-center",
-                      "font-heading font-semibold text-[18px] text-on-surface",
-                      row.swatch,
-                    )}
-                    aria-hidden
+                <div className="flex items-center gap-3">
+                  <StatusDot kind={dotKind} />
+                  <span
+                    className={`${row.pillBg} ${row.pillText} text-[10px] font-bold uppercase tracking-tight px-2 py-0.5 rounded`}
                   >
-                    {row.letter}
-                  </div>
-                  <div>
-                    <h3 className="font-heading text-body text-on-surface font-semibold">
-                      {row.label}
-                    </h3>
-                    <p className="font-body text-caption text-foreground-muted">
-                      {row.description}
-                    </p>
-                  </div>
+                    {row.canonical}
+                  </span>
                 </div>
-                {active ? (
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 text-success">
-                      <div className="w-2 h-2 rounded-full bg-success" />
-                      <span className="font-body text-caption">active</span>
-                    </div>
+                <div className="flex-1 min-w-[260px]">
+                  <h3 className="text-body font-semibold text-on-surface">
+                    {row.displayName}
+                  </h3>
+                  {signedIn ? (
+                    <p className="text-caption text-on-surface-variant tabular-nums">
+                      Subscription: {row.subscription} ·{" "}
+                      {u?.calls_in_window ?? 0} calls in {u?.window_label} ·
+                      Resets in {resetLabel}
+                    </p>
+                  ) : (
+                    <p className="text-caption text-on-surface-variant italic">
+                      Not signed in
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {signedIn ? (
+                    <>
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 text-on-surface-variant hover:bg-surface-container-low text-caption font-medium rounded-lg"
+                      >
+                        Sign out
+                      </button>
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 border border-outline-variant text-caption font-medium rounded-lg hover:bg-surface-container-low"
+                      >
+                        Test connection
+                      </button>
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 border border-outline-variant text-caption font-medium rounded-lg hover:bg-surface-container-low flex items-center gap-1"
+                      >
+                        <ExternalLink
+                          className="h-3.5 w-3.5"
+                          strokeWidth={1.75}
+                        />
+                        Browser preview
+                      </button>
+                    </>
+                  ) : (
                     <button
                       type="button"
-                      disabled={isBusy}
-                      onClick={() => setConfirmTarget(row)}
-                      className="font-caption text-caption text-foreground-muted hover:text-on-surface underline-offset-2 hover:underline disabled:opacity-50"
+                      className="px-4 py-2 bg-primary text-white text-caption font-bold rounded-lg hover:bg-primary-container transition-colors flex items-center gap-1"
                     >
-                      Manage
+                      Sign in
+                      <ArrowRight className="h-4 w-4" strokeWidth={1.75} />
                     </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => void signIn(row)}
-                    className="bg-primary hover:bg-primary-container text-on-primary px-5 py-2.5 rounded-xl font-body text-caption font-semibold transition-all active:scale-95 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isBusy ? "Opening…" : "Connect"}
-                  </button>
-                )}
+                  )}
+                </div>
               </div>
             );
           })}
-        </div>
+        </section>
 
-        <div className="mt-16 pt-8 border-t border-border flex justify-between items-center">
-          <p className="font-body text-caption text-foreground-muted italic">
-            A confident surface that responds to intent.
+        <section className="space-y-3">
+          <h2 className="text-[11px] uppercase tracking-wider font-bold text-on-surface-variant">
+            Telegram Bridge
+          </h2>
+          <div className="bg-surface p-6 rounded-xl shadow-sm border border-outline-variant/20">
+            <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <StatusDot kind={tgConnected ? "green" : "gray"} />
+                <h3 className="text-body font-bold text-on-surface">
+                  Telegram Bridge —{" "}
+                  {tgConnected ? "Connected" : "Not configured"}
+                </h3>
+              </div>
+              {!tgConnected && (
+                <button
+                  type="button"
+                  className="px-4 py-2 bg-primary text-white text-caption font-bold rounded-lg hover:bg-primary-container transition-colors flex items-center gap-1"
+                >
+                  Connect
+                  <ArrowRight className="h-4 w-4" strokeWidth={1.75} />
+                </button>
+              )}
+            </div>
+            <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-caption">
+              <div className="flex gap-2">
+                <dt className="text-on-surface-variant w-32">Bot:</dt>
+                <dd className="font-mono text-on-surface">
+                  {tg?.bot_username ? `@${tg.bot_username}` : "—"}
+                </dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="text-on-surface-variant w-32">Webhook:</dt>
+                <dd className="font-mono text-on-surface break-all">
+                  {tg?.webhook_url ?? (
+                    <span className="text-on-surface-variant/60 italic">
+                      not set
+                    </span>
+                  )}
+                </dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="text-on-surface-variant w-32">Soft confirm:</dt>
+                <dd className="text-on-surface">
+                  {tg?.soft_confirm_window_hours ?? 4} hours
+                </dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="text-on-surface-variant w-32">Last activity:</dt>
+                <dd className="text-on-surface-variant/60 italic">
+                  {tg?.last_activity_summary ?? "never"}
+                </dd>
+              </div>
+            </dl>
+            <div className="mt-4 pt-4 border-t border-outline-variant/30 flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                disabled
+                className="px-3 py-1.5 border border-outline-variant text-caption font-medium rounded-lg flex items-center gap-1 text-on-surface-variant opacity-50 cursor-not-allowed"
+              >
+                <SendHorizontal className="h-3.5 w-3.5" strokeWidth={1.75} />
+                Send test
+              </button>
+              <button
+                type="button"
+                disabled
+                className="px-3 py-1.5 border border-outline-variant text-caption font-medium rounded-lg opacity-50 cursor-not-allowed"
+              >
+                View log
+              </button>
+              <button
+                type="button"
+                disabled
+                className="px-3 py-1.5 text-on-surface-variant text-caption font-medium rounded-lg flex items-center gap-1 opacity-50 cursor-not-allowed"
+              >
+                <SettingsIcon className="h-3.5 w-3.5" strokeWidth={1.75} />
+                Bot settings
+              </button>
+            </div>
+          </div>
+          <p className="text-caption text-on-surface-variant flex items-center gap-1">
+            <Check className="h-3.5 w-3.5 text-success" strokeWidth={2} />
+            Soft confirmation (4h, fail-safe NO) replaces autonomy sliders — see
+            ADR-006 §4.5.
           </p>
-        </div>
+        </section>
       </main>
-
-      <Dialog
-        open={confirmTarget != null}
-        onOpenChange={(open) => !open && setConfirmTarget(null)}
-      >
-        <DialogContent className="bg-surface rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="font-heading text-heading text-on-surface">
-              Disconnect {confirmTarget?.label}?
-            </DialogTitle>
-            <DialogDescription className="font-body text-body text-foreground-muted">
-              Future sessions that need {confirmTarget?.label} will prompt
-              you to sign in again.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setConfirmTarget(null)}
-              disabled={busy === confirmTarget?.name}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => confirmTarget && void disconnect(confirmTarget)}
-              disabled={busy === confirmTarget?.name}
-              className="bg-error text-on-error hover:opacity-90"
-            >
-              {busy === confirmTarget?.name ? "Working…" : "Disconnect"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </AppShell>
   );
 }

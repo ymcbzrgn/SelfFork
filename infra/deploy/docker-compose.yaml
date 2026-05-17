@@ -1,0 +1,55 @@
+# SelfFork v3 single-node self-host (ADR-006 §4 deployment).
+#
+# One container holds the orchestrator FastAPI + Next.js cockpit + the
+# CLI fleet (claude-code, codex, gemini-cli, …) + Playwright headless
+# browser for sign-in flows. The model lives external — set
+# `MODEL_ENDPOINT` to the URL of your mlx-server / Ollama / OpenAI-
+# compatible host (lab Mac, GPU rental, or co-located service).
+
+version: "3.8"
+
+services:
+  selffork:
+    build:
+      context: ../..
+      dockerfile: infra/deploy/Dockerfile
+    image: selffork:v3
+    container_name: selffork
+    restart: unless-stopped
+    ports:
+      - "${SELFFORK_PORT:-8765}:8765"
+    volumes:
+      # CLI sign-in cookies (claude/codex/gemini browser auth state).
+      # Persists across container restarts so the operator only signs
+      # in once per provider.
+      - selffork-auth:/opt/selffork/.config/selffork
+      # All workspace state: projects/{slug}/, audit logs, mind RAG db.
+      - selffork-data:/opt/selffork/.selffork
+    environment:
+      # Operator-set model endpoint (default: local-lab via host gateway).
+      SELFFORK_MODEL_ENDPOINT: "${MODEL_ENDPOINT:-http://host.docker.internal:8080}"
+      SELFFORK_MODEL_PROTOCOL: "${MODEL_PROTOCOL:-openai}"
+      SELFFORK_MODEL_NAME: "${MODEL_NAME:-gemma-4-26b-a4b-it-4bit}"
+      # Telegram bridge (optional). Leave unset to disable.
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
+      TELEGRAM_WEBHOOK_URL: "${TELEGRAM_WEBHOOK_URL:-}"
+      # Soft-confirmation default window (hours). Overridable per
+      # category in Settings → Destructive whitelist.
+      SELFFORK_SOFT_CONFIRM_HOURS: "${SOFT_CONFIRM_HOURS:-4}"
+    # host.docker.internal works on Docker Desktop; on Linux servers
+    # add `extra_hosts: ["host.docker.internal:host-gateway"]` so the
+    # in-container app can reach a model running on the host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Reasonable defaults; bump for heavy RAG + multiple parallel CLIs.
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 8G
+
+volumes:
+  selffork-auth:
+    name: selffork-auth
+  selffork-data:
+    name: selffork-data

@@ -1,5 +1,12 @@
 # ADR-001 — SelfFork MVP v0 Architecture
 
+> **⚠ Partial supersession — ADR-006 (2026-05-17 v3 pivot).**
+> The `apps/` UI surface section ("empty until M4") is replaced by
+> the 5-screen IA in [`ADR-006_v2_Pivot.md`](./ADR-006_v2_Pivot.md) §5
+> (Dashboard / Workspace / Talk / Connections / Settings). M4 →
+> deferred to M6 with revised scope. The MVP backend decisions in this
+> document remain authoritative; the UI surface tarif is not.
+
 | Field | Value |
 |---|---|
 | **Status** | Accepted |

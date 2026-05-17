@@ -1,5 +1,15 @@
 # ADR-004 — M4 Cockpit Full Control
 
+> **⚠ SUPERSEDED by ADR-006 (2026-05-17 v3 pivot).**
+> The 4-tab Workspace IA (Mission / Run / Chat / Context) defined here
+> is replaced by [`ADR-006_v2_Pivot.md`](./ADR-006_v2_Pivot.md) §5 — a
+> sidebar-driven 5-screen layout (Dashboard / Workspace / Talk /
+> Connections / Settings), with the Workspace page itself broken into
+> 4 inner tabs (Kanban / Live Run / Notes / About). The "Fleet Command
+> Center" hero, slider widget, and threshold table from this ADR are
+> revoked. Multi-machine fleet (ARGE §8) is deferred to M9+. Read this
+> document as historical context only.
+
 **Tarih:** 2026-05-09 (close-out + audit-fix wave aynı gün)
 **Durum:** Uygulandı + 9-ajan paralel audit + 9 fix wave (P0/HIGH/MEDIUM); Yamaç laptop e2e smoke'u manuel onay bekliyor
 **Bağlam:** `docs/ROADMAP.md` §M4, ARGE 2026-05-09 (14 paralel ajan: 8 selffork-researcher + 5 explorer-god + 1 audit-god)

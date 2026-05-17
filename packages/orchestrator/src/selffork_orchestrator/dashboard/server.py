@@ -215,6 +215,40 @@ def build_app(config: DashboardConfig) -> FastAPI:
 
     app.include_router(build_settings_router(config_path=config.config_path))
 
+    # M6 Live Run Theater (workspace 3-pane) + global active-loop introspection.
+    from selffork_orchestrator.dashboard.theater_router import (
+        build_theater_router,
+        build_loop_router,
+    )
+
+    app.include_router(build_theater_router(projects_root=config.projects_root))
+    app.include_router(build_loop_router())
+
+    # M6 destructive-action soft confirmation (ADR-006 §4.5). Shared
+    # store across workspaces; warden writes, dashboard reads/decides.
+    from selffork_body.sandbox.pending_confirmations import (
+        PendingConfirmationStore,
+    )
+    from selffork_orchestrator.dashboard.pending_router import (
+        build_pending_router,
+    )
+
+    pending_audit_path = config.audit_dir / "pending_confirmations.jsonl"
+    pending_store = PendingConfirmationStore(audit_path=pending_audit_path)
+    app.state.pending_confirmation_store = pending_store
+    app.include_router(build_pending_router(store=pending_store))
+
+    # M6 Telegram bridge status + Reflex training surface (ADR-006).
+    from selffork_orchestrator.dashboard.telegram_router import (
+        build_telegram_router,
+    )
+    from selffork_orchestrator.dashboard.reflex_router import (
+        build_reflex_router,
+    )
+
+    app.include_router(build_telegram_router())
+    app.include_router(build_reflex_router())
+
     _register_static_mount(app, config)
 
     return app

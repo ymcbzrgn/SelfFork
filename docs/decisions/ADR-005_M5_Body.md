@@ -1,5 +1,19 @@
 # ADR-005 — M5 Body (Cross-Platform Daemon + Vision Drivers + Provider Auth UI)
 
+> **⚠ Partial supersession — ADR-006 (2026-05-17 v3 pivot).**
+> Body daemon + vision drivers + provider browser-auth flows in this
+> ADR remain authoritative. Three changes per
+> [`ADR-006_v2_Pivot.md`](./ADR-006_v2_Pivot.md):
+> 1. **Multi-machine fleet section — deferred to M9+.** v3 ships
+>    single-server self-host; the daemon runs alongside the orchestrator
+>    in one container.
+> 2. **`/cockpit/{fleet,providers,body}` routes — folded.** Provider
+>    auth lives in the unified Connections page; body/fleet state is
+>    surfaced via Dashboard + Workspace > Live Run tab.
+> 3. **Permission warden static threshold table — replaced** by the
+>    destructive whitelist + 4-hour fail-safe-NO soft confirmation
+>    (ADR-006 §4.5). PROD = ∞ rule is implicit in the whitelist.
+
 **Tarih:** 2026-05-10
 **Milestone:** M5 — Body
 **Status:** ACCEPTED (operator approved 2026-05-10)
