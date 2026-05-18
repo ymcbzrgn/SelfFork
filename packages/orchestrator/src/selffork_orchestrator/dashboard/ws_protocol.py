@@ -68,6 +68,8 @@ WsEventType = Literal[
     "body_action",  # body.action.* audit event
     "body_observation",  # body.observation audit event (path ref, never bytes)
     "provider_auth_status",  # provider.auth.* / provider.token.* event
+    # M6 — Talk surface (ADR-007 §4 S1): operator ↔ Self Jr message.
+    "talk.message",
 ]
 
 # Used by tests + downstream consumers (TS mirror generator) to
@@ -84,6 +86,7 @@ WS_EVENT_TYPES: tuple[WsEventType, ...] = (
     "body_action",
     "body_observation",
     "provider_auth_status",
+    "talk.message",
 )
 
 

@@ -124,6 +124,10 @@ class DashboardConfig(BaseModel):
     # ``~/.selffork/chat/branches.db`` (Order 4). Tests point this at a
     # tmp_path file so each test starts from a clean branch tree.
     chat_db_path: Path | None = None
+    # Talk surface SQLite DB path (operator ↔ Self Jr conversations,
+    # ADR-007 §4 S1). ``None`` falls back to
+    # ``~/.selffork/talk/conversations.db``.
+    talk_db_path: Path | None = None
     # Path to ``selffork.yaml``. Cockpit Settings → Vision writes the
     # ``vision:`` section back here. ``None`` disables persistent
     # updates (``POST /api/settings/vision`` returns 503).
@@ -217,8 +221,8 @@ def build_app(config: DashboardConfig) -> FastAPI:
 
     # M6 Live Run Theater (workspace 3-pane) + global active-loop introspection.
     from selffork_orchestrator.dashboard.theater_router import (
-        build_theater_router,
         build_loop_router,
+        build_theater_router,
     )
 
     app.include_router(build_theater_router(projects_root=config.projects_root))
@@ -239,15 +243,38 @@ def build_app(config: DashboardConfig) -> FastAPI:
     app.include_router(build_pending_router(store=pending_store))
 
     # M6 Telegram bridge status + Reflex training surface (ADR-006).
-    from selffork_orchestrator.dashboard.telegram_router import (
-        build_telegram_router,
-    )
     from selffork_orchestrator.dashboard.reflex_router import (
         build_reflex_router,
+    )
+    from selffork_orchestrator.dashboard.telegram_router import (
+        build_telegram_router,
     )
 
     app.include_router(build_telegram_router())
     app.include_router(build_reflex_router())
+
+    # M6 Talk Loop — operator ↔ Self Jr conversation (ADR-007 §4 S1).
+    # The Speaker model endpoint is operator-managed; S1 reads it from
+    # the environment (S4 moves it to a Settings page). No endpoint set
+    # ⇒ speaker=None ⇒ /send reports speaker_status='not_configured'.
+    from selffork_orchestrator.dashboard.talk_router import build_talk_router
+    from selffork_orchestrator.talk.speaker import SpeakerClient
+
+    talk_endpoint = os.environ.get("SELFFORK_TALK_MODEL_ENDPOINT")
+    talk_speaker = (
+        SpeakerClient(
+            base_url=talk_endpoint,
+            model=os.environ.get("SELFFORK_TALK_MODEL", "gemma-4-e2b-it"),
+        )
+        if talk_endpoint
+        else None
+    )
+    app.include_router(
+        build_talk_router(
+            talk_db_path=config.talk_db_path,
+            speaker=talk_speaker,
+        ),
+    )
 
     _register_static_mount(app, config)
 

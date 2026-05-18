@@ -1,68 +1,219 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
   ArrowRight,
   ChevronDown,
   History,
+  Loader2,
   MessageCircle,
   Paperclip,
   Plus,
 } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { listProjects, type ProjectResponse } from "@/lib/api";
-
-interface ChatMessage {
-  id: string;
-  role: "operator" | "self-jr" | "system";
-  workspace?: string;
-  cli?: string;
-  text: string;
-  ts: string;
-  actions?: Array<{ label: string; href: string }>;
-}
+import {
+  ChatMessage,
+  type ChatMessageView,
+} from "@/components/talk/ChatMessage";
+import {
+  getTalkConversation,
+  listProjects,
+  listTalkConversations,
+  openTalkStream,
+  sendTalkMessage,
+  type ConversationResponse,
+  type ProjectResponse,
+  type TalkMessageResponse,
+} from "@/lib/api";
 
 const SLASH_CHIPS = ["/cli", "/workspace", "/pause", "/note", "/finetune"];
 
-const PROVIDER_PILL: Record<string, string> = {
-  claude: "bg-amber-50 text-amber-700",
-  codex: "bg-green-50 text-green-700",
-  gemini: "bg-blue-50 text-blue-700",
-  minimax: "bg-violet-50 text-violet-700",
-  glm: "bg-red-50 text-red-700",
-  system: "bg-surface-container text-on-surface-variant",
+const SPEAKER_NOTICE: Record<string, string> = {
+  offline:
+    "Self Jr is offline — the model endpoint is unreachable. Your message was saved.",
+  not_configured:
+    "No model endpoint is configured yet. Your message was saved; set an endpoint to get replies.",
 };
+
+const EXAMPLE_PROMPTS = [
+  "What did Self Jr ship today?",
+  "Switch ProjectX to Codex",
+  "Pause everything for an hour",
+];
+
+interface TalkMessagePayload {
+  conversation_id: string;
+  message_id: string;
+  seq: number;
+  role: "operator" | "self_jr";
+  content: string;
+  created_at: string;
+}
+
+function formatTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function messageToView(m: TalkMessageResponse): ChatMessageView {
+  return {
+    id: m.id,
+    role: m.role,
+    text: m.content,
+    ts: formatTime(m.created_at),
+  };
+}
 
 export default function TalkPage() {
   const [projects, setProjects] = useState<ProjectResponse[]>([]);
   const [contextSlug, setContextSlug] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<ConversationResponse[]>(
+    [],
+  );
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessageView[]>([]);
   const [draft, setDraft] = useState("");
-  const [messages] = useState<ChatMessage[]>([]); // backend wire: GET /api/talk + WS
+  const [sending, setSending] = useState(false);
+  const [speakerStatus, setSpeakerStatus] = useState<string | null>(null);
   const [openContextMenu, setOpenContextMenu] = useState(false);
+  const [openHistory, setOpenHistory] = useState(false);
+  const feedEndRef = useRef<HTMLDivElement | null>(null);
+  // Live mirror of conversationId — lets an in-flight onSend detect a
+  // conversation switch and discard its now-stale result.
+  const conversationIdRef = useRef<string | null>(null);
 
+  // Mount — load projects + conversations; pick which conversation shows.
   useEffect(() => {
     listProjects()
       .then((p) => {
         setProjects(p);
         if (p[0]) setContextSlug(p[0].slug);
       })
-      .catch(() => {
-        /* graceful */
-      });
+      .catch(() => {});
+
+    const wantsNew =
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("intent") ===
+        "new-workspace";
+
+    listTalkConversations()
+      .then((list) => {
+        setConversations(list);
+        if (!wantsNew && list[0]) setConversationId(list[0].id);
+      })
+      .catch(() => {});
   }, []);
+
+  // Selected conversation — load the thread + open the live stream.
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+    if (!conversationId) {
+      setMessages([]);
+      return;
+    }
+    let cancelled = false;
+
+    getTalkConversation(conversationId)
+      .then((thread) => {
+        if (!cancelled) setMessages(thread.messages.map(messageToView));
+      })
+      .catch(() => {});
+
+    const ws = openTalkStream(conversationId);
+    ws.onmessage = (ev) => {
+      try {
+        const env = JSON.parse(ev.data as string) as {
+          event_type?: string;
+          payload?: TalkMessagePayload;
+        };
+        if (env.event_type !== "talk.message" || !env.payload) return;
+        const p = env.payload;
+        setMessages((prev) =>
+          prev.some((m) => m.id === p.message_id)
+            ? prev
+            : [
+                ...prev,
+                {
+                  id: p.message_id,
+                  role: p.role,
+                  text: p.content,
+                  ts: formatTime(p.created_at),
+                },
+              ],
+        );
+      } catch {
+        // ignore malformed frames
+      }
+    };
+
+    return () => {
+      cancelled = true;
+      if (ws.readyState !== WebSocket.CLOSED) ws.close();
+    };
+  }, [conversationId]);
+
+  // Keep the newest message in view.
+  useEffect(() => {
+    feedEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, sending]);
 
   const contextLabel = useMemo(() => {
     if (!contextSlug) return "All projects";
-    const p = projects.find((x) => x.slug === contextSlug);
-    return p?.name ?? contextSlug;
+    return projects.find((x) => x.slug === contextSlug)?.name ?? contextSlug;
   }, [contextSlug, projects]);
 
-  const onSend = () => {
-    if (!draft.trim()) return;
-    // TODO: backend wire — POST /api/talk/send { workspace: contextSlug, text: draft }
+  const onSend = useCallback(async () => {
+    const text = draft.trim();
+    if (!text || sending) return;
+    // The conversation this send belongs to — if the operator switches
+    // conversations while the request is in flight, the result is stale
+    // and must be discarded (the thread-load effect guards itself too).
+    const sentFor = conversationId;
+    setSending(true);
+    setSpeakerStatus(null);
     setDraft("");
+    try {
+      const res = await sendTalkMessage({
+        text,
+        conversation_id: sentFor ?? undefined,
+        workspace: contextSlug ?? undefined,
+      });
+      if (conversationIdRef.current !== sentFor) return;
+      setSpeakerStatus(res.speaker_status);
+      if (res.conversation_id !== sentFor) {
+        // A new conversation was created — switch to it (the effect
+        // loads its thread + opens the stream) and refresh History.
+        setConversationId(res.conversation_id);
+        listTalkConversations()
+          .then(setConversations)
+          .catch(() => {});
+      }
+    } catch {
+      if (conversationIdRef.current === sentFor) setSpeakerStatus("offline");
+    } finally {
+      setSending(false);
+    }
+  }, [draft, sending, conversationId, contextSlug]);
+
+  const onNewChat = () => {
+    setConversationId(null);
+    setMessages([]);
+    setSpeakerStatus(null);
+    setDraft("");
+    setOpenHistory(false);
   };
+
+  const selectConversation = (id: string) => {
+    setConversationId(id);
+    setSpeakerStatus(null);
+    setOpenHistory(false);
+  };
+
+  const showEmpty = messages.length === 0 && !sending;
+  const notice = speakerStatus ? SPEAKER_NOTICE[speakerStatus] : undefined;
 
   return (
     <AppShell title="Talk">
@@ -70,7 +221,9 @@ export default function TalkPage() {
         <header className="px-gutter-desktop pt-vertical-gap max-w-3xl mx-auto w-full">
           <div className="flex items-start justify-between flex-wrap gap-3">
             <div>
-              <h1 className="font-display text-display text-on-surface">Talk</h1>
+              <h1 className="font-display text-display text-on-surface">
+                Talk
+              </h1>
               <div className="font-body text-caption text-on-surface-variant mt-1 flex items-center gap-2 flex-wrap">
                 <span>Speaker: Self Jr · Context:</span>
                 <div className="relative">
@@ -122,25 +275,60 @@ export default function TalkPage() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                onClick={onNewChat}
                 className="px-3 py-1.5 border border-outline-variant text-caption font-medium rounded-lg hover:bg-surface-container-low flex items-center gap-1"
               >
                 <Plus className="h-4 w-4" strokeWidth={1.75} />
                 New chat
               </button>
-              <button
-                type="button"
-                className="px-3 py-1.5 text-on-surface-variant hover:bg-surface-container-low text-caption font-medium rounded-lg flex items-center gap-1"
-              >
-                <History className="h-4 w-4" strokeWidth={1.75} />
-                History
-              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setOpenHistory((x) => !x)}
+                  className="px-3 py-1.5 text-on-surface-variant hover:bg-surface-container-low text-caption font-medium rounded-lg flex items-center gap-1"
+                  aria-haspopup="listbox"
+                  aria-expanded={openHistory}
+                >
+                  <History className="h-4 w-4" strokeWidth={1.75} />
+                  History
+                </button>
+                {openHistory && (
+                  <div
+                    role="listbox"
+                    className="absolute top-full right-0 mt-1 w-72 bg-surface rounded-lg shadow-lg border border-outline-variant/30 py-1 z-30 max-h-80 overflow-y-auto"
+                  >
+                    {conversations.length === 0 ? (
+                      <p className="px-3 py-2 text-caption text-on-surface-variant">
+                        No past conversations yet.
+                      </p>
+                    ) : (
+                      conversations.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          role="option"
+                          aria-selected={c.id === conversationId}
+                          onClick={() => selectConversation(c.id)}
+                          className={`w-full text-left px-3 py-1.5 text-caption hover:bg-surface-container-low ${
+                            c.id === conversationId
+                              ? "text-on-surface font-medium"
+                              : "text-on-surface-variant"
+                          }`}
+                        >
+                          <span className="block truncate">{c.title}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </header>
 
         <div className="flex-1 overflow-y-auto px-gutter-desktop py-vertical-gap">
           <div className="max-w-3xl mx-auto space-y-6 pb-32">
-            {messages.length === 0 ? (
+            {showEmpty ? (
               <div className="flex flex-col items-center justify-center py-24 text-center gap-3">
                 <MessageCircle
                   className="h-16 w-16 text-on-surface-variant/30"
@@ -150,15 +338,11 @@ export default function TalkPage() {
                   Talk to Self Jr
                 </h3>
                 <p className="text-caption text-on-surface-variant max-w-md">
-                  Project-context-aware. Ask about progress, redirect the active
-                  CLI, or queue work for the next session.
+                  Project-context-aware. Ask about progress, redirect the
+                  active CLI, or queue work for the next session.
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center mt-4">
-                  {[
-                    "What did Self Jr ship today?",
-                    "Switch ProjectX to Codex",
-                    "Pause everything for an hour",
-                  ].map((prompt) => (
+                  {EXAMPLE_PROMPTS.map((prompt) => (
                     <button
                       key={prompt}
                       type="button"
@@ -171,67 +355,30 @@ export default function TalkPage() {
                 </div>
               </div>
             ) : (
-              messages.map((m) => {
-                const isOp = m.role === "operator";
-                return (
-                  <div
-                    key={m.id}
-                    className={`flex ${isOp ? "justify-end" : "justify-start"}`}
-                  >
-                    <div className={isOp ? "max-w-md" : "max-w-2xl"}>
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${
-                            isOp ? "bg-primary" : "bg-success"
-                          }`}
-                        />
-                        <span className="text-caption font-semibold text-on-surface">
-                          {m.role === "operator" ? "operator" : "Self Jr"}
-                        </span>
-                        <span className="text-[11px] text-on-surface-variant tabular-nums">
-                          · {m.ts}
-                        </span>
-                        {m.workspace && (
-                          <span className="bg-surface-variant text-on-surface-variant px-2 py-0.5 rounded text-[10px] font-bold uppercase">
-                            {m.workspace}
-                          </span>
-                        )}
-                        {m.cli && (
-                          <span
-                            className={`${
-                              PROVIDER_PILL[m.cli] ?? PROVIDER_PILL.system
-                            } px-2 py-0.5 rounded text-[10px] font-bold uppercase`}
-                          >
-                            {m.cli}
-                          </span>
-                        )}
-                      </div>
-                      <div
-                        className={`${
-                          isOp
-                            ? "bg-surface-container-low border border-outline-variant/30"
-                            : "bg-surface border border-outline-variant/20 shadow-sm"
-                        } p-4 rounded-xl text-body text-on-surface whitespace-pre-wrap`}
-                      >
-                        {m.text}
-                      </div>
-                      {m.actions && m.actions.length > 0 && (
-                        <div className="flex gap-2 mt-2">
-                          {m.actions.map((a) => (
-                            <a
-                              key={a.label}
-                              href={a.href}
-                              className="text-caption text-primary hover:underline font-medium"
-                            >
-                              {a.label} →
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+              <>
+                {messages.map((m) => (
+                  <ChatMessage key={m.id} message={m} />
+                ))}
+                {sending && (
+                  <div className="flex items-center gap-2 text-caption text-on-surface-variant">
+                    <Loader2
+                      className="h-4 w-4 animate-spin"
+                      strokeWidth={2}
+                    />
+                    Self Jr is thinking…
                   </div>
-                );
-              })
+                )}
+                {notice && (
+                  <div className="flex items-start gap-2 bg-surface-container-low border border-outline-variant/30 rounded-lg px-3 py-2 text-caption text-on-surface-variant">
+                    <AlertTriangle
+                      className="h-4 w-4 shrink-0 mt-0.5"
+                      strokeWidth={1.75}
+                    />
+                    <span>{notice}</span>
+                  </div>
+                )}
+                <div ref={feedEndRef} />
+              </>
             )}
           </div>
         </div>
@@ -244,7 +391,7 @@ export default function TalkPage() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  onSend();
+                  void onSend();
                 }
               }}
               placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
@@ -256,8 +403,10 @@ export default function TalkPage() {
               <div className="flex items-center gap-1 flex-wrap">
                 <button
                   type="button"
-                  className="p-1.5 hover:bg-surface-container-low rounded transition-colors"
-                  aria-label="Attach file"
+                  disabled
+                  title="File attachments — coming soon"
+                  className="p-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Attach file (coming soon)"
                 >
                   <Paperclip
                     className="h-4 w-4 text-on-surface-variant"
@@ -280,8 +429,8 @@ export default function TalkPage() {
               </div>
               <button
                 type="button"
-                onClick={onSend}
-                disabled={!draft.trim()}
+                onClick={() => void onSend()}
+                disabled={!draft.trim() || sending}
                 aria-label="Send message"
                 className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center disabled:opacity-40 hover:bg-primary-container transition-colors"
               >

@@ -218,6 +218,32 @@ Tarayıcı → http://localhost:3000 (dev) veya http://localhost:8765 (container
 
 ---
 
+## S1 — Talk Loop (Wave 2 · ADR-007 §4 S1)
+
+**Hedef:** Operatör ↔ Self Jr konuşması uçtan uca — Talk'tan mesaj →
+Self Jr cevabı feed'e stream; geçmiş conversation'lar History'de.
+
+**Ön-koşul:** §0 (backend + frontend up). Model endpoint opsiyonel:
+`SELFFORK_TALK_MODEL_ENDPOINT` set ise gerçek Self Jr cevabı; değilse
+dürüst "model offline / not configured" notice (no-mock — sahte cevap yok).
+
+**Adım:**
+1. `/talk` aç — empty state ("Talk to Self Jr" hero + örnek prompt chip'leri).
+2. Composer'a mesaj yaz → Enter.
+3. Operator mesajı feed'e bubble olur (WS `talk.message` stream).
+4. Endpoint varsa Self Jr cevabı feed'e stream olur (self_jr bubble);
+   yoksa "No model endpoint…" notice — sahte cevap YOK.
+5. "History" → dropdown geçmiş conversation'ı `[selected]` gösterir.
+6. "New chat" → empty state'e reset.
+
+**Backend testi:** `pytest packages/orchestrator/tests/talk/ tests/dashboard/test_talk_router.py` → 39 passed.
+
+**PASS kriteri:** Mesaj uçtan uca round-trip; feed WS ile güncellenir;
+History + New chat çalışır; backend 39 test + frontend `tsc --noEmit`
+temiz; console'da yalnız favicon 404 (bilinen, zararsız).
+
+---
+
 ## Close-out raporu
 
 Tüm 1–7 PASS + 8–10 deferred/skip notlanmış → M6 ACCEPTED. Operator

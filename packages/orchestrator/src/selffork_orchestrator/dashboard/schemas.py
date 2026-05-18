@@ -24,6 +24,8 @@ __all__ = [
     "ChatMessageEditPayload",
     "ChatMessagePayload",
     "ChatMessageResponse",
+    "ConversationResponse",
+    "ConversationThreadResponse",
     "KanbanCardResponse",
     "KanbanResponse",
     "MindNoteCreatePayload",
@@ -40,6 +42,9 @@ __all__ = [
     "RecentSession",
     "RunRequestPayload",
     "RunRequestResponse",
+    "TalkMessageResponse",
+    "TalkSendPayload",
+    "TalkSendResponse",
     "WorkspaceEntry",
 ]
 
@@ -372,3 +377,61 @@ class ActiveBranchPayload(BaseModel):
     """Body of ``PATCH /api/sessions/<id>/active-branch``."""
 
     branch_id: str
+
+
+# ── Talk surface — S1 ────────────────────────────────────────────────────────
+
+
+class ConversationResponse(_StrictResponse):
+    """One Talk conversation projected to the wire format."""
+
+    id: str
+    workspace_slug: str | None
+    title: str
+    created_at: datetime
+    last_message_at: datetime
+
+
+class TalkMessageResponse(_StrictResponse):
+    """One Talk message projected to the wire format."""
+
+    id: str
+    conversation_id: str
+    seq: int
+    role: str
+    content: str
+    created_at: datetime
+
+
+class ConversationThreadResponse(_StrictResponse):
+    """Body of ``GET /api/talk/conversations/<id>`` — conversation + thread."""
+
+    conversation: ConversationResponse
+    messages: list[TalkMessageResponse]
+
+
+class TalkSendPayload(BaseModel):
+    """Body of ``POST /api/talk/send``.
+
+    ``conversation_id`` continues an existing thread; when omitted a new
+    conversation is created (scoped to ``workspace`` when given).
+    """
+
+    text: str
+    conversation_id: str | None = None
+    workspace: str | None = None
+
+
+class TalkSendResponse(_StrictResponse):
+    """Response from ``POST /api/talk/send``.
+
+    ``reply`` is ``None`` when the Speaker endpoint is unreachable or
+    unconfigured; ``speaker_status`` (``ok`` | ``offline`` |
+    ``not_configured``) tells the cockpit which honest empty state to
+    render instead of a fabricated reply.
+    """
+
+    conversation_id: str
+    operator_message: TalkMessageResponse
+    reply: TalkMessageResponse | None
+    speaker_status: str

@@ -676,3 +676,65 @@ export function listTrainingJobs(): Promise<TrainingJobResponse[]> {
 export function getReflexAdapterInfo(): Promise<ReflexAdapterInfo> {
   return request<ReflexAdapterInfo>("/api/reflex/adapter");
 }
+
+// ── Talk surface — S1 (operator ↔ Self Jr) ─────────────────────────────────
+
+export interface ConversationResponse {
+  id: string;
+  workspace_slug: string | null;
+  title: string;
+  created_at: string;
+  last_message_at: string;
+}
+
+export interface TalkMessageResponse {
+  id: string;
+  conversation_id: string;
+  seq: number;
+  role: "operator" | "self_jr";
+  content: string;
+  created_at: string;
+}
+
+export interface ConversationThreadResponse {
+  conversation: ConversationResponse;
+  messages: TalkMessageResponse[];
+}
+
+export interface TalkSendResponse {
+  conversation_id: string;
+  operator_message: TalkMessageResponse;
+  reply: TalkMessageResponse | null;
+  speaker_status: "ok" | "offline" | "not_configured";
+}
+
+export function listTalkConversations(): Promise<ConversationResponse[]> {
+  return request<ConversationResponse[]>("/api/talk/conversations");
+}
+
+export function getTalkConversation(
+  conversationId: string,
+): Promise<ConversationThreadResponse> {
+  return request<ConversationThreadResponse>(
+    `/api/talk/conversations/${encodeURIComponent(conversationId)}`,
+  );
+}
+
+export function sendTalkMessage(payload: {
+  text: string;
+  conversation_id?: string;
+  workspace?: string;
+}): Promise<TalkSendResponse> {
+  return request<TalkSendResponse>("/api/talk/send", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function talkStreamUrl(conversationId: string): string {
+  return `${_wsBase()}/api/talk/${encodeURIComponent(conversationId)}/stream`;
+}
+
+export function openTalkStream(conversationId: string): WebSocket {
+  return new WebSocket(talkStreamUrl(conversationId));
+}

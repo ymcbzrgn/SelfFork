@@ -285,7 +285,7 @@ Slider 0-10 iptal. ARGE §9.4 threshold tablosu da iptal. Yerine **iki katmanlı
 **Destructive whitelist (config'te, başlangıç):**
 
 ```yaml
-# packages/orchestrator/config/destructive_actions.yaml
+# packages/body/src/selffork_body/sandbox/data/destructive_actions.yaml
 destructive_actions:
   - id: prod_deploy
     description: "PROD ortamına deploy / push"
@@ -979,7 +979,7 @@ ADR-006 kabul sonrası iş paketleri:
 - [ ] Inject/interrupt: Speaker breakpoint mechanism
 
 ### 9.4 Faz M6.3 — Destructive whitelist + soft confirm (1 hafta)
-- [ ] `config/destructive_actions.yaml` schema + parser
+- [ ] `packages/body/src/selffork_body/sandbox/data/destructive_actions.yaml` schema + parser
 - [ ] Body warden integration
 - [ ] Telegram approval flow (proaktif mesaj + onay/iptal callback)
 - [ ] Pending confirmation UI badge
@@ -1111,7 +1111,7 @@ Bu ADR sonrası yeni memory girdileri (onay sonrası):
 | **P+Prompt Engineer** | Kod yazmayan, ama project yöneten + prompt mühendisi olan operatör. operator'ın kendisi. |
 | **Live Run Theater** | Workspace'in 3-pane çekirdek bölgesi (CLI output / screenshot timeline / Jr düşünce balonu). |
 | **Soft confirmation** | Destructive eylem öncesi Telegram'dan onay isteme; fail-safe NO (sessizlik = iptal). |
-| **Destructive whitelist** | Soft confirmation tetikleyen eylem listesi (`config/destructive_actions.yaml`). |
+| **Destructive whitelist** | Soft confirmation tetikleyen eylem listesi (`packages/body/src/selffork_body/sandbox/data/destructive_actions.yaml`). |
 | **Model endpoint** | LLM HTTP API'sinin URL'si; UI'dan konfigüre edilir; lokal veya remote olabilir. |
 | **CLI router** | Aktif task için hangi CLI provider'a (claude/codex/gemini/minimax/glm) prompt yollanacağını seçen modül. |
 | **Jr düşünce balonu** | Speaker'ın `<think>` çıktısının post-think compacted özeti (Live Run Theater sağ pane). |
