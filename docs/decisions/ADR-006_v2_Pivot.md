@@ -463,6 +463,36 @@ Profil:
 
 **Iconography:** Lucide. Material Symbols opsiyonu reddedildi (build size).
 
+### 5.1.1 Operatör Günlük Akışı (Operator Journey)
+
+UI'ı doğru kavramak için önce operatörün **bir günü** — bu, 5 ekranın
+neden bu sırada ve bu biçimde olduğunu açıklar:
+
+1. **Sabah, Dashboard.** Operatör girer girmez 5 CLI'nin kota durumunu
+   (claude/codex/gemini/minimax/glm — kalan pencere + reset) ve Self
+   Jr'ın o an hangi workspace'te ne yaptığını (Live Loop hero) görür.
+2. **Workspace seçer.** Kanban'da o sprint'in task'ları zaten hazırdır —
+   operatör onları Jira-stili önceden planlamıştır.
+3. **Self Jr çalışır.** Bir task'ı alır; task tipine + kalan kotaya +
+   geçmiş performansa göre bir CLI seçer (rotasyon değil — §4.6 router),
+   ona prompt yazar. Operatör **Live Run** tab'ında CLI'nin kod
+   üretişini "film izler gibi" izler (3-pane theater).
+4. **Self Jr test eder.** Ürettiği şeyi ayağa kaldırır (web/mobil),
+   vision ile kontrol eder, sonraki prompt'u yazar. **Operatör tek
+   satır kod yazmaz.**
+5. **Operatör araya girer — iki yol.** Masadaysa **Talk** ekranından
+   doğrudan Self Jr ile konuşur (yön düzelt, CLI değiştir). Dışarıdaysa
+   **Telegram**'dan aynı şeyi yapar.
+6. **Self Jr ihtiyaç bildirir.** Bir dış bağımlılığa takılırsa (örn.
+   "Supabase auth bağlaman gerek") Telegram'dan operatöre yazar.
+7. **Destructive eylem = onay.** PROD push / DB drop gibi bir eylem
+   gerektiğinde Self Jr Telegram'dan onay ister; operatör 4 saat içinde
+   onaylamazsa eylem iptal (§4.5 fail-safe NO).
+
+Operatörün rolü: **task tanımlamak, prompt akışını yönlendirmek, çıktıyı
+denetlemek** — yani P+Prompt Engineer. SelfFork bu döngüyü operatör
+uyurken / işteyken / dışarıdayken de yürütür ("uyumayan ikinci ben").
+
 ### 5.2 Bilgi Mimarisi (IA)
 
 ```
@@ -729,7 +759,7 @@ WebSocket channel: `/ws/workspace/{slug}/theater`. Orchestrator multiplex.
 │  Telegram Bridge                                            │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │ 🟢 Connected as @yamac                              │  │
-│  │    Bot: @YamacJrBot                                  │  │
+│  │    Bot: @SelfJrBot                                   │  │
 │  │    Webhook: https://selffork.example.com/tg         │  │
 │  │    Soft confirmation window: 4 hours                 │  │
 │  │    Last activity: 5 dk önce (TASK-12 onayı)         │  │

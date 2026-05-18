@@ -1,14 +1,31 @@
 # SelfFork — Roadmap
 
-> **⚠ M4/M5 supersession + M6 added — ADR-006 (2026-05-17 v3 pivot).**
+> **⚠ M4/M5 supersession + M6 added — ADR-006 + ADR-007 (2026-05-17 v3 pivot).**
 > The M4 Cockpit milestone (Fleet Command + 4-tab Workspace + slider +
-> emergency kill) is replaced by **M6** per
-> [`docs/decisions/ADR-006_v2_Pivot.md`](decisions/ADR-006_v2_Pivot.md)
-> §9 — sidebar + 5 screens (Dashboard / Workspace 4-tab inner / Talk /
-> Connections / Settings) + Linux server self-host deployment +
-> destructive whitelist + Telegram bridge surface + Fine-tune UI +
-> Watcher removal. M5 Body remains in effect with the patches in
-> ADR-006 §7.2. Multi-machine mesh and Watcher revival are M9+ (deferred).
+> emergency kill) is replaced by **M6 v3 Pivot** per
+> [`docs/decisions/ADR-006_v2_Pivot.md`](decisions/ADR-006_v2_Pivot.md) —
+> sidebar + 5 screens (Dashboard / Workspace 4-tab inner / Talk /
+> Connections / Settings) + Linux server self-host + destructive
+> whitelist + Telegram bridge + Fine-tune UI + Watcher removal.
+>
+> **M6 runs in two waves:**
+> - **Wave 1 — MV Scaffold (DONE, commit `8d509d5`):** 5 screens + 12
+>   components + 5 routers + destructive whitelist/store + deploy
+>   scaffold + doc banners. TypeScript-clean, 56 Python tests pass.
+> - **Wave 2 — Wiring Completion (S1–S8):** every screen wired end-to-end
+>   to the backend. A 2026-05-17 wiring audit found 30+ UI elements
+>   stub/dead/hardcoded; a 2026-05-18 vision-traceability audit expanded
+>   the plan 6→8 sprints so all 12 locked ADR-006 decisions are wired.
+>   See [`docs/decisions/ADR-007_v3_Wiring_Completion.md`](decisions/ADR-007_v3_Wiring_Completion.md)
+>   §4: S1 Talk Loop · S2 Live Run Theater · S3 Destructive Warden +
+>   Telegram (iki yönlü) · S4 Settings Persistence · S5 Connections
+>   Actions · S6 CLI Router · S7 Workspace Actions · S8 Dashboard
+>   Activity + Final Cleanup.
+>
+> M5 Body remains in effect with the patches in ADR-006 §7.2.
+> Multi-machine mesh and Watcher revival are M9+ (deferred).
+> ADR-004 (M4 Cockpit) + M4_Cockpit_Plan.md → `docs/archive/superseded/`.
+> M6 closes (→ M7 Reflex LAST MILE) only when all S1–S8 smoke gates PASS.
 
 > **Codename:** Yamaç Jr. Nano
 > **Hardware target (v1):** 16 GB Apple Silicon MacBook Pro (operator's existing machine)
