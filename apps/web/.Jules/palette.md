@@ -1,0 +1,1 @@
+## 2026-05-19 - Enhance Topbar accessibility\n**Learning:** Added focus states to topbar buttons for better keyboard navigation. Also converted search input to a button to trigger command palette properly.\n**Action:** Always ensure interactive elements have focus states.
