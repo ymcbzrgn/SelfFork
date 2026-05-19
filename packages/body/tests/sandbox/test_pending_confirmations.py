@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from selffork_body.sandbox.destructive_whitelist import (
     CandidateAction,
     DestructiveCategory,
-    DestructiveWhitelist,
     MatchRule,
 )
 from selffork_body.sandbox.pending_confirmations import (
@@ -74,7 +73,7 @@ def test_expire_stale_marks_old_entries_expired() -> None:
     entry = store.request(category=cat, action=_action())
     # Fast-forward by stubbing the expires_at to the past.
     entry.expires_at = (
-        datetime.now(timezone.utc) - timedelta(hours=2)
+        datetime.now(UTC) - timedelta(hours=2)
     ).isoformat()
     flipped = store.expire_stale()
     assert {e.id for e in flipped} == {entry.id}
@@ -89,7 +88,7 @@ def test_approve_after_expire_is_noop() -> None:
     store = PendingConfirmationStore()
     entry = store.request(category=_category(window_hours=1), action=_action())
     entry.expires_at = (
-        datetime.now(timezone.utc) - timedelta(hours=2)
+        datetime.now(UTC) - timedelta(hours=2)
     ).isoformat()
     store.expire_stale()
     decided = store.approve(entry.id)
@@ -118,7 +117,7 @@ def test_time_left_seconds_drops_to_zero_past_expiry() -> None:
     store = PendingConfirmationStore()
     entry = store.request(category=_category(window_hours=1), action=_action())
     entry.expires_at = (
-        datetime.now(timezone.utc) - timedelta(minutes=5)
+        datetime.now(UTC) - timedelta(minutes=5)
     ).isoformat()
     assert entry.time_left_seconds() == 0
     assert entry.is_expired() is True
