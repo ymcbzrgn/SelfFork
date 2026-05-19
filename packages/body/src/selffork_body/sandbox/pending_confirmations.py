@@ -15,10 +15,11 @@ from __future__ import annotations
 import json
 import threading
 import uuid
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta, timezone
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Iterable, Literal
+from typing import Literal
 
 from .destructive_whitelist import CandidateAction, DestructiveCategory
 
@@ -26,7 +27,7 @@ PendingStatus = Literal["pending", "approved", "cancelled", "expired"]
 
 
 def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _iso(dt: datetime) -> str:
@@ -220,8 +221,7 @@ def _summarize(action: CandidateAction) -> str:
         args = " ".join(action.args)
         return f"{action.tool} {args}".strip()
     if action.sql:
-        snippet = action.sql.strip().splitlines()[0][:80]
-        return snippet
+        return action.sql.strip().splitlines()[0][:80]
     if action.url:
         return f"{action.http_method or 'GET'} {action.url}"
     return "(unknown action)"

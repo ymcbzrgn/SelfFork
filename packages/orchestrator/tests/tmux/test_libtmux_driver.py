@@ -141,7 +141,7 @@ class TestInit:
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        monkeypatch.setenv("TMUX", "/tmp/tmux-501/default,12345,0")  # noqa: S108 — fake $TMUX value, not a real file
+        monkeypatch.setenv("TMUX", "/tmp/tmux-501/default,12345,0")
         _make_driver(monkeypatch)
         # After init, TMUX must be unset so libtmux's Server connects to
         # the default socket rather than nesting inside the user's

@@ -9,7 +9,7 @@ The Reflex package itself is M7 scope; this router lands the
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
@@ -49,7 +49,7 @@ _JOBS: dict[str, TrainingJobResponse] = {}
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def build_reflex_router() -> APIRouter:
@@ -77,7 +77,8 @@ def build_reflex_router() -> APIRouter:
             estimated_seconds=5 * 3600 + 18 * 60,  # 5h 18m heuristic
             progress_percent=0,
             log_tail=[
-                f"queued: method={req.hyperparams.method} rank={req.hyperparams.lora_rank} epochs={req.hyperparams.epochs}",
+                f"queued: method={req.hyperparams.method} rank={req.hyperparams.lora_rank} "
+                f"epochs={req.hyperparams.epochs}",
                 "M7 worker not yet implemented — job stays queued.",
             ],
         )

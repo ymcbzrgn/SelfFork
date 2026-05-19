@@ -800,9 +800,8 @@ def _redact_image_payload(value: bytes | str) -> bytes | str:
     """
     if isinstance(value, bytes):
         return f"<redacted_image:{len(value)}_bytes>"
-    if isinstance(value, str):
-        if value.startswith(_IMAGE_BASE64_PREFIXES):
-            return f"<redacted_image_base64:{len(value)}_chars>"
+    if isinstance(value, str) and value.startswith(_IMAGE_BASE64_PREFIXES):
+        return f"<redacted_image_base64:{len(value)}_chars>"
     return value
 
 

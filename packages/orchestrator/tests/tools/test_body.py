@@ -21,43 +21,43 @@ class _StubDriver:
 
     last_call: tuple[str, tuple, dict] | None = None
 
-    async def click(self, target, bbox=None, button="left"):  # noqa: ANN001
+    async def click(self, target, bbox=None, button="left"):
         self.last_call = ("click", (target,), {"bbox": bbox, "button": button})
         return {"ok": True}
 
-    async def type_text(self, text, target=None):  # noqa: ANN001
+    async def type_text(self, text, target=None):
         self.last_call = ("type", (text,), {"target": target})
         return {"ok": True}
 
-    async def screenshot(self, rect=None):  # noqa: ANN001
+    async def screenshot(self, rect=None):
         self.last_call = ("screenshot", (), {"rect": rect})
         return b"\x89PNG\r\n\x1a\n" + b"x" * 64
 
-    async def scroll(self, direction, amount):  # noqa: ANN001
+    async def scroll(self, direction, amount):
         self.last_call = ("scroll", (direction,), {"amount": amount})
         return {"ok": True}
 
-    async def swipe(self, sx, sy, ex, ey, duration_ms):  # noqa: ANN001
+    async def swipe(self, sx, sy, ex, ey, duration_ms):
         self.last_call = ("swipe", (sx, sy, ex, ey), {"duration_ms": duration_ms})
         return {"ok": True}
 
-    async def app_launch(self, bundle_id):  # noqa: ANN001
+    async def app_launch(self, bundle_id):
         self.last_call = ("app_launch", (bundle_id,), {})
         return {"ok": True}
 
-    async def press_key(self, key_combo):  # noqa: ANN001
+    async def press_key(self, key_combo):
         self.last_call = ("press_key", (key_combo,), {})
         return {"ok": True}
 
-    async def storage_state_save(self, provider, project_slug):  # noqa: ANN001
+    async def storage_state_save(self, provider, project_slug):
         self.last_call = ("storage_state_save", (provider,), {"project_slug": project_slug})
         return f"/tmp/auth/{provider}.json"
 
-    async def storage_state_load(self, provider, project_slug):  # noqa: ANN001
+    async def storage_state_load(self, provider, project_slug):
         self.last_call = ("storage_state_load", (provider,), {"project_slug": project_slug})
         return True
 
-    async def ax_tree(self, bundle_id=None):  # noqa: ANN001
+    async def ax_tree(self, bundle_id=None):
         self.last_call = ("ax_tree", (), {"bundle_id": bundle_id})
         return [{"role": "AXButton", "title": "OK"}]
 
@@ -177,9 +177,10 @@ async def test_denied_when_warden_not_wired() -> None:
 
 async def test_screenshot_persists_via_screenshot_store() -> None:
     """ToolContext.screenshot_store wiring — body_screenshot returns ref_path."""
+    import tempfile
+
     from selffork_body.storage import ScreenshotStore
     from selffork_orchestrator.tools.body import BodyScreenshotArgs, _body_screenshot
-    import tempfile
 
     driver = _StubDriver()
     with tempfile.TemporaryDirectory() as tmp:
@@ -304,7 +305,7 @@ async def test_handler_error_caught() -> None:
     from selffork_orchestrator.tools.body import BodyClickArgs, _body_click
 
     class _BoomDriver:
-        async def click(self, *_args, **_kwargs):  # noqa: ANN001
+        async def click(self, *_args, **_kwargs):
             raise RuntimeError("driver boom")
 
     result = await _body_click(_ctx(driver=_BoomDriver()), BodyClickArgs(target="Submit"))

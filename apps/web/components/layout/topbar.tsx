@@ -55,7 +55,7 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
       <div className="flex items-center gap-8 min-w-0">
         <button
           type="button"
-          className="flex items-center gap-2 font-heading text-body font-bold text-on-surface group whitespace-nowrap"
+          className="flex items-center gap-2 font-heading text-body font-bold text-on-surface group whitespace-nowrap focus-visible:ring-2 focus-visible:ring-primary/20 outline-none rounded-md"
           aria-label="Switch workspace"
         >
           <span className="truncate">{title}</span>
@@ -69,19 +69,21 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
             className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-on-surface-variant"
             strokeWidth={1.75}
           />
-          <input
-            type="text"
-            placeholder="Search… ⌘K"
-            className="w-full bg-surface-container-high/50 border-none rounded-full pl-10 pr-4 py-1.5 text-caption focus:ring-2 focus:ring-primary/20 placeholder:text-on-surface-variant outline-none"
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event("selffork:open-palette"))}
+            className="w-full bg-surface-container-high/50 border-none rounded-full pl-10 pr-4 py-1.5 text-caption focus-visible:ring-2 focus-visible:ring-primary/20 outline-none text-left text-on-surface-variant"
             aria-label="Global search (command palette)"
-          />
+          >
+            Search… ⌘K
+          </button>
         </div>
       </div>
 
       <div className="flex items-center gap-2">
         <button
           type="button"
-          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full relative"
+          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full relative focus-visible:ring-2 focus-visible:ring-primary/20 outline-none"
           aria-label={
             pendingCount
               ? `Notifications, ${pendingCount} pending`
@@ -118,7 +120,7 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
 
         <button
           type="button"
-          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full"
+          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full focus-visible:ring-2 focus-visible:ring-primary/20 outline-none"
           aria-label="System status"
         >
           <ServerCog
@@ -129,7 +131,8 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
 
         <button
           type="button"
-          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full"
+          onClick={() => window.dispatchEvent(new Event("selffork:show-shortcuts"))}
+          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full focus-visible:ring-2 focus-visible:ring-primary/20 outline-none"
           aria-label="Help and keyboard shortcuts"
         >
           <HelpCircle

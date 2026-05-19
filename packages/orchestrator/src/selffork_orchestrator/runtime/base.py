@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from typing import Literal, Protocol, TypedDict
 
 from selffork_shared.config import RuntimeConfig
 
@@ -39,7 +40,6 @@ ChatMessage = dict[str, str]
 # text-only ``ChatMessage`` and ``LLMRuntime`` ABC remain untouched. Body's
 # vision pipeline uses ``MultimodalLLMRuntime`` Protocol below; backends opt in
 # by implementing it (currently ``MlxServerRuntime`` via ``mlx_vlm.server``).
-from typing import Literal, Protocol, TypedDict
 
 
 class ContentPartText(TypedDict):

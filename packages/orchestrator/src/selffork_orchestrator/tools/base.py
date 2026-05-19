@@ -98,7 +98,8 @@ class ToolContext:
     # when the body pillar isn't wired into this session (e.g. legacy text-only
     # round-loop). Tools that require these fields (body_click, body_screenshot,
     # ...) return an "unauthorized" :class:`ToolResult` rather than raise.
-    body_driver: object | None = None  # selffork_body.drivers protocol (web/android/ios/desktop/tmux)
+    # selffork_body.drivers protocol (web/android/ios/desktop/tmux)
+    body_driver: object | None = None
     vision_runtime: object | None = None  # selffork_orchestrator.runtime.base.MultimodalLLMRuntime
     permission_warden: object | None = None  # selffork_body.sandbox.PermissionWarden
     screenshot_store: object | None = None  # selffork_body.storage.ScreenshotStore
