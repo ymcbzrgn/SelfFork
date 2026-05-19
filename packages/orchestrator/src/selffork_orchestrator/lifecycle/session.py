@@ -44,6 +44,10 @@ from selffork_orchestrator.spawn.sentinel import (
     SpawnRequest,
     extract_spawn_requests,
 )
+from selffork_orchestrator.theater.producer import (
+    NullTheaterProducer,
+    TheaterProducer,
+)
 from selffork_orchestrator.tools.base import (
     ToolCall,
     ToolContext,
@@ -142,6 +146,7 @@ class Session:
         launchd_scheduler: object | None = None,
         resume_store: object | None = None,
         telegram_bridge: object | None = None,
+        theater_producer: TheaterProducer | None = None,
     ) -> None:
         self._session_id = session_id
         self._prd_text = prd_text
@@ -170,6 +175,11 @@ class Session:
         self._launchd_scheduler = launchd_scheduler
         self._resume_store = resume_store
         self._telegram_bridge = telegram_bridge
+        # Theater producer — best-effort Live Run surface (ADR-007 §4 S2).
+        # Null Object default so the round loop never branches on None.
+        self._theater: TheaterProducer = (
+            theater_producer or NullTheaterProducer()
+        )
         self._state: SessionState = SessionState.IDLE
         self._failure_reason: str | None = None
 
@@ -213,6 +223,7 @@ class Session:
             outcome = SessionState.FAILED
             raise
         finally:
+            await self._theater.loop_ended()
             await self._teardown()
         return outcome
 
@@ -261,6 +272,7 @@ class Session:
              the loop also bails out after that many rounds.
         """
         self._transition(SessionState.RUNNING)
+        await self._theater.loop_started()
         binary = self._cli_agent.resolve_binary()
         env = self._cli_agent.build_env(base_env=os.environ)
 
@@ -302,6 +314,9 @@ class Session:
                     "text": yamac_reply,
                     "chars": len(yamac_reply),
                 },
+            )
+            await self._theater.thought(
+                yamac_reply, turn=rounds_completed
             )
 
             if self._cli_agent.is_selffork_jr_done(yamac_reply):
@@ -389,13 +404,22 @@ class Session:
                 },
             )
 
+            await self._theater.cli_output(
+                yamac_reply, kind="jr-prompt"
+            )
             proc = await self._sandbox.exec(cmd, env=env)
             stdout_chunks: list[bytes] = []
             async for line in proc.stdout:
                 stdout_chunks.append(line)
+                await self._theater.cli_output(
+                    line.decode("utf-8", errors="replace"), kind="stdout"
+                )
             stderr_chunks: list[bytes] = []
             async for line in proc.stderr:
                 stderr_chunks.append(line)
+                await self._theater.cli_output(
+                    line.decode("utf-8", errors="replace"), kind="stderr"
+                )
             exit_code = await proc.wait()
             output_text = b"".join(stdout_chunks).decode("utf-8", errors="replace")
             stderr_text = b"".join(stderr_chunks).decode("utf-8", errors="replace")

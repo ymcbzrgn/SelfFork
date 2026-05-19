@@ -31,6 +31,8 @@ import {
   type ProjectResponse,
   type KanbanResponse,
   type TheaterSnapshotResponse,
+  type TheaterCLIOutputChunk,
+  type TheaterThoughtResponse,
 } from "@/lib/api";
 import type { ProjectStatus } from "@/components/dashboard/project-card";
 
@@ -217,7 +219,12 @@ function WorkspaceContent({ slug }: { slug: string }) {
     getTheaterSnapshot(slug)
       .then((snap) => {
         if (cancelled) return;
-        setTheaterState(snapshotToState(snap));
+        // Initial paint only — once the WS sets state (snapshot or a
+        // live delta) it is authoritative; a late HTTP response must
+        // not clobber deltas already appended.
+        setTheaterState((prev) =>
+          prev === null ? snapshotToState(snap) : prev,
+        );
       })
       .catch(() => {
         if (!cancelled) setTheaterState(null);
@@ -229,14 +236,51 @@ function WorkspaceContent({ slug }: { slug: string }) {
         try {
           const envelope = JSON.parse(event.data) as {
             event_type: string;
-            payload?: TheaterSnapshotResponse;
+            payload?: unknown;
           };
           if (envelope.event_type === "snapshot" && envelope.payload) {
-            setTheaterState(snapshotToState(envelope.payload));
+            setTheaterState(
+              snapshotToState(envelope.payload as TheaterSnapshotResponse),
+            );
+          } else if (
+            envelope.event_type === "cli.output.append" &&
+            envelope.payload
+          ) {
+            const c = envelope.payload as TheaterCLIOutputChunk;
+            setTheaterState((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    output: [
+                      ...prev.output,
+                      { id: c.id, kind: c.kind, text: c.text },
+                    ],
+                  }
+                : prev,
+            );
+          } else if (
+            envelope.event_type === "thought.new" &&
+            envelope.payload
+          ) {
+            const t = envelope.payload as TheaterThoughtResponse;
+            setTheaterState((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    thoughts: [
+                      ...prev.thoughts,
+                      {
+                        id: t.id,
+                        summary: t.summary,
+                        raw: t.raw ?? undefined,
+                      },
+                    ],
+                  }
+                : prev,
+            );
           }
-          // Producer event types (cli.output.append, screenshot.new,
-          // thought.new) wire in during M6.5 — for now the snapshot
-          // payload is the source of truth.
+          // screenshot.new has no S2 producer (ADR-007 §4 S2 scope) —
+          // the screenshot pane stays an honest empty state.
         } catch {
           /* swallow malformed frames */
         }

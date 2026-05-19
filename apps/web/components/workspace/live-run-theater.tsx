@@ -83,9 +83,9 @@ function ScreenshotTimeline({ screenshots }: { screenshots: Screenshot[] }) {
       {screenshots.length === 0 ? (
         <div className="flex-1 flex items-center justify-center p-4">
           <p className="text-caption text-on-surface-variant/60 italic text-center">
-            No screenshots yet.
+            No screenshots.
             <br />
-            Self Jr will capture vision frames as the session runs.
+            Self Jr&apos;s vision isn&apos;t wired to the run loop yet.
           </p>
         </div>
       ) : (

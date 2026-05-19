@@ -219,14 +219,22 @@ def build_app(config: DashboardConfig) -> FastAPI:
 
     app.include_router(build_settings_router(config_path=config.config_path))
 
-    # M6 Live Run Theater (workspace 3-pane) + global active-loop introspection.
+    # M6 Live Run Theater (workspace 3-pane) + global active-loop
+    # introspection (ADR-007 §4 S2). Both routers tail the shared theater
+    # event DB that a separate ``selffork run`` process writes.
     from selffork_orchestrator.dashboard.theater_router import (
         build_loop_router,
         build_theater_router,
     )
+    from selffork_orchestrator.theater.store import theater_db_path
 
-    app.include_router(build_theater_router(projects_root=config.projects_root))
-    app.include_router(build_loop_router())
+    _theater_db = theater_db_path(config.projects_root)
+    app.include_router(
+        build_theater_router(
+            projects_root=config.projects_root, db_path=_theater_db
+        ),
+    )
+    app.include_router(build_loop_router(db_path=_theater_db))
 
     # M6 destructive-action soft confirmation (ADR-006 §4.5). Shared
     # store across workspaces; warden writes, dashboard reads/decides.

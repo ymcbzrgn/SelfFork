@@ -42,6 +42,12 @@ from selffork_orchestrator.runtime.factory import build_runtime
 from selffork_orchestrator.runtime.mlx_server import MlxServerRuntime
 from selffork_orchestrator.sandbox.factory import build_sandbox
 from selffork_orchestrator.spawn.runner import SpawnRunnerConfig, TmuxSpawnRunner
+from selffork_orchestrator.theater.producer import (
+    NullTheaterProducer,
+    StoreTheaterProducer,
+    TheaterProducer,
+)
+from selffork_orchestrator.theater.store import TheaterStore, theater_db_path
 from selffork_orchestrator.tmux.factory import build_tmux_driver
 from selffork_shared.audit import AuditLogger
 from selffork_shared.config import SelfForkSettings, load_settings
@@ -553,6 +559,26 @@ async def _amain(
     if project_slug is not None:
         project_store_for_tools = _ProjectStore(root=projects_root)
 
+    # Theater producer — surfaces the round-loop in the Workspace Live
+    # Run theater (ADR-007 §4 S2). Project runs only: an orphan run has
+    # no workspace to attach a theater to, so it gets the Null producer.
+    theater_store: TheaterStore | None = None
+    theater_producer: TheaterProducer = NullTheaterProducer()
+    if project_slug is not None and project_store_for_tools is not None:
+        project = project_store_for_tools.load(project_slug)
+        if project is not None:
+            theater_store = TheaterStore(
+                db_path=theater_db_path(projects_root),
+            )
+            await theater_store.setup()
+            theater_producer = StoreTheaterProducer(
+                store=theater_store,
+                session_id=session_id,
+                workspace_slug=project_slug,
+                workspace_name=project.name,
+                cli=settings.cli_agent.agent,
+            )
+
     # Jr autopilot subsystem wiring. SnapperRunner spins up a background
     # task that polls each per-CLI signal source (Claude statusline tee,
     # Codex rollout JSONL, opencode SQLite, ...) and atomically writes
@@ -593,6 +619,7 @@ async def _amain(
         launchd_scheduler=launchd_scheduler_for_tools,
         resume_store=resume_store_for_tools,
         telegram_bridge=telegram_bridge_for_tools,
+        theater_producer=theater_producer,
     )
     # Run the snapper fleet in parallel with the session; tear it down
     # when the session returns (regardless of outcome).
@@ -602,6 +629,8 @@ async def _amain(
             outcome = await session.run()
         finally:
             snapper_runner.stop()
+            if theater_store is not None:
+                await theater_store.teardown()
     return outcome, session.failure_reason
 
 

@@ -117,6 +117,25 @@ export default function DashboardPage() {
     };
   }, []);
 
+  // The active loop changes independently of the page lifecycle — poll
+  // so the hero reflects a loop that starts or ends after page load.
+  useEffect(() => {
+    let cancelled = false;
+    const id = window.setInterval(() => {
+      getActiveLoop()
+        .then((al) => {
+          if (!cancelled) setActiveLoop(al);
+        })
+        .catch(() => {
+          /* transient error — keep the last known state */
+        });
+    }, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
   const quotaCards = useMemo<QuotaCard[]>(() => {
     const byProvider = new Map<string, ProviderUsage>();
     for (const u of usage) {

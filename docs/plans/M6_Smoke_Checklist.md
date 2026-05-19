@@ -244,6 +244,53 @@ temiz; console'da yalnız favicon 404 (bilinen, zararsız).
 
 ---
 
+## S2 — Live Run Theater (Wave 2 · ADR-007 §4 S2)
+
+**Hedef:** Workspace "Live Run" theater + Dashboard "Live Loop" hero,
+çalışan round-loop'un GERÇEK verisini gösterir — CLI output akar,
+düşünce balonu güncellenir, hero LIVE. Screenshot paneli S2 kapsamı
+dışı (round-loop↔Body-vision teli ertelendi) → dürüst boş durum.
+
+**Mimari:** Cross-process store-tail. `selffork run` process'i SQLite
+theater DB'sine (`~/.selffork/theater/events.db`) event yazar; ayrı
+`selffork ui` process'i tail eder (Talk/chat ile aynı desen).
+
+**Ön-koşul:** §0 + round-loop model runtime'ı. `selffork.yaml`
+`runtime.backend: mlx-server` → `mlx_vlm.server` (`uv pip install
+mlx-vlm`; Gemma 4 E2B 4bit modeli). CLI agent kurulu (opencode /
+claude-code / ...). `--project <slug>` zorunlu (orphan run theater'a
+düşmez — `NullTheaterProducer`).
+
+**Adım:**
+1. `selffork ui --port 8765`; `/api/loop/active` → `null`,
+   `/api/workspaces/<slug>/theater/snapshot` → dürüst boş.
+2. `selffork run --project <slug> <prd>` başlat.
+3. Run sırasında: Dashboard hero `/api/loop/active`'i 5 sn poll'lar →
+   LIVE (workspace · cli · turn · duration · last_thought). Workspace >
+   Live Run tab'ında CLI output satır satır, düşünce balonu güncellenir.
+4. Run bitince: `active_loops` temizlenir → `/api/loop/active` `null`;
+   `theater_events` kalıcı (snapshot geçmişi gösterir).
+
+**Doğrulanmış smoke (2026-05-19):** mlx-vlm kuruldu; gerçek `selffork
+run --project m4-smoke-test` 2× koşuldu (mlx-server Self Jr + opencode),
+exit 0 / COMPLETED. Theater event'leri üretildi (thought + jr-prompt +
+opencode stdout/stderr — `apply_patch Success ... hello.txt`); ayrı
+`selffork ui` process'i hepsini `/api/.../theater/snapshot` ile servis
+etti — cross-process doğrulandı. `/api/loop/active` run sırasında LIVE
+yakalandı (duration 0→42 sn, last_thought dolu), bitince `null`.
+
+**Backend testi:** `pytest tests/theater/ tests/dashboard/test_theater_router.py
+tests/lifecycle/test_session_theater.py` geçer (64 S2 testi). Tüm
+orchestrator suite: 1019 passed (1 fail = ortam: Ollama açık, S2 dışı).
+ruff/mypy temiz (`session.py:827` SIM102 pre-existing, S2 dışı).
+`tsc --noEmit` temiz.
+
+**PASS kriteri:** Round-loop event'leri cross-process theater'a düşer;
+Dashboard hero canlı; screenshot paneli dürüst-boş; backend + tsc temiz;
+audit-god 0 kritik bulgu.
+
+---
+
 ## Close-out raporu
 
 Tüm 1–7 PASS + 8–10 deferred/skip notlanmış → M6 ACCEPTED. Operator

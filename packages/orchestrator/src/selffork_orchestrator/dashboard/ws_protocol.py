@@ -70,6 +70,10 @@ WsEventType = Literal[
     "provider_auth_status",  # provider.auth.* / provider.token.* event
     # M6 — Talk surface (ADR-007 §4 S1): operator ↔ Self Jr message.
     "talk.message",
+    # M6 — Live Run Theater (ADR-007 §4 S2): workspace 3-pane stream.
+    "snapshot",  # full theater state, sent first on WS connect
+    "cli.output.append",  # one new CLI output / jr-prompt chunk
+    "thought.new",  # one new compacted Self Jr thought
 ]
 
 # Used by tests + downstream consumers (TS mirror generator) to
@@ -87,6 +91,9 @@ WS_EVENT_TYPES: tuple[WsEventType, ...] = (
     "body_observation",
     "provider_auth_status",
     "talk.message",
+    "snapshot",
+    "cli.output.append",
+    "thought.new",
 )
 
 
