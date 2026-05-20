@@ -590,6 +590,23 @@ export function cancelPendingConfirmation(
   );
 }
 
+export function extendPendingConfirmation(
+  id: string,
+  hours: number = 2,
+): Promise<PendingConfirmationResponse> {
+  return request<PendingConfirmationResponse>(
+    `/api/pending-confirmations/${encodeURIComponent(id)}/extend`,
+    {
+      method: "POST",
+      body: JSON.stringify({ hours }),
+    },
+  );
+}
+
+export function getPendingConfirmationCount(): Promise<number> {
+  return request<number>("/api/pending-confirmations/count");
+}
+
 // ── M6 Telegram bridge surface (ADR-006 §4.7) ──────────────────────────────
 
 export interface TelegramStatusResponse {
@@ -600,6 +617,7 @@ export interface TelegramStatusResponse {
   last_activity_at: string | null;
   last_activity_summary: string | null;
   detail: string | null;
+  mode?: "polling" | "webhook" | null;
 }
 
 export function getTelegramStatus(): Promise<TelegramStatusResponse> {
@@ -608,11 +626,58 @@ export function getTelegramStatus(): Promise<TelegramStatusResponse> {
 
 export function setupTelegram(payload: {
   bot_token: string;
-  webhook_url: string;
+  webhook_url?: string;
 }): Promise<TelegramStatusResponse> {
   return request<TelegramStatusResponse>("/api/telegram/setup", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export function sendTelegramTest(
+  body: string = "SelfFork test message — bridge is alive.",
+): Promise<{ status: string; chat_id: string }> {
+  return request<{ status: string; chat_id: string }>(
+    "/api/telegram/test",
+    { method: "POST", body: JSON.stringify({ body }) },
+  );
+}
+
+export interface TelegramActivityEntry {
+  at: string;
+  direction: "inbound" | "outbound";
+  summary: string;
+  detail: string | null;
+}
+
+export interface TelegramActivityResponse {
+  inbound: TelegramActivityEntry[];
+  outbound: TelegramActivityEntry[];
+}
+
+export function getTelegramActivity(): Promise<TelegramActivityResponse> {
+  return request<TelegramActivityResponse>("/api/telegram/activity");
+}
+
+// ── Telegram drafts (Sr→Jr with no active workspace) ────────────────────
+
+export interface TelegramDraftResponse {
+  id: number;
+  sender: string | null;
+  text: string;
+  received_at: string;
+}
+
+export function listTelegramDrafts(): Promise<TelegramDraftResponse[]> {
+  return request<TelegramDraftResponse[]>("/api/talk/drafts");
+}
+
+export function claimTelegramDrafts(
+  ids: number[],
+): Promise<{ claimed: number }> {
+  return request<{ claimed: number }>("/api/talk/drafts/claim", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
   });
 }
 

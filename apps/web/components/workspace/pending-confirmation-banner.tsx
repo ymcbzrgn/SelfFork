@@ -12,12 +12,14 @@ export interface PendingConfirmationBannerProps {
   pending: PendingAction | null;
   onApprove?: (id: string) => void;
   onCancel?: (id: string) => void;
+  onExtend?: (id: string, hours: number) => void;
 }
 
 export function PendingConfirmationBanner({
   pending,
   onApprove,
   onCancel,
+  onExtend,
 }: PendingConfirmationBannerProps) {
   if (!pending) return null;
   return (
@@ -63,6 +65,16 @@ export function PendingConfirmationBanner({
         >
           Cancel
         </button>
+        {onExtend ? (
+          <button
+            type="button"
+            onClick={() => onExtend(pending.id, 2)}
+            className="text-yellow-900 border border-yellow-300 hover:bg-yellow-100 px-3 py-2 rounded-lg font-medium text-caption transition-colors"
+            title="Push the soft-confirm window by 2 hours"
+          >
+            Extend 2h
+          </button>
+        ) : null}
         {pending.detailsHref ? (
           <a
             href={pending.detailsHref}

@@ -300,3 +300,109 @@ karar verir: tek bundled commit mi (önerilen), faz başına commit mi
 
 Sonraki ADR (007) gündemine giren açık iş kalemleri için bkz.
 `M6_v2_Pivot_Plan.md` § "Deferred (M6.5+ sub-tasks)".
+
+---
+
+## S3 — Destructive Warden + Telegram Bridge (Wave 2 · ADR-007 §4 S3)
+
+**Hedef:** Destructive eylem soft-confirm uçtan uca (warden hook →
+PendingConfirmationStore → Telegram outbound → operator approve via
+UI or Telegram inline button → exec devam) **ve** Telegram inbound
+köprüsü (Sr → Jr): operator Telegram'a yazar → Talk feed'inde
+operator-role mesajı görünür (aktif workspace yoksa drafts banner).
+
+**Ön-koşul (smoke için):**
+
+- §0 (backend + frontend up).
+- Destructive whitelist YAML (default: `packages/body/.../destructive_actions.yaml`).
+- Telegram smoke: `SELFFORK_TELEGRAM_BOT_TOKEN` env set + `~/.selffork/operators.json`
+  içinde operator chat_id ekli.
+- Mode env: `SELFFORK_TELEGRAM_MODE=polling` (dev varsayılan) veya
+  `webhook` + `SELFFORK_TELEGRAM_WEBHOOK_URL` (deploy).
+- Aynı pending JSONL path iki süreçte: `SELFFORK_PENDING_AUDIT_PATH`
+  (varsayılan `~/.selffork/pending_confirmations.jsonl`) hem
+  `selffork run` hem `selffork ui` tarafından okunur/yazılır.
+
+**Senaryo (a) — Destructive approve flow (UI yolu):**
+
+1. Geçici test whitelist YAML:
+   ```yaml
+   destructive_actions:
+     - id: demo
+       description: "demo: rm test-destructive-marker"
+       match_any:
+         - tool: rm
+           args_contains: ["test-destructive-marker"]
+       confirm_window_hours: 1
+   ```
+   `SELFFORK_DESTRUCTIVE_WHITELIST_PATH=/tmp/demo.yaml`.
+2. `selffork run --project demo` başlat (Self Jr opencode'a "rm
+   test-destructive-marker" benzeri komut talep ettirilecek).
+3. Round-loop'ta sandbox.exec çağrılmadan önce warden yakalar →
+   `/api/pending-confirmations` listesinde yeni entry görünür.
+4. Workspace ekranında `PendingConfirmationBanner` çıkar.
+5. "Approve" tıkla → 200 OK + banner kaybolur + audit'te
+   `destructive_action_approved` event'i.
+6. Round-loop devam eder, exec çalışır.
+
+**Senaryo (b) — Destructive approve flow (Telegram yolu):**
+
+1. Aynı set-up, ama bridge wire'lı (env token + allowlist).
+2. Warden yakalayınca operator Telegram chat'ine inline keyboard'lu
+   mesaj düşer: workspace · komut · `[✅ Approve][❌ Cancel][⏰ Extend 2h][💬 Ask me]`.
+3. "✅ Approve" tıkla → callback işlenir, store flip eder, round-loop
+   devam.
+4. PASS kriteri: `/api/telegram/activity` outbound listesinde notify
+   ve callback inbound kayıtları görünür.
+
+**Senaryo (c) — Sessizlik = iptal (fail-safe NO):**
+
+1. Short window (`confirm_window_hours: 0` → 0 saatlik yapay TTL veya
+   per-test seconds-override).
+2. Hiçbir aksiyon yapmadan bekle.
+3. `expire_loop` arka plan task'ı sweep yapar → entry `expired` olur.
+4. Telegram'a "⏰ Window expired" mesajı düşer.
+5. Banner ekrandan kaybolur, audit'te `destructive_action_timeout`.
+
+**Senaryo (d) — Telegram inbound (no active workspace) → drafts:**
+
+1. Talk'ta hiç konuşma yokken Telegram'a "merhaba jr" yaz.
+2. `/api/telegram/webhook` veya polling alır → MessageHandler işler →
+   `last_active_workspace = None` → drafts queue'ya düşer.
+3. Talk sayfasında üst banner "📲 1 Telegram message waiting" + Show /
+   Dismiss butonları görünür.
+4. "Show" → composer'a mesaj basılır + drafts claim edilir.
+
+**Senaryo (e) — Telegram slash commands:**
+
+1. Telegram'dan `/workspace alpha` → Talk store'da `alpha`'ya bağlı
+   conversation yaratılır + last_active_workspace = `alpha` olur.
+2. Telegram'dan plain text → conversation'a operator-role olarak
+   inject + Talk WS event ile UI'a anında düşer.
+3. Telegram'dan `/pause` → `~/.selffork/pause.flag` yazılır.
+4. Telegram'dan `/extend <id> 4` → seçilen pending entry'nin
+   expires_at'i 4 saat uzar.
+
+**Backend testi:**
+`pytest packages/orchestrator/tests/ packages/body/tests/` — 1245+ pass
+(S3'le 100+ yeni test geldi: destructive_guard, pending_notify_hook,
+destructive_notify, expire_loop, drafts, inbound_router, app_factory,
+dashboard s3_endpoints).
+`ruff check` + `mypy` temiz (S3 dosyalarında pre-existing dışı 0
+finding). `tsc --noEmit` temiz.
+
+**PASS kriteri:**
+
+- Senaryo (a) + (b) round-loop'u kesip approve sonra devam eder.
+- Senaryo (c)'de 4h (test'te short window) sonunda eylem otomatik
+  iptal + Telegram + audit kaydı.
+- Senaryo (d) + (e) Talk feed'i + drafts banner'ı doğru güncellenir.
+- audit-god 0 kritik bulgu.
+
+**Kapsam dışı (sonraki sprint'lere):**
+
+- CLI router override gerçek mekanizma (S6) — `/cli` komutu şimdilik
+  drafts'a düşer + "S6 yolda" notu.
+- Settings UI'da destructive whitelist düzenleyici (S4).
+- Webhook setup wizard tam akışı (S5'in `setupTelegram` yolu zaten
+  endpoint'i yazıyor, prod URL wizard'ı S5'te tamamlanacak).

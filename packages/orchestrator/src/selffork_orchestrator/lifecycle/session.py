@@ -19,6 +19,10 @@ import json
 import os
 from typing import Protocol
 
+from selffork_body.sandbox.destructive_whitelist import DestructiveWhitelist
+from selffork_body.sandbox.pending_confirmations import (
+    PendingConfirmationStore,
+)
 from selffork_mind.memory.tiers import (
     EpisodicToolCall,
     EpisodicWriter,
@@ -26,6 +30,10 @@ from selffork_mind.memory.tiers import (
 from selffork_mind.rag.retriever import HybridRetriever
 from selffork_mind.store.base import MindStore
 from selffork_orchestrator.cli_agent.base import CLIAgent
+from selffork_orchestrator.lifecycle.destructive_guard import (
+    DestructiveActionBlockedError,
+    check_destructive_action,
+)
 from selffork_orchestrator.lifecycle.states import (
     SessionState,
     is_legal_transition,
@@ -147,6 +155,8 @@ class Session:
         resume_store: object | None = None,
         telegram_bridge: object | None = None,
         theater_producer: TheaterProducer | None = None,
+        destructive_whitelist: DestructiveWhitelist | None = None,
+        pending_store: PendingConfirmationStore | None = None,
     ) -> None:
         self._session_id = session_id
         self._prd_text = prd_text
@@ -180,6 +190,11 @@ class Session:
         self._theater: TheaterProducer = (
             theater_producer or NullTheaterProducer()
         )
+        # Destructive guard — ADR-006 §4.5 + ADR-007 §4 S3. Both pieces
+        # are optional: when either is None the warden hook becomes a
+        # no-op (no whitelist loaded → orphan/test runs still execute).
+        self._destructive_whitelist = destructive_whitelist
+        self._pending_store = pending_store
         self._state: SessionState = SessionState.IDLE
         self._failure_reason: str | None = None
 
@@ -213,6 +228,18 @@ class Session:
             if self._state != SessionState.PAUSED_RATE_LIMIT:
                 await self._verify()
             outcome = self._state  # COMPLETED | FAILED | PAUSED_RATE_LIMIT
+        except DestructiveActionBlockedError as exc:
+            # S3 audit fix #12: preserve category + command context so
+            # the audit / Live Run hero shows *why* the loop stopped,
+            # not just "cancelled".
+            entry = exc.entry
+            reason = (
+                f"destructive_{exc.reason}: "
+                f"{entry.category_id if entry else '?'}/"
+                f"{entry.command_summary if entry else '?'}"
+            )
+            self._fail(reason=reason)
+            outcome = SessionState.FAILED
         except SelfForkError as exc:
             self._fail(reason=str(exc))
             outcome = SessionState.FAILED
@@ -407,6 +434,31 @@ class Session:
             await self._theater.cli_output(
                 yamac_reply, kind="jr-prompt"
             )
+
+            # Destructive guard — ADR-006 §4.5 / ADR-007 §4 S3. Pause the
+            # round-loop until the operator approves or the per-category
+            # window elapses (silence = cancel, fail-safe NO). Both
+            # collaborators must be wired for the guard to engage;
+            # orphan/test runs without a whitelist or store proceed
+            # unchanged.
+            if (
+                self._destructive_whitelist is not None
+                and self._pending_store is not None
+            ):
+                guard = await check_destructive_action(
+                    cmd=cmd,
+                    env=env,
+                    workspace_slug=self._project_slug,
+                    whitelist=self._destructive_whitelist,
+                    store=self._pending_store,
+                    audit=self._audit,
+                )
+                if not guard.allow:
+                    raise DestructiveActionBlockedError(
+                        reason=guard.reason,
+                        entry=guard.entry,
+                    )
+
             proc = await self._sandbox.exec(cmd, env=env)
             stdout_chunks: list[bytes] = []
             async for line in proc.stdout:

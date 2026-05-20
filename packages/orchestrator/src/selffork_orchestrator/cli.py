@@ -24,6 +24,10 @@ from typing import Annotated
 
 import typer
 
+from selffork_body.sandbox.destructive_whitelist import DestructiveWhitelist
+from selffork_body.sandbox.pending_confirmations import (
+    PendingConfirmationStore,
+)
 from selffork_orchestrator import __version__
 from selffork_orchestrator.cli_agent.factory import build_cli_agent
 from selffork_orchestrator.cli_mind import mind_app
@@ -59,6 +63,14 @@ from selffork_shared.ulid import new_ulid
 # one JSON file under here. Override via ``SELFFORK_RESUME_DIR`` env var.
 _DEFAULT_RESUME_DIR = Path("~/.selffork/scheduled").expanduser()
 _DEFAULT_PROJECTS_ROOT = Path("~/.selffork/projects").expanduser()
+_DEFAULT_PENDING_AUDIT_PATH = Path(
+    "~/.selffork/pending_confirmations.jsonl"
+).expanduser()
+
+# Strong references to in-flight Telegram notify tasks so they don't get
+# garbage-collected mid-await. The callback in :func:`_build_pending_telegram_hook`
+# removes finished tasks; the set stays tiny under normal load.
+_PENDING_TELEGRAM_TASKS: set[asyncio.Task] = set()
 
 __all__ = ["app"]
 
@@ -620,6 +632,10 @@ async def _amain(
         resume_store=resume_store_for_tools,
         telegram_bridge=telegram_bridge_for_tools,
         theater_producer=theater_producer,
+        destructive_whitelist=_load_destructive_whitelist(),
+        pending_store=_build_pending_store(
+            telegram_bridge=telegram_bridge_for_tools,
+        ),
     )
     # Run the snapper fleet in parallel with the session; tear it down
     # when the session returns (regardless of outcome).
@@ -658,6 +674,106 @@ def _build_telegram_bridge() -> object:
         return PtbTelegramBridge(bot_token=token, allowlist=allowlist)
     except Exception:
         return NullTelegramBridge()
+
+
+def _resolve_pending_audit_path() -> Path:
+    """Honour ``SELFFORK_PENDING_AUDIT_PATH`` env var, else use the default.
+
+    Both ``selffork run`` (the producer of destructive requests) and the
+    ``selffork ui`` dashboard server (which serves approve/cancel HTTP)
+    must point at the same path so the cross-process JSONL replay keeps
+    them in sync.
+    """
+    env = os.environ.get("SELFFORK_PENDING_AUDIT_PATH")
+    if env:
+        return Path(env).expanduser()
+    return _DEFAULT_PENDING_AUDIT_PATH
+
+
+def _load_destructive_whitelist() -> DestructiveWhitelist:
+    """Load the default whitelist (``packages/body/.../destructive_actions.yaml``).
+
+    Honour ``SELFFORK_DESTRUCTIVE_WHITELIST_PATH`` env var to point at a
+    custom YAML — same shape, used by the operator's Settings UI in S4.
+    """
+    env = os.environ.get("SELFFORK_DESTRUCTIVE_WHITELIST_PATH")
+    if env:
+        return DestructiveWhitelist.load(Path(env).expanduser())
+    return DestructiveWhitelist.load()
+
+
+def _build_pending_store(
+    telegram_bridge: object | None = None,
+) -> PendingConfirmationStore:
+    """Construct the destructive pending-confirmation store.
+
+    JSONL audit at :func:`_resolve_pending_audit_path` is the single
+    cross-process source of truth — every mutation appends, restart
+    replays. The store is restart-safe; the dashboard server's own
+    instance reads the same file and so approvals are visible across
+    processes (``store.reload_from_disk`` in the dashboard handlers).
+
+    When ``telegram_bridge`` is a non-null bridge we attach an outbound
+    notify hook (ADR-006 §4.5 step 1): every request / approve /
+    cancel / expire / extend fans out a Telegram message. Hook
+    failures (e.g. network) are swallowed inside the store —
+    destructive guard correctness must not depend on Telegram.
+    """
+    store = PendingConfirmationStore(
+        audit_path=_resolve_pending_audit_path(),
+    )
+    if telegram_bridge is not None:
+        hook = _build_pending_telegram_hook(telegram_bridge)
+        if hook is not None:
+            store.set_notify_hook(hook)
+    return store
+
+
+def _build_pending_telegram_hook(telegram_bridge: object):
+    """Wrap ``bridge.notify(...)`` as a sync :class:`NotifyHook`.
+
+    The store invokes the hook from inside ``request/_decide/expire``
+    paths that run on the orchestrator's event loop. We schedule the
+    async notify as a background task so the destructive guard never
+    blocks on Telegram round-trip time.
+    """
+    from selffork_orchestrator.telegram.bridge import (
+        NullTelegramBridge,
+        TelegramBridge,
+    )
+    from selffork_orchestrator.telegram.destructive_notify import (
+        build_message,
+    )
+
+    if isinstance(telegram_bridge, NullTelegramBridge):
+        return None
+    if not isinstance(telegram_bridge, TelegramBridge):
+        return None
+    bridge = telegram_bridge
+
+    def hook(entry, op) -> None:
+        from selffork_orchestrator.telegram.bridge import TelegramMessage
+
+        outbound = build_message(entry, op)
+        message = TelegramMessage(
+            level=outbound.level,
+            text=outbound.text,
+            session_id=entry.id,
+            project_slug=entry.workspace_slug,
+        )
+        try:
+            # 3.12+: get_event_loop is deprecated outside a coroutine.
+            # get_running_loop raises RuntimeError when nothing's
+            # running — which is exactly our skip condition for the
+            # best-effort fire-and-forget contract (audit fix #3).
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return  # no running loop — skip best-effort notify
+        task = loop.create_task(bridge.notify(message))
+        _PENDING_TELEGRAM_TASKS.add(task)
+        task.add_done_callback(_PENDING_TELEGRAM_TASKS.discard)
+
+    return hook
 
 
 def _resolve_resume_dir() -> Path:

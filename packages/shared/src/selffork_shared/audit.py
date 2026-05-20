@@ -72,6 +72,18 @@ AuditCategory = Literal[
     "provider.auth.failed",  # Sign-in flow errored (network/CAPTCHA/MFA)
     "provider.token.refreshed",  # Proactive token refresh (per-provider)
     "provider.token.expired",  # Runtime detection of expired credential
+    # S3 destructive-action warden (ADR-006 §4.5 / ADR-007 §4 S3)
+    "destructive_action_requested",  # Whitelist match; pending operator decision
+    "destructive_action_approved",  # Operator (UI or Telegram) approved → exec resumes
+    "destructive_action_cancelled",  # Operator denied → exec aborted
+    "destructive_action_timeout",  # Silence past confirm window → fail-safe NO
+    # ``destructive_action_extended`` is emitted by the orchestrator audit
+    # logger when the soft-confirm window is pushed out (operator /extend
+    # or banner "Extend 2h"). The PendingConfirmationStore JSONL already
+    # carries an ``op="extend"`` row for cross-process replay; the audit
+    # literal here lets dashboard endpoints + the Telegram inbound router
+    # mirror the event into the per-session audit log as well.
+    "destructive_action_extended",
     "error",
 ]
 

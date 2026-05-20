@@ -11,9 +11,12 @@ import {
 
 import { AppShell } from "@/components/layout/app-shell";
 import {
+  getTelegramActivity,
   getTelegramStatus,
   listProviderUsage,
+  sendTelegramTest,
   type ProviderUsage,
+  type TelegramActivityResponse,
   type TelegramStatusResponse,
 } from "@/lib/api";
 
@@ -98,16 +101,27 @@ function StatusDot({ kind }: { kind: "green" | "amber" | "red" | "gray" }) {
 export default function ConnectionsPage() {
   const [usage, setUsage] = useState<ProviderUsage[]>([]);
   const [tg, setTg] = useState<TelegramStatusResponse | null>(null);
+  const [activity, setActivity] = useState<TelegramActivityResponse | null>(
+    null,
+  );
+  const [testStatus, setTestStatus] = useState<
+    "idle" | "sending" | "ok" | "error"
+  >("idle");
+  const [testError, setTestError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       listProviderUsage().catch(() => [] as ProviderUsage[]),
       getTelegramStatus().catch(() => null),
+      getTelegramActivity().catch(
+        () => ({ inbound: [], outbound: [] }) as TelegramActivityResponse,
+      ),
     ])
-      .then(([u, t]) => {
+      .then(([u, t, a]) => {
         setUsage(u);
         setTg(t);
+        setActivity(a);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -280,28 +294,73 @@ export default function ConnectionsPage() {
             <div className="mt-4 pt-4 border-t border-outline-variant/30 flex items-center gap-2 flex-wrap">
               <button
                 type="button"
-                disabled
-                className="px-3 py-1.5 border border-outline-variant text-caption font-medium rounded-lg flex items-center gap-1 text-on-surface-variant opacity-50 cursor-not-allowed"
+                onClick={() => {
+                  void (async () => {
+                    setTestStatus("sending");
+                    try {
+                      await sendTelegramTest();
+                      setTestStatus("ok");
+                      const fresh = await getTelegramActivity();
+                      setActivity(fresh);
+                    } catch (err) {
+                      setTestStatus("error");
+                      setTestError(
+                        err instanceof Error
+                          ? err.message
+                          : "test message failed",
+                      );
+                    }
+                  })();
+                }}
+                disabled={!tgConnected || testStatus === "sending"}
+                className="px-3 py-1.5 border border-outline-variant text-caption font-medium rounded-lg flex items-center gap-1 text-on-surface enabled:hover:bg-surface-container disabled:text-on-surface-variant disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <SendHorizontal className="h-3.5 w-3.5" strokeWidth={1.75} />
-                Send test
+                {testStatus === "sending" ? "Sending…" : "Send test"}
               </button>
-              <button
-                type="button"
-                disabled
-                className="px-3 py-1.5 border border-outline-variant text-caption font-medium rounded-lg opacity-50 cursor-not-allowed"
-              >
-                View log
-              </button>
-              <button
-                type="button"
-                disabled
-                className="px-3 py-1.5 text-on-surface-variant text-caption font-medium rounded-lg flex items-center gap-1 opacity-50 cursor-not-allowed"
-              >
-                <SettingsIcon className="h-3.5 w-3.5" strokeWidth={1.75} />
-                Bot settings
-              </button>
+              {testStatus === "ok" && (
+                <span className="text-caption text-success">✓ delivered</span>
+              )}
+              {testStatus === "error" && (
+                <span className="text-caption text-error">
+                  ✗ {testError ?? "failed"}
+                </span>
+              )}
             </div>
+            {activity && (activity.inbound.length + activity.outbound.length) > 0 && (
+              <div className="mt-4 pt-4 border-t border-outline-variant/30">
+                <h4 className="text-[11px] uppercase tracking-wider font-bold text-on-surface-variant mb-2">
+                  Recent activity
+                </h4>
+                <ul className="space-y-1 text-caption">
+                  {[...activity.outbound.slice(0, 3), ...activity.inbound.slice(0, 3)]
+                    .sort((a, b) => b.at.localeCompare(a.at))
+                    .slice(0, 5)
+                    .map((entry) => (
+                      <li
+                        key={`${entry.direction}-${entry.at}`}
+                        className="flex items-center gap-2"
+                      >
+                        <span
+                          className={
+                            entry.direction === "outbound"
+                              ? "text-primary"
+                              : "text-success"
+                          }
+                        >
+                          {entry.direction === "outbound" ? "↑" : "↓"}
+                        </span>
+                        <span className="text-on-surface-variant w-32 truncate">
+                          {new Date(entry.at).toLocaleTimeString()}
+                        </span>
+                        <span className="text-on-surface truncate">
+                          {entry.summary}
+                        </span>
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
           </div>
           <p className="text-caption text-on-surface-variant flex items-center gap-1">
             <Check className="h-3.5 w-3.5 text-success" strokeWidth={2} />

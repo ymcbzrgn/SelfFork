@@ -18,7 +18,7 @@ import {
   ServerCog,
 } from "lucide-react";
 
-import { getHealth } from "@/lib/api";
+import { getHealth, getPendingConfirmationCount } from "@/lib/api";
 
 interface TopBarProps {
   /** Page title shown on the left. Defaults to "Dashboard". */
@@ -27,7 +27,9 @@ interface TopBarProps {
 
 export function TopBar({ title = "Dashboard" }: TopBarProps) {
   const [online, setOnline] = useState(true);
-  const [pendingCount] = useState(0); // wired to destructive confirmation queue later
+  // S3 Phase F — real pending count from /api/pending-confirmations/count.
+  // 10-second poll matches the destructive-action human-scale tempo.
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,6 +43,25 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
     };
     void tick();
     const id = window.setInterval(() => void tick(), 15_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const count = await getPendingConfirmationCount();
+        if (!cancelled) setPendingCount(count);
+      } catch {
+        // Best-effort — the badge falls back to 0 on any backend error.
+        if (!cancelled) setPendingCount(0);
+      }
+    };
+    void tick();
+    const id = window.setInterval(() => void tick(), 10_000);
     return () => {
       cancelled = true;
       window.clearInterval(id);

@@ -15,6 +15,7 @@ import asyncio
 import contextlib
 import json
 import os
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -139,6 +140,73 @@ def build_app(config: DashboardConfig) -> FastAPI:
 
     Pure factory — no side effects on import.
     """
+    # S3 Phase E: Telegram bridge + inbound application live for the
+    # process lifetime. Created sync (PTB constructors don't touch
+    # the network); ``initialize/start`` happens inside ``lifespan``.
+    from selffork_orchestrator.dashboard.telegram_router import (
+        TelegramActivityLog,
+        attach_outbound_recorder,
+    )
+
+    telegram_activity_log = TelegramActivityLog()
+    outbound_bridge = _build_outbound_bridge()
+    wrapped_bridge = (
+        attach_outbound_recorder(outbound_bridge, telegram_activity_log)
+        if outbound_bridge.__class__.__name__ != "NullTelegramBridge"
+        else outbound_bridge
+    )
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        # Late-bound — the inbound app is configured only after
+        # `_register_telegram_routes` has built the InboundRouter and
+        # PtbApplication and stashed them on ``app.state``.
+        ptb_app = getattr(_app.state, "telegram_application", None)
+        expire_task: asyncio.Task | None = None
+        pending_store = getattr(_app.state, "pending_confirmation_store", None)
+        try:
+            if ptb_app is not None:
+                # S3 audit fix #7: don't let a Telegram failure block the
+                # entire dashboard. Best-effort startup; if anything
+                # raises (bad token, transient network, JobQueue init),
+                # disable the PTB app so teardown skips it and the rest
+                # of the dashboard keeps serving HTTP.
+                try:
+                    await ptb_app.initialize()
+                    await ptb_app.start()
+                    mode = os.environ.get(
+                        "SELFFORK_TELEGRAM_MODE", "polling"
+                    ).strip().lower()
+                    if mode != "webhook" and ptb_app.updater is not None:
+                        await ptb_app.updater.start_polling(
+                            drop_pending_updates=True
+                        )
+                except Exception:
+                    _log.exception("telegram_application_start_failed")
+                    ptb_app = None
+            if pending_store is not None:
+                from selffork_orchestrator.telegram.expire_loop import (
+                    expire_loop,
+                )
+
+                expire_task = asyncio.create_task(
+                    expire_loop(store=pending_store, interval_seconds=60.0)
+                )
+            yield
+        finally:
+            if expire_task is not None:
+                expire_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await expire_task
+            if ptb_app is not None:
+                with contextlib.suppress(Exception):
+                    if ptb_app.updater is not None:
+                        await ptb_app.updater.stop()
+                with contextlib.suppress(Exception):
+                    await ptb_app.stop()
+                with contextlib.suppress(Exception):
+                    await ptb_app.shutdown()
+
     app = FastAPI(
         title="SelfFork Dashboard",
         version="0.1.0",
@@ -146,7 +214,10 @@ def build_app(config: DashboardConfig) -> FastAPI:
             "Read-only views over real SelfFork artifacts on disk. "
             "ABSOLUTELY no mock data — see project_ui_stack.md."
         ),
+        lifespan=lifespan,
     )
+    app.state.telegram_outbound_bridge = wrapped_bridge
+    app.state.telegram_activity_log = telegram_activity_log
     # Permissive CORS for local dev (Next.js dev server on a different
     # port). Production static-export build is same-origin so this has
     # no effect there.
@@ -245,10 +316,42 @@ def build_app(config: DashboardConfig) -> FastAPI:
         build_pending_router,
     )
 
-    pending_audit_path = config.audit_dir / "pending_confirmations.jsonl"
+    # Cross-process source of truth. ``selffork run`` (warden side) and
+    # ``selffork ui`` (this server) must read/write the same JSONL so
+    # request → approve/cancel flows survive across processes. The
+    # canonical path lives under ``~/.selffork/`` (overridable via
+    # ``SELFFORK_PENDING_AUDIT_PATH``) — matches ``cli._resolve_pending_audit_path``.
+    pending_audit_path = Path(
+        os.environ.get(
+            "SELFFORK_PENDING_AUDIT_PATH",
+            str(Path("~/.selffork/pending_confirmations.jsonl").expanduser()),
+        )
+    ).expanduser()
+    pending_audit_path.parent.mkdir(parents=True, exist_ok=True)
     pending_store = PendingConfirmationStore(audit_path=pending_audit_path)
+    # S3 audit fix #8: cockpit approvals/cancels must also surface in the
+    # operator's Telegram chat — wire the same outbound notify hook the
+    # warden process uses (see ``cli._build_pending_telegram_hook``).
+    _hook = _build_dashboard_notify_hook(wrapped_bridge)
+    if _hook is not None:
+        pending_store.set_notify_hook(_hook)
     app.state.pending_confirmation_store = pending_store
     app.include_router(build_pending_router(store=pending_store))
+
+    # S3 Phase E — Telegram inbound application (operator → Self Jr).
+    #
+    # Build the inbound router + PTB Application now (sync). The
+    # ``lifespan`` context manager started above will call
+    # ``initialize/start/updater.start_polling`` on it after
+    # `build_app` returns. ``application`` stays ``None`` when no
+    # bot token is configured — the operator simply doesn't use the
+    # Telegram surface.
+    _wire_telegram_inbound(
+        app=app,
+        pending_store=pending_store,
+        talk_db_path=config.talk_db_path,
+        outbound_bridge=wrapped_bridge,
+    )
 
     # M6 Telegram bridge status + Reflex training surface (ADR-006).
     from selffork_orchestrator.dashboard.reflex_router import (
@@ -258,7 +361,13 @@ def build_app(config: DashboardConfig) -> FastAPI:
         build_telegram_router,
     )
 
-    app.include_router(build_telegram_router())
+    app.include_router(
+        build_telegram_router(
+            bridge=wrapped_bridge,
+            application=getattr(app.state, "telegram_application", None),
+            activity_log=telegram_activity_log,
+        ),
+    )
     app.include_router(build_reflex_router())
 
     # M6 Talk Loop — operator ↔ Self Jr conversation (ADR-007 §4 S1).
@@ -284,9 +393,202 @@ def build_app(config: DashboardConfig) -> FastAPI:
         ),
     )
 
+    # S3 Phase D — Telegram drafts queue surface for the Talk page banner.
+    _register_drafts_routes(app)
+
     _register_static_mount(app, config)
 
     return app
+
+
+_DASHBOARD_NOTIFY_TASKS: set[asyncio.Task] = set()
+"""Strong refs to in-flight Telegram notify tasks scheduled from the
+dashboard side (mirrors ``cli._PENDING_TELEGRAM_TASKS``)."""
+
+
+def _build_dashboard_notify_hook(bridge):
+    """Sync :class:`NotifyHook` that schedules ``bridge.notify`` as a task.
+
+    Cockpit approve/cancel → store mutates → ``_invoke_hook(entry, op)``
+    fires → this hook builds the Telegram message and schedules
+    ``bridge.notify`` on the FastAPI event loop. Same pattern as
+    ``cli._build_pending_telegram_hook`` so both processes deliver
+    consistent operator notifications.
+    """
+    from selffork_orchestrator.telegram.bridge import (
+        NullTelegramBridge,
+        TelegramBridge,
+        TelegramMessage,
+    )
+    from selffork_orchestrator.telegram.destructive_notify import (
+        build_message,
+    )
+
+    if isinstance(bridge, NullTelegramBridge):
+        return None
+    if not isinstance(bridge, TelegramBridge):
+        return None
+
+    def hook(entry, op) -> None:
+        outbound = build_message(entry, op)
+        message = TelegramMessage(
+            level=outbound.level,
+            text=outbound.text,
+            session_id=entry.id,
+            project_slug=entry.workspace_slug,
+        )
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        task = loop.create_task(bridge.notify(message))
+        _DASHBOARD_NOTIFY_TASKS.add(task)
+        task.add_done_callback(_DASHBOARD_NOTIFY_TASKS.discard)
+
+    return hook
+
+
+def _build_outbound_bridge():
+    """Pick a Telegram bridge based on env (same logic as ``cli.py``).
+
+    Lazy import keeps PTB out of the test path for non-Telegram tests
+    that import :func:`build_app`.
+    """
+    from selffork_orchestrator.telegram import (
+        AllowList,
+        NullTelegramBridge,
+        PtbTelegramBridge,
+    )
+
+    token = ""
+    for name in ("SELFFORK_TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_TOKEN"):
+        candidate = os.environ.get(name, "").strip()
+        if candidate:
+            token = candidate
+            break
+    if not token:
+        return NullTelegramBridge()
+    allowlist = AllowList.load()
+    if not allowlist.chat_ids:
+        return NullTelegramBridge()
+    try:
+        return PtbTelegramBridge(bot_token=token, allowlist=allowlist)
+    except Exception:
+        return NullTelegramBridge()
+
+
+def _wire_telegram_inbound(
+    *,
+    app: FastAPI,
+    pending_store,
+    talk_db_path: Path | None,
+    outbound_bridge,
+) -> None:
+    """Construct ``InboundRouter`` + PTB ``Application`` and stash on ``app.state``.
+
+    PTB ``Application`` only built when a bot token is configured —
+    otherwise the Telegram surface is intentionally inert and the
+    Connections page reports "not configured" cleanly.
+    """
+    from selffork_orchestrator.talk.store import TalkStore
+    from selffork_orchestrator.telegram import (
+        AllowList,
+        InboundRouter,
+        NullTelegramBridge,
+        PauseSignal,
+        TelegramDraftStore,
+        default_drafts_path,
+    )
+    from selffork_orchestrator.telegram.app import (
+        TelegramAppConfig,
+        build_telegram_application,
+    )
+
+    drafts_store = TelegramDraftStore(path=default_drafts_path())
+    app.state.telegram_drafts_store = drafts_store
+
+    pause_signal = PauseSignal()
+    app.state.telegram_pause_signal = pause_signal
+
+    talk_store: TalkStore | None = None
+    if talk_db_path is not None:
+        # Surface the TalkStore so InboundRouter can resolve last_active
+        # workspace + inject inbound text. ``setup()`` is async and runs
+        # in ``lifespan``; stash a setup hook so the router can lazy-init.
+        talk_store = TalkStore(db_path=talk_db_path)
+        app.state.telegram_talk_store = talk_store
+
+    allowlist = AllowList.load()
+    inbound_router = InboundRouter(
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+    )
+    app.state.telegram_inbound_router = inbound_router
+
+    # Decide whether to build the PTB Application. ``NullTelegramBridge``
+    # means we cannot deliver outbound, and the operator has no way to
+    # send commands either — keep the inbound app off too.
+    if isinstance(outbound_bridge, NullTelegramBridge):
+        app.state.telegram_application = None
+        return
+    token = ""
+    for name in ("SELFFORK_TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_TOKEN"):
+        candidate = os.environ.get(name, "").strip()
+        if candidate:
+            token = candidate
+            break
+    if not token:
+        app.state.telegram_application = None
+        return
+    mode = os.environ.get(
+        "SELFFORK_TELEGRAM_MODE", "polling"
+    ).strip().lower()
+    webhook_url = os.environ.get(
+        "SELFFORK_TELEGRAM_WEBHOOK_URL", ""
+    ).strip() or None
+    try:
+        ptb_app = build_telegram_application(
+            config=TelegramAppConfig(
+                bot_token=token,
+                mode="webhook" if mode == "webhook" else "polling",
+                webhook_url=webhook_url,
+            ),
+            router=inbound_router,
+        )
+    except ValueError:
+        app.state.telegram_application = None
+        return
+    app.state.telegram_application = ptb_app
+
+
+def _register_drafts_routes(app: FastAPI) -> None:
+    """Talk-page drafts surface (Telegram messages with no active workspace)."""
+
+    @app.get("/api/talk/drafts")
+    async def list_drafts() -> list[dict[str, object]]:
+        store = getattr(app.state, "telegram_drafts_store", None)
+        if store is None:
+            return []
+        return [
+            {
+                "id": d.id,
+                "sender": d.sender,
+                "text": d.text,
+                "received_at": d.received_at.isoformat(),
+            }
+            for d in store.list_unclaimed()
+        ]
+
+    @app.post("/api/talk/drafts/claim")
+    async def claim_drafts(payload: dict[str, list[int]]) -> dict[str, int]:
+        store = getattr(app.state, "telegram_drafts_store", None)
+        if store is None:
+            return {"claimed": 0}
+        ids = payload.get("ids", [])
+        return {"claimed": store.claim(ids)}
 
 
 # ── API routes ────────────────────────────────────────────────────────────────

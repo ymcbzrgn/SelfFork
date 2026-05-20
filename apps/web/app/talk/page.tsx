@@ -18,14 +18,17 @@ import {
   type ChatMessageView,
 } from "@/components/talk/ChatMessage";
 import {
+  claimTelegramDrafts,
   getTalkConversation,
   listProjects,
   listTalkConversations,
+  listTelegramDrafts,
   openTalkStream,
   sendTalkMessage,
   type ConversationResponse,
   type ProjectResponse,
   type TalkMessageResponse,
+  type TelegramDraftResponse,
 } from "@/lib/api";
 
 const SLASH_CHIPS = ["/cli", "/workspace", "/pause", "/note", "/finetune"];
@@ -67,9 +70,33 @@ function messageToView(m: TalkMessageResponse): ChatMessageView {
   };
 }
 
+function useTelegramDrafts() {
+  const [drafts, setDrafts] = useState<TelegramDraftResponse[]>([]);
+  const refresh = useCallback(() => {
+    listTelegramDrafts()
+      .then(setDrafts)
+      .catch(() => setDrafts([]));
+  }, []);
+  useEffect(() => {
+    refresh();
+    const id = window.setInterval(refresh, 30_000);
+    return () => window.clearInterval(id);
+  }, [refresh]);
+  const claim = useCallback(
+    (ids: number[]) =>
+      claimTelegramDrafts(ids)
+        .then(() => refresh())
+        .catch(() => undefined),
+    [refresh],
+  );
+  return { drafts, claim };
+}
+
 export default function TalkPage() {
   const [projects, setProjects] = useState<ProjectResponse[]>([]);
   const [contextSlug, setContextSlug] = useState<string | null>(null);
+  const { drafts: telegramDrafts, claim: claimTelegramDraftIds } =
+    useTelegramDrafts();
   const [conversations, setConversations] = useState<ConversationResponse[]>(
     [],
   );
@@ -325,6 +352,45 @@ export default function TalkPage() {
             </div>
           </div>
         </header>
+
+        {telegramDrafts.length > 0 && (
+          <div className="px-gutter-desktop max-w-3xl mx-auto w-full mt-3">
+            <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-2 flex items-center justify-between gap-3">
+              <p className="text-caption text-on-surface">
+                📲 {telegramDrafts.length} Telegram message
+                {telegramDrafts.length === 1 ? "" : "s"} waiting
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="text-caption text-primary font-medium hover:underline"
+                  onClick={() => {
+                    setDraft((cur) =>
+                      cur
+                        ? `${cur}\n\n${telegramDrafts.map((d) => d.text).join("\n")}`
+                        : telegramDrafts.map((d) => d.text).join("\n"),
+                    );
+                    // S3 audit fix #9: claim drafts when the operator
+                    // pulls them into the composer; otherwise the
+                    // banner reappears on every refresh forever.
+                    void claimTelegramDraftIds(telegramDrafts.map((d) => d.id));
+                  }}
+                >
+                  Show
+                </button>
+                <button
+                  type="button"
+                  className="text-caption text-on-surface-variant hover:underline"
+                  onClick={() =>
+                    void claimTelegramDraftIds(telegramDrafts.map((d) => d.id))
+                  }
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto px-gutter-desktop py-vertical-gap">
           <div className="max-w-3xl mx-auto space-y-6 pb-32">

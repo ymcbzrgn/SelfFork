@@ -170,6 +170,41 @@ class TalkStore:
             self._conn.rollback()
             raise
 
+    async def get_last_active_workspace(self) -> str | None:
+        """Resolve the workspace slug of the most-recently-touched conversation.
+
+        Used by the Telegram inbound router (ADR-006 §4.7.3) to decide
+        where to inject a plain-text operator message. Returns ``None``
+        when no conversation has ever been bound to a workspace — the
+        caller then drops the message into the Telegram drafts queue.
+
+        S3 audit fix #5: filter ``workspace_slug IS NOT NULL`` directly
+        so a year-old pinned conversation never wins over a fresh
+        orphan — the answer reflects the most-recent *pinned* exchange,
+        not any conversation that happens to have a slug.
+        """
+        async with self._lock:
+            self._require_open()
+            row = await anyio.to_thread.run_sync(
+                self._last_active_workspace_row
+            )
+        if row is None:
+            return None
+        slug = row[0]
+        return slug if isinstance(slug, str) else None
+
+    def _last_active_workspace_row(self) -> tuple[object, ...] | None:
+        assert self._conn is not None  # noqa: S101
+        return cast(
+            "tuple[object, ...] | None",
+            self._conn.execute(
+                "SELECT workspace_slug FROM conversations "
+                "WHERE workspace_slug IS NOT NULL "
+                "ORDER BY last_message_at DESC "
+                "LIMIT 1"
+            ).fetchone(),
+        )
+
     async def list_conversations(self) -> list[Conversation]:
         """Return every conversation, most-recently-active first."""
         async with self._lock:

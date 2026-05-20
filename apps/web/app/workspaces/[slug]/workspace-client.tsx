@@ -22,6 +22,7 @@ import {
 import {
   approvePendingConfirmation,
   cancelPendingConfirmation,
+  extendPendingConfirmation,
   getProject,
   getKanban,
   getTheaterSnapshot,
@@ -206,6 +207,17 @@ function WorkspaceContent({ slug }: { slug: string }) {
         /* leave intact */
       });
   };
+  const onExtend = (id: string, hours: number) => {
+    extendPendingConfirmation(id, hours)
+      .then((updated) =>
+        setPendingList((cur) =>
+          cur.map((p) => (p.id === updated.id ? updated : p)),
+        ),
+      )
+      .catch(() => {
+        /* leave intact */
+      });
+  };
   const [theaterState, setTheaterState] =
     useState<LiveRunTheaterState | null>(null);
 
@@ -341,6 +353,7 @@ function WorkspaceContent({ slug }: { slug: string }) {
           pending={pending}
           onApprove={onApprove}
           onCancel={onCancel}
+          onExtend={onExtend}
         />
 
         <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
