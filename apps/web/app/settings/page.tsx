@@ -10,6 +10,7 @@ type Section =
   | "fine-tune"
   | "telegram"
   | "codexbar"
+  | "autonomy"
   | "theme"
   | "workspace"
   | "advanced";
@@ -19,6 +20,7 @@ const DEFAULT_OPEN: Record<Section, boolean> = {
   "fine-tune": true,
   telegram: true,
   codexbar: false,
+  autonomy: true,
   theme: false,
   workspace: false,
   advanced: false,
@@ -342,6 +344,14 @@ export default function SettingsPage() {
         </SectionCard>
 
         <SectionCard
+          id="autonomy"
+          title="Autonomy — Heartbeat (S-Auto)"
+          previewWhenClosed="Read-only · Live daemon state + persisted preset"
+        >
+          <AutonomyStatusPanel />
+        </SectionCard>
+
+        <SectionCard
           id="theme"
           title="Theme"
           previewWhenClosed="Light enterprise · Inter"
@@ -577,6 +587,233 @@ function CodexBarStatusPanel() {
       <p className="text-[11px] text-on-surface-variant/70 pt-2 border-t border-outline-variant/30">
         Read-only Wave 2 view. Version pin, auto-update toggle, and binary path
         overrides land in S4 (Settings Persistence).
+      </p>
+    </div>
+  );
+}
+
+// ── Autonomy panel (S-Auto Faz G — read-only) ─────────────────────
+
+
+interface AutonomyView {
+  preset: string;
+  enabled: boolean;
+  supervised_mode: boolean;
+  creative_dial: string;
+  creative_veto_window_hours: number;
+  tick_seconds: number;
+  reconciliation_seconds: number;
+  max_concurrency: number;
+  active_hours: string;
+  timezone: string;
+  morning_report_enabled: boolean;
+  morning_report_time: string;
+}
+
+interface HeartbeatStateView {
+  state: string;
+  is_running: boolean;
+  tick_count: number;
+  last_legal_actions: string[] | null;
+  last_decision:
+    | {
+        action: string;
+        reasoning: string;
+        fallback: boolean;
+        selected_at: string;
+      }
+    | null;
+  last_result:
+    | {
+        action: string;
+        outcome: string;
+        summary: string;
+        executed_at: string;
+      }
+    | null;
+  last_air_alert:
+    | {
+        severity: string;
+        reason: string;
+        consecutive_failures: number;
+        recommended_recovery: string;
+      }
+    | null;
+}
+
+function AutonomyStatusPanel() {
+  const [autonomy, setAutonomy] = useState<AutonomyView | null>(null);
+  const [state, setState] = useState<HeartbeatStateView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const [a, s] = await Promise.all([
+          fetch("/api/heartbeat/autonomy"),
+          fetch("/api/heartbeat/state"),
+        ]);
+        if (!a.ok) throw new Error(`autonomy_http_${a.status}`);
+        if (!s.ok) throw new Error(`state_http_${s.status}`);
+        const aBody = (await a.json()) as AutonomyView;
+        const sBody = (await s.json()) as HeartbeatStateView;
+        if (!cancelled) {
+          setAutonomy(aBody);
+          setState(sBody);
+          setError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "fetch_failed");
+        }
+      }
+    };
+    void tick();
+    const id = window.setInterval(() => void tick(), 15_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  if (error) {
+    return (
+      <div className="pt-4 text-caption text-on-surface-variant italic">
+        Couldn’t reach /api/heartbeat/* ({error}). SelfFork dashboard
+        running?
+      </div>
+    );
+  }
+  if (!autonomy || !state) {
+    return (
+      <div className="pt-4 text-caption text-on-surface-variant italic">
+        Reading heartbeat state…
+      </div>
+    );
+  }
+
+  const stateColor: Record<string, string> = {
+    running: "text-success",
+    starting: "text-amber-600",
+    stopping: "text-amber-600",
+    stopped: "text-on-surface-variant",
+    inactive: "text-on-surface-variant",
+    disabled: "text-on-surface-variant",
+    failed: "text-error",
+  };
+  const color = stateColor[state.state] ?? "text-on-surface";
+  const airColor: Record<string, string> = {
+    medium: "text-amber-600",
+    high: "text-error",
+    critical: "text-error",
+  };
+  return (
+    <div className="pt-4 space-y-4 text-caption text-on-surface">
+      <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
+        <div className="flex gap-2">
+          <dt className="text-on-surface-variant w-36">Daemon state:</dt>
+          <dd className={`${color} font-bold uppercase tracking-wide`}>
+            {state.state}
+          </dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="text-on-surface-variant w-36">Tick count:</dt>
+          <dd className="font-mono">{state.tick_count}</dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="text-on-surface-variant w-36">Preset:</dt>
+          <dd className="font-bold uppercase tracking-wide">
+            {autonomy.preset}
+          </dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="text-on-surface-variant w-36">Enabled:</dt>
+          <dd>{autonomy.enabled ? "yes" : "no"}</dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="text-on-surface-variant w-36">Supervised:</dt>
+          <dd>{autonomy.supervised_mode ? "yes (Denetimli)" : "no"}</dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="text-on-surface-variant w-36">Creative dial:</dt>
+          <dd className="font-mono">{autonomy.creative_dial}</dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="text-on-surface-variant w-36">Tick:</dt>
+          <dd className="font-mono">{autonomy.tick_seconds}s</dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="text-on-surface-variant w-36">Reconciliation:</dt>
+          <dd className="font-mono">{autonomy.reconciliation_seconds}s</dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="text-on-surface-variant w-36">Concurrency cap:</dt>
+          <dd className="font-mono">{autonomy.max_concurrency}</dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="text-on-surface-variant w-36">Active hours:</dt>
+          <dd className="font-mono">
+            {autonomy.active_hours} · {autonomy.timezone}
+          </dd>
+        </div>
+      </dl>
+
+      {state.last_decision && (
+        <div className="rounded border border-outline-variant/40 px-3 py-2 bg-surface-1">
+          <div className="text-on-surface-variant text-[11px] uppercase tracking-wide mb-1">
+            Last decision
+          </div>
+          <div>
+            <span className="font-mono">{state.last_decision.action}</span>
+            {state.last_decision.fallback && (
+              <span className="ml-2 text-amber-600">(fallback)</span>
+            )}
+          </div>
+          <div className="text-on-surface-variant text-[12px] mt-1">
+            {state.last_decision.reasoning}
+          </div>
+        </div>
+      )}
+
+      {state.last_result && (
+        <div className="rounded border border-outline-variant/40 px-3 py-2 bg-surface-1">
+          <div className="text-on-surface-variant text-[11px] uppercase tracking-wide mb-1">
+            Last result
+          </div>
+          <div>
+            <span className="font-mono">{state.last_result.action}</span>
+            <span className="ml-2 uppercase tracking-wide">
+              {state.last_result.outcome}
+            </span>
+          </div>
+          <div className="text-on-surface-variant text-[12px] mt-1">
+            {state.last_result.summary}
+          </div>
+        </div>
+      )}
+
+      {state.last_air_alert && (
+        <div className="rounded border border-error/60 px-3 py-2 bg-error/10">
+          <div
+            className={`${airColor[state.last_air_alert.severity] ?? "text-error"} text-[11px] uppercase tracking-wide mb-1 font-bold`}
+          >
+            🚨 AIR alert · {state.last_air_alert.severity}
+          </div>
+          <div className="text-[12px]">
+            {state.last_air_alert.reason} (consecutive failures:{" "}
+            {state.last_air_alert.consecutive_failures})
+          </div>
+          <div className="text-on-surface-variant text-[12px] mt-1">
+            {state.last_air_alert.recommended_recovery}
+          </div>
+        </div>
+      )}
+
+      <p className="pt-2 text-on-surface-variant italic">
+        Live read-only view. Preset switching + power-user knob edit lands
+        in S4 (Settings Persistence). Until then, ``PUT /api/heartbeat/
+        autonomy`` accepts the same shape this panel renders.
       </p>
     </div>
   );

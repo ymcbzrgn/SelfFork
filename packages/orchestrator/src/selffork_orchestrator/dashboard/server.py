@@ -166,6 +166,17 @@ def build_app(config: DashboardConfig) -> FastAPI:
 
     codexbar_server = build_default_codexbar_server()
 
+    # S-Auto Faz A — Heartbeat scheduler. Constructed eagerly (no side
+    # effects); booted by ``lifespan`` AFTER CodexBar + Telegram so
+    # the daemon sees a fully-up dependency graph. Default opt-in
+    # (``SELFFORK_HEARTBEAT_ENABLED=true``); a disabled scheduler is
+    # a no-op at start/stop time so the unconditional wire is safe.
+    from selffork_orchestrator.heartbeat.config import (
+        build_default_heartbeat,
+    )
+
+    heartbeat = build_default_heartbeat()
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         # Late-bound — the inbound app is configured only after
@@ -175,6 +186,7 @@ def build_app(config: DashboardConfig) -> FastAPI:
         expire_task: asyncio.Task | None = None
         pending_store = getattr(_app.state, "pending_confirmation_store", None)
         codexbar_server = getattr(_app.state, "codexbar_server", None)
+        heartbeat = getattr(_app.state, "heartbeat", None)
         try:
             # S-Quota Faz B/E — boot the CodexBar sidecar first so the
             # secondary quota source is up before anything starts serving
@@ -212,8 +224,25 @@ def build_app(config: DashboardConfig) -> FastAPI:
                 expire_task = asyncio.create_task(
                     expire_loop(store=pending_store, interval_seconds=60.0)
                 )
+            # S-Auto Faz A — Heartbeat boots last so the daemon sees a
+            # fully-up dependency graph (CodexBar quota signal +
+            # Telegram bridge). ``start`` is a no-op when the daemon
+            # is disabled via env; any failure logs + leaves the rest
+            # of the dashboard serving HTTP.
+            if heartbeat is not None:
+                try:
+                    await heartbeat.start()
+                except Exception:
+                    _log.exception("heartbeat_start_failed")
             yield
         finally:
+            # Heartbeat stops first — releases the outer loop cleanly
+            # before its dependencies (Telegram outbound bridge,
+            # CodexBar quota reader) tear down. ``stop`` is idempotent
+            # and preserves the ``DISABLED`` terminal state.
+            if heartbeat is not None:
+                with contextlib.suppress(Exception):
+                    await heartbeat.stop()
             if expire_task is not None:
                 expire_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):
@@ -244,6 +273,21 @@ def build_app(config: DashboardConfig) -> FastAPI:
     app.state.telegram_outbound_bridge = wrapped_bridge
     app.state.telegram_activity_log = telegram_activity_log
     app.state.codexbar_server = codexbar_server
+    app.state.heartbeat = heartbeat
+
+    # S-Auto Faz G — AutonomyStore + heartbeat router. The router is
+    # stateless apart from the store handle; the daemon scheduler is
+    # passed for the live state endpoint.
+    from selffork_orchestrator.dashboard.heartbeat_router import (
+        build_heartbeat_router,
+    )
+    from selffork_orchestrator.heartbeat.autonomy import AutonomyStore
+
+    autonomy_store = AutonomyStore.default()
+    app.state.heartbeat_autonomy_store = autonomy_store
+    app.include_router(
+        build_heartbeat_router(store=autonomy_store, scheduler=heartbeat),
+    )
     # Permissive CORS for local dev (Next.js dev server on a different
     # port). Production static-export build is same-origin so this has
     # no effect there.

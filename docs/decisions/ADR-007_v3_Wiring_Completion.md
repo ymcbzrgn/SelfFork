@@ -357,6 +357,68 @@ yapar.
 
 **Bağımlılık:** S2 (theater), S6 (Switch CLI router override).
 
+### S-Auto — Self Jr Heartbeat (ADR-008 §3-§5)
+
+**Hedef:** Mevcut round-loop'un (iç döngü) üstüne **dış döngü**
+(Heartbeat) ekle: ADR-008'in tam implementasyonu. perceive → decide →
+act → record nabzı, 8 closed-set eylem, deterministik filter + model
+seçer hibrit kontrol-loop. Operatör onayında §11 8 sorunun hepsi
+çözüldü (§14 #5 "tek geniş sprint", §11 #4 "spark_only" pre-M7 default).
+
+**Bağımlılık:** S2 (theater), S3 (warden + Telegram outbound), S-Quota
+W1+W2 (proactive_source quota signal — Heartbeat'in kota geçidi).
+
+**Tamamlandı (8 Faz tek sprint, 2026-05-23):**
+
+* **Faz A — Scheduler**: `heartbeat/scheduler.py` + `config.py`.
+  HeartbeatScheduler StrEnum lifecycle + event queue + reconciliation
+  timer + pause/active-hours gate + 6 env switch.
+* **Faz B — Legal-action filter**: `actions.py` (8 LegalAction enum) +
+  `filter.py` (WorldState + LegalActionFilter 5 deterministik kural).
+  ADR-008 §7 Lock #3 — model only selects from this filter's frozenset.
+* **Faz C — Deliberation**: `deliberation.py` (ActionDecision +
+  DeliberationLayer + Speaker Protocol reuse). Orient→Check→Decide
+  prompt + JSON parse + fail-safe WAIT fallback.
+* **Faz D — Eylem sözlüğü**: `executor.py` (8 ActionExecutor handler +
+  callable injection). Lock #4 — destructive guard subprocess path'inde
+  hâlâ tetikleniyor (bypass yok).
+* **Faz E — Audit + checkpoint + AIR**: `audit.py` (AuditEntry JSONL) +
+  `checkpoint.py` (atomic temp/rename) + `air.py` (panic-keyword +
+  sustained-failure detector + critical Telegram alert + cooperative
+  self-stop). Researcher gap (arXiv 2602.11749 AIR) kapatıldı.
+* **Faz F — Creative mode**: `creative.py` (IdeaSize + CreativeScopeGate
+  3-tier B*C mix + IdeationManager Lab workspace persistence). Pre-M7
+  default `spark_only` (operator §11 #4).
+* **Faz G — Settings panel**: `autonomy.py` (4 preset + YAML store +
+  apply_preset) + `dashboard/heartbeat_router.py` (GET/PUT autonomy +
+  GET state + POST preset) + `apps/web/app/settings/page.tsx` Autonomy
+  accordion (read-only; edit lands in S4).
+* **Faz H — Smoke + audit-god + memory + commit-ready**: bu satır +
+  M6_Smoke_Checklist.md S-Auto bölümü + project memory entry.
+
+**Smoke gate:** `M6_Smoke_Checklist.md` § S-Auto (Senaryo a-h hepsi
+PASS). Backend: 1497 test (önceki 1286 + 211 yeni heartbeat). Frontend
+tsc clean. Audit-god 0 CRITICAL.
+
+**S-Auto sonrası deferred:**
+
+* Dashboard Faz H wire — `app.state.heartbeat` daemon'a Telegram
+  bridge + task_starter + kanban_card_creator inject (Faz D handler
+  `skipped` yerine `executed` olur). S4 ile birlikte tamamlanır.
+* Autonomy Settings UI **edit** (preset switcher + knob inputs) — S4
+  (Settings Persistence).
+* Heartbeat hot-reload — PUT /autonomy şu an restart gerektiriyor.
+* S6 CLI router RAG affinity — `cli_seç` action gerçek implementasyon.
+* Audit log rotation / size cap.
+* M7 dataset SSOT pipeline — Heartbeat audit.jsonl → eğitim verisi.
+
+### S-Memory — Cross-CLI shared memory (ADR-002 implement)
+
+**Hedef:** Operator'un 2026-05-23 direktifi: Hivemind sadece ÖRNEKTİ,
+ek açık-kaynak araştırması + **iki ortogonal pool** (proje-bazlı +
+genel global). S-Auto sonrası S4 öncesi başlar; S6 RAG-affinity'nin
+ön-koşulu. Detay `[[s-memory-scope-2026-05-23]]` memory.
+
 ### S8 — Dashboard Activity + Final Cleanup
 
 **Hedef:** Son aktivite feed'i + kalan tüm dead button (topbar/sidebar).

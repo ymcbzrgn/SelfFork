@@ -544,22 +544,45 @@ eder veya değiştirir:
   (`MlxServerRuntime`) ve Talk (`SpeakerClient`) ayrı; Heartbeat tek bir
   "Self Jr" arayüzü ister. *Mitigasyon:* S-Auto sprint'inin ilk işi bu
   birleştirme; explorer-god ile entegrasyon yüzeyi netleştirilir.
+  *Çözüm (2026-05-23):* S-Auto Faz C; Heartbeat connect-only
+  `SpeakerClient` reuse + `Speaker` Protocol ile ortak yüzey.
 - **Sprint kayması.** S-Auto, S2+S3'e bağımlı; onlar fail ederse S-Auto
   başlamaz (ADR-007 §9 disiplini).
+- **M7 sonrası safety drift (Misevolution).** arXiv 2509.26354 (Eylül
+  2025, USENIX Sec '25): LLM agent'ın bellek/araç/iş akışı evrimi
+  sırasında safety alignment'ı düşebilir. Heartbeat audit.jsonl M7
+  fine-tune dataset'inin SSOT'su olduğu için, *fine-tune sonrası
+  periyodik safety re-alignment check* gerekir. *Mitigasyon (deferred):*
+  M7 öncesi yeni ADR maddesi — kalibrasyon kadansı (ör. her 1000 tick'te
+  bir held-out behavior eval). Faz E AIR detector bu evrime karşı
+  birinci-katman koruma; periyodik re-alignment ikinci-katman.
 
 ---
 
 ## 13. Onay
 
-Bu ADR **operatör onayını bekleyen V1 taslaktır.** Otonomi tasarımının
-ana hatları 2026-05-18 oturumunda iteratif onaylandı (Yol A; B×C kademeli
-yaratıcı otonomi); bu doküman onları formalize eder ve §7 Karar Bloğu +
-§11 Açık Sorular operatör onayında kilitlenir.
+Bu ADR **2026-05-23'te operatör onaylı + S-Auto sprint tamamlandı.**
+§7 12 Karar Bloğu kilitli; §11 8 Açık Soru operatör cevaplarıyla
+çözüldü:
 
-Onay sonrası: ADR-007 §4/§6 `S-Auto` içerecek şekilde güncellenir;
-`docs/plans/M6_Smoke_Checklist.md`'ye S-Auto smoke senaryosu eklenir;
-yeni memory girdisi (`[[autonomy-heartbeat]]`) yazılır.
+- #1 Reconciliation timer: 10-15 dk (default 600s, Settings'te ayar).
+- #2 Eşzamanlılık sınırı: 1 (Settings'te artırılır).
+- #3 Veto penceresi: 4h (ADR-006 §4.5 ile tutarlı).
+- #4 Yaratıcı kadran pre-M7: `spark_only` (sadece-fikir; Settings'ten
+  4 kademe ayarlanabilir — operatör direktifi).
+- #5 Sprint yapısı: **tek geniş S-Auto** (executive + creative + settings
+  birlikte).
+- #6 İsim: "Heartbeat" korundu (enterprise tutarlılık; ADR-008 §12'ye
+  Letta-deprecate notu eklendi).
+- #7 Aktif-saat: 7/24 default.
+- #8 Default preset: `dengeli` (executive açık, destructive-confirmed,
+  yaratma kapalı).
+
+Implementation 8 faz tek sprint'te tamamlandı (Faz A scheduler → Faz H
+smoke). Tüm S-Auto memory entry'si: `[[s-auto-complete-2026-05-23]]`.
+Smoke gate: `docs/plans/M6_Smoke_Checklist.md` § S-Auto.
 
 İlgili: `ADR-006_v2_Pivot.md` (§2, §4.5, §5.1.1), `ADR-007_v3_Wiring_Completion.md`,
 `[[full-autonomy-soft-confirm-4h]]`, `[[infra-before-finetune]]`,
-`[[yamac-jr-is-user-simulator]]`.
+`[[yamac-jr-is-user-simulator]]`, `[[s-auto-complete-2026-05-23]]`,
+`[[s-memory-scope-2026-05-23]]` (sıradaki sprint).

@@ -568,3 +568,161 @@ mevcut tests opt-out default'a göre güncellendi).
   görünürse Wave 3'te).
 - Settings'te edit + auto-update toggle + binary path override — S4
   (Settings Persistence) sprint'inde.
+
+---
+
+## S-Auto — Self Jr Heartbeat (ADR-008 §3-§5, 8 Faz Tek Sprint)
+
+**Hedef:** Mevcut round-loop'un üstüne **dış döngü** (Heartbeat)
+ekleme — *perceive → decide → act → record* nabzı ile "hangi proje /
+task / şimdi mi bekle mi" otonom kararı. ADR-008 §7 12 lock onaylı,
+§11 8 açık soru çözüldü (operator + researcher synthesis):
+* #4 yaratıcı kadran: pre-M7 default `SPARK_ONLY` (sadece-fikir),
+  Settings'ten 4 kademe ayarlanabilir.
+* #5 sprint yapısı: **tek geniş S-Auto** (executive + creative birlikte).
+* #6 isim: `Heartbeat` korundu (enterprise tutarlılık; ADR-008 §13'e
+  Letta-deprecate açıklaması eklendi).
+
+**Ön-koşul (smoke için):**
+
+- §0 (backend + frontend up).
+- Heartbeat default opt-in (Wave 1 disiplini):
+  `SELFFORK_HEARTBEAT_ENABLED=true` env set veya `~/.selffork/heartbeat/
+  autonomy.yaml` exists ile `enabled=true`.
+- Speaker endpoint (deliberation wire için): `SELFFORK_TALK_MODEL_ENDPOINT`
+  + `SELFFORK_TALK_MODEL` set; yoksa daemon tick atar ama decide stage
+  yapmaz (Faz B observe-only).
+- `~/.selffork/heartbeat/` writable (audit.jsonl + checkpoint.json
+  yazımı için).
+- Pause flag yolu: `~/.selffork/pause.flag` (S3 `PauseSignal` reuse).
+
+**Senaryo (a) — Daemon boot + observe (Faz A scaffold):**
+
+1. `SELFFORK_HEARTBEAT_ENABLED=true selffork ui --port 8765` başlat.
+2. Lifespan log'larında `heartbeat_started` (tick_seconds + active_hours
+   + timezone payload'ı) görmek gerek.
+3. `curl http://127.0.0.1:8765/api/heartbeat/state` → `state: "running"`,
+   `tick_count >= 1` (kısa bekleme sonrası).
+4. `SELFFORK_HEARTBEAT_ENABLED` unset → `heartbeat_skipped_disabled`;
+   `/api/heartbeat/state` → `state: "disabled"`.
+
+**Senaryo (b) — Pause flag short-circuit (Faz A reaktif gate):**
+
+1. Daemon running.
+2. `touch ~/.selffork/pause.flag`.
+3. Tick'ler `tick_count` artırmıyor (perceive stage'de short-circuit;
+   filter çağrılmıyor → `last_legal_actions` None kalıyor).
+4. `rm ~/.selffork/pause.flag` → tick'ler devam ediyor.
+
+**Senaryo (c) — Legal-action filter rules (Faz B):**
+
+1. Daemon running, kanban event'i submit et:
+   ```bash
+   curl -X POST http://127.0.0.1:8765/api/heartbeat/state  # no-op; rely on internal events
+   ```
+2. `last_legal_actions` populated; default WorldStateBuilder'da
+   `creative_mode_enabled=False` → `fikirleş` set'te değil.
+3. Pause aktif → set sadece `{bekle, kendini_durdur}`.
+4. Tüm CLI quotas 99% → `task_başlat` ve `cli_seç` set'ten çıkar.
+
+**Senaryo (d) — Deliberation layer (Faz C):**
+
+1. `SELFFORK_TALK_MODEL_ENDPOINT=http://localhost:11434/v1
+   SELFFORK_TALK_MODEL=gemma3:2b SELFFORK_HEARTBEAT_ENABLED=true selffork ui`
+   başlat.
+2. Bir kanban event'i veya reconciliation timer tetikle.
+3. `/api/heartbeat/state` → `last_decision.action` (modelin seçtiği
+   eylem) + `last_decision.reasoning` (kısa Türkçe gerekçe).
+4. Model unhealthy ise `last_decision.fallback=true` + action=WAIT.
+
+**Senaryo (e) — Action executor (Faz D):**
+
+1. Yukarıdaki state'de `last_result.outcome` ∈ {executed, deferred,
+   skipped, failed}.
+2. WAIT/SELF_STOP → executed (pure).
+3. TASK_START/OPERATOR_ASK/KANBAN_SUGGEST → callable wired değilse
+   `skipped` (Faz H dashboard wire yapacak).
+4. SESSION_RESUME / CLI_SELECT / IDEATE → `deferred` (Faz F'de IDEATE
+   `executed` döner).
+
+**Senaryo (f) — Audit + checkpoint + AIR (Faz E):**
+
+1. Daemon tick atınca `~/.selffork/heartbeat/audit.jsonl` dosyasında
+   her tick için JSON-line eklendi:
+   ```bash
+   tail -1 ~/.selffork/heartbeat/audit.jsonl | jq .
+   # {tick, timestamp, trigger, world_state, legal_actions,
+   #  decision_action, decision_reasoning, result_outcome,
+   #  result_metadata, air_alert, idempotency_key}
+   ```
+2. `~/.selffork/heartbeat/checkpoint.json` her tick refresh oldu
+   (`{step, progress, next_action, updated_at}`).
+3. AIR test: Speaker'a "I am panicking and covering up the failure"
+   gerekçesi döndüren stub bağla → daemon self-stop, `last_air_alert`
+   populated (severity=high), emergency Telegram (bridge wired'sa)
+   mesajı gönderildi.
+
+**Senaryo (g) — Creative mode (Faz F):**
+
+1. `~/.selffork/heartbeat/autonomy.yaml` yaz:
+   ```yaml
+   preset: tam
+   enabled: true
+   creative_dial: spark_only
+   ```
+2. Daemon restart → builder Settings'ten okur, creative_mode_enabled=True.
+3. Idle tick'te IDEATE seçildiğinde `~/.selffork/lab/ideas/<date>-<size>-<id>.md`
+   dosyası yazıldı (`spark_only` default Faz F için).
+4. Idea text "new project: ..." içeriyorsa size=large; word_count>180 ise large.
+
+**Senaryo (h) — Settings panel (Faz G):**
+
+1. `curl http://127.0.0.1:8765/api/heartbeat/autonomy` → 4 preset
+   default (`dengeli` when no YAML).
+2. `curl -X POST http://127.0.0.1:8765/api/heartbeat/autonomy/preset/tam`
+   → `~/.selffork/heartbeat/autonomy.yaml` yazıldı, response
+   `{preset: tam, creative_dial: spark_only, ...}`.
+3. `curl -X PUT http://127.0.0.1:8765/api/heartbeat/autonomy
+   -d '{"preset":"dengeli","enabled":true,...}'` → persist + return.
+4. Settings page'inde Autonomy accordion açık (preset + creative dial +
+   tick + reconciliation + concurrency + active hours render); 15 sn
+   poll; "edit lands in S4" notu.
+5. Daemon restart sonrası YAML değişikliği effect (Faz G hot-reload
+   yapmıyor; persist now, effect next boot).
+
+**Backend testi:**
+```bash
+.venv/bin/python -m pytest packages/orchestrator/tests/heartbeat/ -q
+```
+→ **211 heartbeat test passed** (Faz A 19 + Faz B 32 + Faz C 22 + Faz D
+28 + Faz E 53 + Faz F 26 + Faz G 31).
+Full suite:
+```bash
+.venv/bin/python -m pytest packages/orchestrator/tests/ packages/body/tests/ -q
+```
+→ **1497 passed** (önceki 1286 + 211 yeni). `ruff` + `mypy` + `tsc` temiz
+(13 heartbeat source files 0 mypy hata, ruff All checks passed).
+
+**PASS kriteri:**
+
+- Senaryo (a)-(h) hepsi PASS.
+- audit-god rigorous review 0 CRITICAL bulgu.
+- Full backend + tsc + ruff + mypy temiz.
+- Audit JSONL + checkpoint JSON persist + read-back roundtrip ok.
+- AIR panic-detect daemon halt + emergency Telegram alert wired'sa.
+- 4 preset POST /api/heartbeat/autonomy/preset/{name} ile YAML yazımı.
+
+**Kapsam dışı (S-Auto sonrası sprintler):**
+
+- Dashboard'un Faz H wire'ları (lifespan'da TelegramBridge / task_starter /
+  kanban_card_creator inject) S4'le birlikte tamamlanır.
+- Autonomy Settings UI **edit** (preset switcher dropdown + knob inputs)
+  S4 (Settings Persistence) sprint'inde.
+- Heartbeat hot-reload (PUT /autonomy effect immediately) deferred.
+- S6 CLI router gerçek RAG affinity — şu an `cli_seç` deferred.
+- Audit log rotation / size cap — long-running production deferred.
+- M7 Reflex fine-tune entegrasyonu (Heartbeat audit JSONL → M7 dataset
+  SSOT) — ADR-008 §9 madde gereği.
+- ADR-007 §4'e S-Auto sprint blok eklenmesi (sprint sonu commit ayrı).
+- Sabah raporu (`/api/heartbeat/morning-report`) — Autonomy panel'da
+  flag var ama generator deferred.

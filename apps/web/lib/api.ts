@@ -815,3 +815,84 @@ export function talkStreamUrl(conversationId: string): string {
 export function openTalkStream(conversationId: string): WebSocket {
   return new WebSocket(talkStreamUrl(conversationId));
 }
+
+// ── Heartbeat (S-Auto Faz G) ─────────────────────────────────────
+
+export type AutonomyPreset = "kapalı" | "denetimli" | "dengeli" | "tam";
+
+export type CreativeDial = "closed" | "spark_only" | "gradient" | "full";
+
+export interface AutonomySettings {
+  preset: AutonomyPreset;
+  enabled: boolean;
+  supervised_mode: boolean;
+  creative_dial: CreativeDial;
+  creative_veto_window_hours: number;
+  tick_seconds: number;
+  reconciliation_seconds: number;
+  max_concurrency: number;
+  active_hours: string;
+  timezone: string;
+  morning_report_enabled: boolean;
+  morning_report_time: string;
+}
+
+export interface ActionDecisionPayload {
+  action: string;
+  reasoning: string;
+  fallback: boolean;
+  selected_at: string;
+}
+
+export interface ActionResultPayload {
+  action: string;
+  outcome: "executed" | "deferred" | "skipped" | "failed";
+  summary: string;
+  metadata: Record<string, unknown>;
+  executed_at: string;
+}
+
+export interface AIRAlertPayload {
+  severity: "medium" | "high" | "critical";
+  reason: string;
+  matched_keywords: string[];
+  consecutive_failures: number;
+  detected_at: string;
+  recommended_recovery: string;
+}
+
+export interface HeartbeatStateResponse {
+  state: string;
+  is_running: boolean;
+  tick_count: number;
+  last_legal_actions: string[] | null;
+  last_decision: ActionDecisionPayload | null;
+  last_result: ActionResultPayload | null;
+  last_air_alert: AIRAlertPayload | null;
+}
+
+export function getHeartbeatAutonomy(): Promise<AutonomySettings> {
+  return request<AutonomySettings>("/api/heartbeat/autonomy");
+}
+
+export function putHeartbeatAutonomy(
+  payload: AutonomySettings,
+): Promise<AutonomySettings> {
+  return request<AutonomySettings>("/api/heartbeat/autonomy", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function applyHeartbeatPreset(
+  preset: AutonomyPreset,
+): Promise<AutonomySettings> {
+  return request<AutonomySettings>(
+    `/api/heartbeat/autonomy/preset/${encodeURIComponent(preset)}`,
+    { method: "POST" },
+  );
+}
+
+export function getHeartbeatState(): Promise<HeartbeatStateResponse> {
+  return request<HeartbeatStateResponse>("/api/heartbeat/state");
+}
