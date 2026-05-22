@@ -13,11 +13,14 @@ import { QueryClientProvider } from "@tanstack/react-query";
 
 import { queryClient } from "@/lib/query";
 import { SidebarProvider } from "@/components/layout/sidebar-context";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 export function CockpitProviders({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <SidebarProvider>{children}</SidebarProvider>
+      <TooltipProvider>
+        <SidebarProvider>{children}</SidebarProvider>
+      </TooltipProvider>
     </QueryClientProvider>
   );
 }

@@ -19,6 +19,11 @@ import {
 } from "lucide-react";
 
 import { getHealth, getPendingConfirmationCount } from "@/lib/api";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface TopBarProps {
   /** Page title shown on the left. Defaults to "Dashboard". */
@@ -100,25 +105,32 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
       </div>
 
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full relative"
-          aria-label={
-            pendingCount
-              ? `Notifications, ${pendingCount} pending`
-              : "Notifications"
-          }
-        >
-          <Bell
-            className="h-5 w-5 text-on-surface-variant"
-            strokeWidth={1.75}
-          />
-          {pendingCount > 0 && (
-            <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 bg-error text-white text-[10px] flex items-center justify-center rounded-full font-bold tabular-nums">
-              {pendingCount}
-            </span>
-          )}
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+              aria-label={
+                pendingCount
+                  ? `Notifications, ${pendingCount} pending`
+                  : "Notifications"
+              }
+            >
+              <Bell
+                className="h-5 w-5 text-on-surface-variant"
+                strokeWidth={1.75}
+              />
+              {pendingCount > 0 && (
+                <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 bg-error text-white text-[10px] flex items-center justify-center rounded-full font-bold tabular-nums">
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" align="center">
+            {pendingCount ? `Notifications (${pendingCount} pending)` : "Notifications"}
+          </TooltipContent>
+        </Tooltip>
 
         <div
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${
@@ -137,27 +149,41 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
           </span>
         </div>
 
-        <button
-          type="button"
-          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full"
-          aria-label="System status"
-        >
-          <ServerCog
-            className="h-5 w-5 text-on-surface-variant"
-            strokeWidth={1.75}
-          />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+              aria-label="System status"
+            >
+              <ServerCog
+                className="h-5 w-5 text-on-surface-variant"
+                strokeWidth={1.75}
+              />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" align="center">
+            System status
+          </TooltipContent>
+        </Tooltip>
 
-        <button
-          type="button"
-          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full"
-          aria-label="Help and keyboard shortcuts"
-        >
-          <HelpCircle
-            className="h-5 w-5 text-on-surface-variant"
-            strokeWidth={1.75}
-          />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+              aria-label="Help and keyboard shortcuts"
+            >
+              <HelpCircle
+                className="h-5 w-5 text-on-surface-variant"
+                strokeWidth={1.75}
+              />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" align="center">
+            Help & shortcuts
+          </TooltipContent>
+        </Tooltip>
 
         <div
           aria-label="Local operator"
