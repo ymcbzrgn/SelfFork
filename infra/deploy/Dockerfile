@@ -95,6 +95,16 @@ COPY --chown=selffork:selffork apps/ ./apps/
 COPY --chown=selffork:selffork docs/ ./docs/
 COPY --chown=selffork:selffork infra/ ./infra/
 
+# CodexBar vendored CLI binary (ADR-007 §4 S-Quota,
+# `[[codexbar-adoption-2026-05-22]]`). The install script reads the
+# pinned manifest, downloads the Linux tarball matching this image's
+# arch, and verifies the sha256 before extracting to /usr/local/bin.
+# Build fails closed when checksums are unpinned — operator must run
+# ``scripts/refresh-codexbar-checksums.sh <vTag>`` before the first
+# image build.
+RUN /bin/bash infra/deploy/scripts/install-codexbar.sh \
+    && /usr/local/bin/codexbar --help >/dev/null
+
 USER selffork
 
 # Python deps via uv (orchestrator + body + reflex + telegram packages)

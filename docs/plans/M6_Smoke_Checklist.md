@@ -406,3 +406,99 @@ finding). `tsc --noEmit` temiz.
 - Settings UI'da destructive whitelist düzenleyici (S4).
 - Webhook setup wizard tam akışı (S5'in `setupTelegram` yolu zaten
   endpoint'i yazıyor, prod URL wizard'ı S5'te tamamlanacak).
+
+---
+
+## S-Quota — CodexBar Sidecar Wave 1 (Backend)
+
+**Hedef:** SelfFork snapper'larının yanına `codexbar serve` sidecar'ı
+adapter-shim olarak yerleştirmek — `[[codexbar-adoption-2026-05-22]]`.
+SelfFork snappers PRIMARY (sub-second tail), CodexBar SECONDARY (40+
+provider coverage, Gemini için OTel telemetry off durumunda CodexBar
+gerçek quota dönüyor).
+
+**Ön-koşul (smoke için):**
+
+- `codexbar` binary'si PATH'te (dev: `make install-codexbar` veya
+  `./infra/deploy/scripts/install-codexbar.sh --prefix ~/.local/bin`).
+  Docker image build'inde Dockerfile otomatik vendor eder
+  (checksums pinned olduğunda).
+- `infra/deploy/codexbar/manifest.toml` v0.27.0 pin'i + sha256'lar
+  doluysa (yoksa `refresh-codexbar-checksums.sh v0.27.0` ile doldur).
+- Env (default'lar OK; override etmek istersen):
+  - `SELFFORK_CODEXBAR_ENABLED=true` (default; binary varsa otomatik)
+  - `SELFFORK_CODEXBAR_PORT=8766` (default)
+  - `SELFFORK_CODEXBAR_BIN=/path/to/codexbar` (PATH override)
+  - `SELFFORK_CODEXBAR_REFRESH_INTERVAL=60` (serve cache TTL)
+  - `SELFFORK_CODEXBAR_READINESS_TIMEOUT=8.0` (probe budget)
+
+**Senaryo (a) — Sidecar boot:**
+
+1. `selffork ui --port 8765` başlat.
+2. Lifespan log'larında `codexbar_sidecar_started` (port=8766) görmen
+   gerek (binary varsa). Binary yoksa `codexbar_sidecar_skipped` +
+   "binary not resolved" — dashboard yine de tam çalışır.
+3. `curl http://127.0.0.1:8766/health` → 200.
+
+**Senaryo (b) — Gemini fallback (telemetry OFF):**
+
+1. `~/.gemini/telemetry.log` yok (default kurulumda OTel açık değil).
+2. `selffork-orchestrator` Python REPL:
+   ```python
+   from selffork_orchestrator.usage.codexbar_fallback import build_codexbar_fallback_reader
+   from selffork_orchestrator.usage.proactive import ProactiveUsageReader
+   reader = build_codexbar_fallback_reader(
+       primary=ProactiveUsageReader(),
+       codexbar_base_url="http://127.0.0.1:8766",
+   )
+   import asyncio; snap = asyncio.run(reader.read("gemini-cli"))
+   print(snap.source if snap else "no data")
+   ```
+3. Gemini'de OAuth kurulu + CodexBar configured ise:
+   `codexbar:openai-web` (veya `codexbar:oauth`) source label ile snapshot.
+4. Hiçbir yapılandırma yoksa → `None` (dürüst).
+
+**Senaryo (c) — Source label primary kazanıyor:**
+
+1. SelfFork snapper (`claude_snap.sh`) çalışıyor +
+   `~/.selffork/cli-state/claude-code.json` güncel.
+2. Aynı REPL ile `await reader.read("claude-code")` → snapshot'ın
+   `source` alanı `selffork-snapper` (veya benzeri SelfFork iç-source
+   etiketi) olmalı. CodexBar payload'ı vardır ama PRIMARY snapshot
+   wins.
+
+**Senaryo (d) — Graceful degradation:**
+
+1. `SELFFORK_CODEXBAR_ENABLED=false` ile dashboard restart.
+2. `codexbar_sidecar_skipped` log'unu gör.
+3. UsageAggregator + ProactiveUsageReader hâlâ çalışır (SelfFork
+   snappers primary). Hiçbir HTTP endpoint kırılmaz.
+
+**Backend testi:**
+```bash
+.venv/bin/python -m pytest packages/orchestrator/tests/snappers/test_codexbar.py \
+    packages/orchestrator/tests/snappers/test_codexbar_server.py \
+    packages/orchestrator/tests/usage/test_codexbar_fallback.py -q
+```
+→ 36 yeni test (14 snapper + 13 sidecar + 9 fallback).
+Full suite: **1285 passed**. ruff + mypy + tsc temiz.
+
+**PASS kriteri:**
+
+- Senaryo (a) sidecar boot + health 200.
+- Senaryo (b) Gemini için CodexBar fallback kuralı (telemetry off →
+  CodexBar primary olur).
+- Senaryo (c) primary kuralı (SelfFork snapper var → CodexBar geri
+  düşer).
+- Senaryo (d) binary yok → dashboard kırılmaz.
+- Full backend suite + lint temiz.
+
+**Kapsam dışı (S-Quota Wave 2 — sonraki session):**
+
+- Frontend: Connections sayfasında provider kartlarında "Source:
+  selffork-snapper | codexbar | both" mini etiketi.
+- Settings → "CodexBar" alt-bölüm (version pin, auto-update
+  toggle, last-bump date).
+- `.github/workflows/codexbar-watch.yml` — haftalık release watch +
+  `refresh-codexbar-checksums.sh` + PR aç.
+- Connections card "Last sync from CodexBar" timestamp.

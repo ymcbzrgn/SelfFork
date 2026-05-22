@@ -1,0 +1,52 @@
+# CodexBar CLI — vendored binary manifest.
+#
+# ADR-007 §4 S-Quota + `[[codexbar-adoption-2026-05-22]]`. The dashboard
+# expects a ``codexbar`` binary on ``PATH`` (or at the resolved override
+# path); ``install-codexbar.sh`` reads this manifest, downloads the
+# platform-specific tarball from GitHub Releases, sha256-verifies the
+# archive, and extracts the binary to ``--prefix`` (default ``/usr/local/bin``).
+#
+# Bumping the version: run ``scripts/refresh-codexbar-checksums.sh``
+# (S-Quota Wave 2 — auto-update CI) to fetch the new sha256 values from
+# the release assets, then open a PR.
+
+[release]
+# Upstream release tag (GitHub `vX.Y.Z` style). MUST match the leading
+# component of the asset filenames below.
+version = "v0.27.0"
+
+# URL template — ``{platform}`` is replaced at install time with one of
+# the keys under ``[platforms]``. CodexBar's release-cli.yml workflow
+# publishes tarballs at this exact path.
+url_template = "https://github.com/steipete/CodexBar/releases/download/{version}/CodexBarCLI-{version}-{platform}.tar.gz"
+
+# Layout inside the tarball — the binary lives at this relative path.
+# Verified against the v0.27.0 tarball layout; bump only when CodexBar
+# changes its release packaging.
+archive_member = "codexbar"
+
+# Optional companion checksum file in the release assets (some releases
+# include one; install-codexbar.sh prefers explicit per-platform sha256
+# below, but falls back to this when set).
+checksums_asset = ""
+
+
+# Per-platform sha256 of the tarball. The shasum command writes lower-case
+# hex; we store them verbatim. Empty strings mean "not yet pinned" — the
+# install script then refuses to proceed unless the operator passes
+# ``--no-verify`` (NEVER acceptable in production).
+#
+# Refresh with ``scripts/refresh-codexbar-checksums.sh v0.27.0`` (S-Quota
+# Wave 2). The Dockerfile build fails closed when an empty entry is hit.
+
+[platforms.linux-x86_64]
+sha256 = ""
+
+[platforms.linux-aarch64]
+sha256 = ""
+
+[platforms.macos-arm64]
+sha256 = ""
+
+[platforms.macos-x86_64]
+sha256 = ""

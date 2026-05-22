@@ -156,6 +156,16 @@ def build_app(config: DashboardConfig) -> FastAPI:
         else outbound_bridge
     )
 
+    # S-Quota Faz B — construct the CodexBar sidecar eagerly (no side
+    # effects until ``lifespan`` calls ``start``). Stashed on
+    # ``app.state`` so the lifespan + future provider router can both
+    # reach the same instance.
+    from selffork_orchestrator.snappers.codexbar_server import (
+        build_default_codexbar_server,
+    )
+
+    codexbar_server = build_default_codexbar_server()
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         # Late-bound — the inbound app is configured only after
@@ -164,7 +174,17 @@ def build_app(config: DashboardConfig) -> FastAPI:
         ptb_app = getattr(_app.state, "telegram_application", None)
         expire_task: asyncio.Task | None = None
         pending_store = getattr(_app.state, "pending_confirmation_store", None)
+        codexbar_server = getattr(_app.state, "codexbar_server", None)
         try:
+            # S-Quota Faz B/E — boot the CodexBar sidecar first so the
+            # secondary quota source is up before anything starts serving
+            # HTTP. Best-effort: missing binary or boot failure logs and
+            # disables the sidecar (snappers continue to carry the load).
+            if codexbar_server is not None:
+                try:
+                    await codexbar_server.start()
+                except Exception:
+                    _log.exception("codexbar_sidecar_start_failed")
             if ptb_app is not None:
                 # S3 audit fix #7: don't let a Telegram failure block the
                 # entire dashboard. Best-effort startup; if anything
@@ -206,6 +226,11 @@ def build_app(config: DashboardConfig) -> FastAPI:
                     await ptb_app.stop()
                 with contextlib.suppress(Exception):
                     await ptb_app.shutdown()
+            # CodexBar last — it has the longest tail of in-flight HTTP
+            # work, and ``stop`` is idempotent on already-failed sidecars.
+            if codexbar_server is not None:
+                with contextlib.suppress(Exception):
+                    await codexbar_server.stop()
 
     app = FastAPI(
         title="SelfFork Dashboard",
@@ -218,6 +243,7 @@ def build_app(config: DashboardConfig) -> FastAPI:
     )
     app.state.telegram_outbound_bridge = wrapped_bridge
     app.state.telegram_activity_log = telegram_activity_log
+    app.state.codexbar_server = codexbar_server
     # Permissive CORS for local dev (Next.js dev server on a different
     # port). Production static-export build is same-origin so this has
     # no effect there.

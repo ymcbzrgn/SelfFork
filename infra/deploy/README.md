@@ -115,6 +115,40 @@ docker compose up -d
 Workspace state survives the rebuild because it lives in the named
 volume, not the image.
 
+### 6.1 CodexBar CLI (vendored quota sidecar)
+
+The image ships the [CodexBar](https://github.com/steipete/CodexBar) CLI
+binary as a sha256-pinned secondary quota source (ADR-007 §4 S-Quota,
+`[[codexbar-adoption-2026-05-22]]`). The pin lives in
+`infra/deploy/codexbar/manifest.toml`; the `Dockerfile` runs
+`infra/deploy/scripts/install-codexbar.sh` at build time to verify and
+extract the binary into `/usr/local/bin/codexbar`.
+
+**Bumping the version:** before the first build (and on each upstream
+release) the checksums in the manifest must be populated. Run:
+
+```bash
+./infra/deploy/scripts/refresh-codexbar-checksums.sh v0.27.0
+# or dry-run:
+./infra/deploy/scripts/refresh-codexbar-checksums.sh v0.27.0 --dry-run
+```
+
+This downloads every platform tarball, computes the sha256, and rewrites
+the manifest in place. Wave 2 of S-Quota (GitHub Action) will run this
+automatically on a weekly schedule and open a PR with the result; for
+now the operator runs it once per upstream release.
+
+**Local-dev install (no Docker):**
+
+```bash
+./infra/deploy/scripts/install-codexbar.sh --prefix ~/.local/bin
+# or, if checksums aren't pinned yet:
+./infra/deploy/scripts/install-codexbar.sh --prefix ~/.local/bin --no-verify
+```
+
+The dashboard auto-detects `codexbar` on `PATH`. Disable the sidecar
+entirely with `SELFFORK_CODEXBAR_ENABLED=false`.
+
 ## 7. Going bare-metal (no Docker)
 
 The container is a convenience; the orchestrator runs natively just
