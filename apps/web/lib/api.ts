@@ -90,13 +90,25 @@ export interface KanbanResponse {
   cards_by_column: Record<string, KanbanCardResponse[]>;
 }
 
+export type ProactiveSource =
+  | "snapper"
+  | "codexbar"
+  | "snapper+codexbar"
+  | null;
+
 export interface ProviderUsage {
-  cli_agent: "claude-code" | "gemini-cli" | "opencode" | "codex";
+  cli_agent: "claude-code" | "gemini-cli" | "opencode" | "codex" | "minimax-cli";
   window_label: string;
   window_seconds: number;
   calls_in_window: number;
   next_reset_at: string | null;
   last_rate_limited_at: string | null;
+  /**
+   * S-Quota Wave 2 — proactive source tag. `null` when neither the
+   * SelfFork snapper layer nor the CodexBar sidecar has data for
+   * this CLI; otherwise one of the documented combinations.
+   */
+  proactive_source: ProactiveSource;
 }
 
 class ApiError extends Error {

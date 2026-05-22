@@ -224,18 +224,18 @@ async def test_base_url_reflects_port() -> None:
 # ── env resolver ───────────────────────────────────────────────────────
 
 
-def test_resolver_default_is_opt_in(
+def test_resolver_default_auto_detects_binary(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Wave 1 default: even with a real binary on PATH, the sidecar
-    stays disabled until ``SELFFORK_CODEXBAR_ENABLED=true`` is set."""
+    """Wave 2 default: auto-detect; explicit env unnecessary when
+    a binary is on the host (opt-out, not opt-in)."""
     fake = tmp_path / "codexbar"
     fake.write_text("#!/bin/sh\nexit 0\n")
     fake.chmod(0o755)
     monkeypatch.setenv("SELFFORK_CODEXBAR_BIN", str(fake))
     monkeypatch.delenv("SELFFORK_CODEXBAR_ENABLED", raising=False)
     server = build_default_codexbar_server()
-    assert server.binary is None
+    assert server.binary == fake
 
 
 def test_resolver_disabled_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -251,7 +251,7 @@ def test_resolver_picks_explicit_override(
     fake.write_text("#!/bin/sh\nexit 0\n")
     fake.chmod(0o755)
     monkeypatch.setenv("SELFFORK_CODEXBAR_BIN", str(fake))
-    monkeypatch.setenv("SELFFORK_CODEXBAR_ENABLED", "true")
+    monkeypatch.delenv("SELFFORK_CODEXBAR_ENABLED", raising=False)
     server = build_default_codexbar_server()
     assert server.binary == fake
 
@@ -261,7 +261,7 @@ def test_resolver_falls_back_when_binary_missing(
 ) -> None:
     monkeypatch.setenv("SELFFORK_CODEXBAR_BIN", str(tmp_path / "ghost"))
     monkeypatch.setenv("PATH", str(tmp_path))  # nothing on PATH
-    monkeypatch.setenv("SELFFORK_CODEXBAR_ENABLED", "true")
+    monkeypatch.delenv("SELFFORK_CODEXBAR_ENABLED", raising=False)
     server = build_default_codexbar_server()
     # A nonexistent override + empty PATH + no /usr/local/bin/codexbar
     # is treated as "no binary"; start() will be a graceful no-op.
@@ -326,16 +326,34 @@ def _write_python_stub_binary(tmp_path: Path) -> Path:
     return bin_path
 
 
+def _pick_free_port() -> int:
+    """Bind a loopback socket on port 0 to grab an ephemeral free port.
+
+    The socket closes before we hand the number to the subprocess —
+    standard TOCTOU window, but for an integration test on the
+    operator's laptop the failure mode is "test fails, rerun" and
+    never observed in practice (audit-god Wave 1 F-11).
+    """
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
+
+
 @pytest.mark.asyncio
 async def test_real_subprocess_boot_and_teardown(tmp_path: Path) -> None:
-    """End-to-end: real subprocess, real /health HTTP, real SIGTERM."""
+    """End-to-end: real subprocess, real /health HTTP, real SIGTERM.
+
+    Uses an ephemeral port (Wave 1 F-11 fix) so parallel pytest runs
+    don't collide on the previously-hardcoded 18766.
+    """
     binary = _write_python_stub_binary(tmp_path)
-    # Use a high port unlikely to clash; pytest-xdist would still
-    # collide if two workers hit the same; we accept that for now.
+    port = _pick_free_port()
     server = CodexBarServer(
         config=CodexBarServerConfig(
             binary=binary,
-            port=18766,
+            port=port,
             readiness_timeout_seconds=4.0,
         )
     )

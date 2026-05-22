@@ -23,7 +23,19 @@ ProviderName = Literal[
 
 
 class ProviderUsage(BaseModel):
-    """One row in ``GET /api/usage/providers``."""
+    """One row in ``GET /api/usage/providers``.
+
+    The audit-derived columns (``calls_in_window``,
+    ``last_rate_limited_at``, ``next_reset_at``) come from
+    :class:`UsageAggregator` walking the JSONL audit logs — the
+    ``[[provider-usage-source]]`` ground truth, never displaced.
+
+    The ``proactive_source`` annotation (S-Quota Wave 2) names which
+    secondary layer also carries a snapshot for this CLI, so the
+    Connections card can render a "Source: snapper | codexbar |
+    snapper+codexbar" chip without conflating audit-truth with
+    proactive data.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -33,3 +45,7 @@ class ProviderUsage(BaseModel):
     calls_in_window: int
     next_reset_at: datetime | None
     last_rate_limited_at: datetime | None
+    # S-Quota Wave 2 — lower-case dotted-prefix tag (``snapper``,
+    # ``codexbar``, ``snapper+codexbar``) or ``None`` when no proactive
+    # layer surfaces data for the row.
+    proactive_source: str | None = None

@@ -27,6 +27,7 @@ internal provider id is ``claude``. The translation table lives in
 from __future__ import annotations
 
 import logging
+import os
 from datetime import UTC, datetime
 from typing import Any, Final
 
@@ -45,6 +46,7 @@ __all__ = [
     "DEFAULT_SIDECAR_PORT",
     "CodexBarSnapper",
     "map_codexbar_payload",
+    "resolve_default_base_url",
 ]
 
 _log = logging.getLogger(__name__)
@@ -55,6 +57,36 @@ DEFAULT_SIDECAR_PORT: Final[int] = 8766
 Distinct from the dashboard's own port (8765) so the two can run
 side-by-side on a single host without a flag collision.
 """
+
+
+def resolve_default_base_url() -> str:
+    """Compute the snapper's default ``base_url`` from the env.
+
+    Resolution order (first hit wins) — keeps the snapper aligned
+    with the sidecar wherever it actually listens (Wave 1 F-07):
+
+    1. ``SELFFORK_CODEXBAR_BASE_URL`` — full override (host:port).
+       Used by operators who run ``codexbar serve`` themselves on
+       a non-loopback interface.
+    2. ``SELFFORK_CODEXBAR_PORT`` — port-only override; host stays
+       ``127.0.0.1`` (the SelfFork-managed sidecar always binds
+       loopback for safety).
+    3. Default — ``http://127.0.0.1:{DEFAULT_SIDECAR_PORT}``.
+    """
+    override = os.environ.get("SELFFORK_CODEXBAR_BASE_URL", "").strip()
+    if override:
+        return override.rstrip("/")
+    port_raw = os.environ.get("SELFFORK_CODEXBAR_PORT", "").strip()
+    if port_raw:
+        try:
+            port = int(port_raw)
+        except ValueError:
+            port = DEFAULT_SIDECAR_PORT
+        else:
+            if port <= 0 or port > 65535:
+                port = DEFAULT_SIDECAR_PORT
+        return f"http://127.0.0.1:{port}"
+    return f"http://127.0.0.1:{DEFAULT_SIDECAR_PORT}"
 
 DEFAULT_HTTP_TIMEOUT_SECONDS: Final[float] = 4.0
 """Per-request budget for CodexBar HTTP calls.
@@ -261,7 +293,7 @@ class CodexBarSnapper(Snapper):
         self._base_url = (
             base_url
             if base_url is not None
-            else f"http://127.0.0.1:{DEFAULT_SIDECAR_PORT}"
+            else resolve_default_base_url()
         ).rstrip("/")
         self._owned_client = client is None
         self._client = client or httpx.AsyncClient(timeout=timeout_seconds)

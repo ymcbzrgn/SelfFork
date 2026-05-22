@@ -590,6 +590,64 @@ def _wire_telegram_inbound(
     app.state.telegram_application = ptb_app
 
 
+async def _annotate_proactive_sources(
+    app: FastAPI, rows: list[ProviderUsage]
+) -> list[ProviderUsage]:
+    """Tag each :class:`ProviderUsage` row with its proactive source label.
+
+    Reads the SelfFork snapper file (sync, cheap) and falls back to
+    the CodexBar sidecar (async HTTP) for every row in parallel. The
+    audit-derived columns are untouched — this only writes the new
+    ``proactive_source`` field.
+
+    Tag matrix:
+      * snapper file exists + CodexBar HTTP exists → ``"snapper+codexbar"``
+      * only snapper file → ``"snapper"``
+      * only CodexBar → ``"codexbar"``
+      * neither → ``None``
+    """
+    from selffork_orchestrator.snappers.codexbar import (
+        _SELFFORK_TO_CODEXBAR,
+        CodexBarSnapper,
+    )
+    from selffork_orchestrator.usage.proactive import ProactiveUsageReader
+
+    reader = ProactiveUsageReader()
+    codexbar_server = getattr(app.state, "codexbar_server", None)
+    base_url = (
+        codexbar_server.base_url
+        if codexbar_server is not None and codexbar_server.is_running
+        else None
+    )
+
+    async def _probe(row: ProviderUsage) -> ProviderUsage:
+        cli_id = row.cli_agent
+        has_snapper = reader.read(cli_id) is not None
+        has_codexbar = False
+        if base_url is not None and cli_id in _SELFFORK_TO_CODEXBAR:
+            snapper = CodexBarSnapper(cli_id=cli_id, base_url=base_url)
+            try:
+                snap = await snapper.snapshot()
+                has_codexbar = snap is not None
+            except Exception:
+                has_codexbar = False
+            finally:
+                await snapper.aclose()
+        label: str | None
+        if has_snapper and has_codexbar:
+            label = "snapper+codexbar"
+        elif has_snapper:
+            label = "snapper"
+        elif has_codexbar:
+            label = "codexbar"
+        else:
+            label = None
+        return row.model_copy(update={"proactive_source": label})
+
+    results = await asyncio.gather(*[_probe(row) for row in rows])
+    return list(results)
+
+
 def _register_drafts_routes(app: FastAPI) -> None:
     """Talk-page drafts surface (Telegram messages with no active workspace)."""
 
@@ -627,6 +685,33 @@ def _register_api_routes(app: FastAPI, config: DashboardConfig) -> None:
             "status": "ok",
             "audit_dir": str(config.audit_dir),
             "resume_dir": str(config.resume_dir),
+        }
+
+    @app.get("/api/codexbar/status")
+    async def codexbar_status() -> dict[str, object]:
+        """Read-only sidecar status for the Settings → CodexBar panel.
+
+        S-Quota Wave 2 ships **read-only** — edit + auto-update toggles
+        land in S4 (Settings Persistence) so we don't double-spec the
+        config schema. The panel renders ``state`` as a status pill,
+        ``binary`` as the resolved path (or ``null`` when disabled),
+        and ``base_url`` so operators can curl it for diagnostics.
+        """
+        server = getattr(app.state, "codexbar_server", None)
+        if server is None:
+            return {
+                "state": "disabled",
+                "binary": None,
+                "base_url": None,
+                "port": None,
+                "fail_reason": None,
+            }
+        return {
+            "state": server.state.value,
+            "binary": str(server.binary) if server.binary else None,
+            "base_url": server.base_url,
+            "port": server.port,
+            "fail_reason": server.fail_reason,
         }
 
     @app.get(
@@ -1091,7 +1176,12 @@ def _register_api_routes(app: FastAPI, config: DashboardConfig) -> None:
             )
             return UsageAggregator(cfg).aggregate()
 
-        return await anyio.to_thread.run_sync(_aggregate)
+        rows = await anyio.to_thread.run_sync(_aggregate)
+        # S-Quota Wave 2 — enrich each row with a proactive_source tag
+        # ("snapper" / "codexbar" / "snapper+codexbar" / None) so the
+        # Connections card can show where the secondary data comes
+        # from without conflating it with the audit-derived columns.
+        return await _annotate_proactive_sources(app, rows)
 
     # ── Mind provenance — Order 5 §8 (ChatGPT Memory Sources pattern) ─────
 

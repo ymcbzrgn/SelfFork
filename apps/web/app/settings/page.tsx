@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Play } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
@@ -9,6 +9,7 @@ type Section =
   | "model"
   | "fine-tune"
   | "telegram"
+  | "codexbar"
   | "theme"
   | "workspace"
   | "advanced";
@@ -17,6 +18,7 @@ const DEFAULT_OPEN: Record<Section, boolean> = {
   model: true,
   "fine-tune": true,
   telegram: true,
+  codexbar: false,
   theme: false,
   workspace: false,
   advanced: false,
@@ -332,6 +334,14 @@ export default function SettingsPage() {
         </SectionCard>
 
         <SectionCard
+          id="codexbar"
+          title="CodexBar (secondary quota source)"
+          previewWhenClosed="Read-only · S-Quota Wave 2"
+        >
+          <CodexBarStatusPanel />
+        </SectionCard>
+
+        <SectionCard
           id="theme"
           title="Theme"
           previewWhenClosed="Light enterprise · Inter"
@@ -462,5 +472,112 @@ function Toggle({ label }: { label: string }) {
         />
       </button>
     </label>
+  );
+}
+
+
+interface CodexBarStatus {
+  state: string;
+  binary: string | null;
+  base_url: string | null;
+  port: number | null;
+  fail_reason: string | null;
+}
+
+function CodexBarStatusPanel() {
+  const [status, setStatus] = useState<CodexBarStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const res = await fetch("/api/codexbar/status");
+        if (!res.ok) throw new Error(`http_${res.status}`);
+        const data = (await res.json()) as CodexBarStatus;
+        if (!cancelled) {
+          setStatus(data);
+          setError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "fetch_failed");
+        }
+      }
+    };
+    void tick();
+    const id = window.setInterval(() => void tick(), 15_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  if (error) {
+    return (
+      <div className="pt-4 text-caption text-on-surface-variant italic">
+        Couldn’t reach /api/codexbar/status ({error}). SelfFork dashboard
+        running?
+      </div>
+    );
+  }
+  if (!status) {
+    return (
+      <div className="pt-4 text-caption text-on-surface-variant italic">
+        Reading sidecar state…
+      </div>
+    );
+  }
+
+  const stateColor: Record<string, string> = {
+    ready: "text-success",
+    starting: "text-amber-600",
+    stopping: "text-amber-600",
+    stopped: "text-on-surface-variant",
+    inactive: "text-on-surface-variant",
+    failed: "text-error",
+    disabled: "text-on-surface-variant",
+  };
+  const color = stateColor[status.state] ?? "text-on-surface";
+
+  return (
+    <div className="pt-4 space-y-3 text-caption text-on-surface">
+      <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
+        <div className="flex gap-2">
+          <dt className="text-on-surface-variant w-28">State:</dt>
+          <dd className={`${color} font-bold uppercase tracking-wide`}>
+            {status.state}
+          </dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="text-on-surface-variant w-28">Port:</dt>
+          <dd className="font-mono">{status.port ?? "—"}</dd>
+        </div>
+        <div className="flex gap-2 md:col-span-2">
+          <dt className="text-on-surface-variant w-28">Binary:</dt>
+          <dd className="font-mono break-all">
+            {status.binary ?? (
+              <span className="text-on-surface-variant/60 italic">
+                not resolved (set SELFFORK_CODEXBAR_ENABLED=false or install)
+              </span>
+            )}
+          </dd>
+        </div>
+        <div className="flex gap-2 md:col-span-2">
+          <dt className="text-on-surface-variant w-28">Base URL:</dt>
+          <dd className="font-mono break-all">{status.base_url ?? "—"}</dd>
+        </div>
+        {status.fail_reason && (
+          <div className="flex gap-2 md:col-span-2">
+            <dt className="text-on-surface-variant w-28">Last error:</dt>
+            <dd className="text-error">{status.fail_reason}</dd>
+          </div>
+        )}
+      </dl>
+      <p className="text-[11px] text-on-surface-variant/70 pt-2 border-t border-outline-variant/30">
+        Read-only Wave 2 view. Version pin, auto-update toggle, and binary path
+        overrides land in S4 (Settings Persistence).
+      </p>
+    </div>
   );
 }

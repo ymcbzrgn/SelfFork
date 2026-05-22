@@ -134,9 +134,12 @@ release) the checksums in the manifest must be populated. Run:
 ```
 
 This downloads every platform tarball, computes the sha256, and rewrites
-the manifest in place. Wave 2 of S-Quota (GitHub Action) will run this
-automatically on a weekly schedule and open a PR with the result; for
-now the operator runs it once per upstream release.
+the manifest in place. **S-Quota Wave 2** automates this with
+`.github/workflows/codexbar-watch.yml` — every Monday the workflow
+queries `steipete/CodexBar` releases, diffs against the pin, and opens
+an auto-bump PR when a new tag drops. The PR carries a reviewer
+checklist (manifest diff + local smoke + upstream CHANGELOG scan).
+Manual dispatch with a specific version is also supported.
 
 **Local-dev install (no Docker):**
 

@@ -1,0 +1,129 @@
+# CodexBar release watcher — S-Quota Wave 2 / `[[codexbar-adoption-2026-05-22]]`.
+#
+# Every Monday (and on manual dispatch) the workflow queries the
+# upstream ``steipete/CodexBar`` releases API. When the latest tag
+# differs from the pin in ``infra/deploy/codexbar/manifest.toml``, it
+# runs the local ``refresh-codexbar-checksums.sh`` script to download
+# every platform tarball, sha256-verify it, and rewrite the manifest
+# version + checksums. The resulting diff is opened as a pull request
+# the operator can review + merge.
+#
+# Permissions: the workflow needs ``contents: write`` to push a branch
+# and ``pull-requests: write`` to open the PR. The PR title carries the
+# version tag so Renovate-style dashboards can deduplicate.
+name: codexbar-watch
+
+on:
+  schedule:
+    # Mondays at 09:00 UTC — gives the upstream release a weekend to
+    # settle before SelfFork chases it.
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Pin a specific tag (e.g. v0.28.0). Empty = latest release.'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve target version
+        id: target
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          requested="${{ github.event.inputs.version }}"
+          if [[ -n "$requested" ]]; then
+            echo "tag=$requested" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # GitHub Releases API returns the latest *published* release.
+          latest=$(gh api repos/steipete/CodexBar/releases/latest --jq .tag_name)
+          if [[ -z "$latest" ]]; then
+            echo "Could not resolve latest CodexBar release tag" >&2
+            exit 1
+          fi
+          echo "tag=$latest" >> "$GITHUB_OUTPUT"
+
+      - name: Detect current pin
+        id: pin
+        run: |
+          set -Eeuo pipefail
+          current=$(awk '
+            /^\[release\]/ { in_section = 1; next }
+            /^\[/ { in_section = 0; next }
+            in_section && /^version[[:space:]]*=/ {
+              sub(/^[^=]+=[[:space:]]*/, "")
+              gsub(/^"|"$/, "")
+              print
+              exit
+            }
+          ' infra/deploy/codexbar/manifest.toml)
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+
+      - name: Skip when already pinned to target
+        if: steps.pin.outputs.current == steps.target.outputs.tag
+        run: |
+          echo "Already pinned to ${{ steps.target.outputs.tag }} — nothing to do."
+
+      - name: Refresh checksums
+        id: refresh
+        if: steps.pin.outputs.current != steps.target.outputs.tag
+        run: |
+          set -Eeuo pipefail
+          chmod +x infra/deploy/scripts/refresh-codexbar-checksums.sh
+          ./infra/deploy/scripts/refresh-codexbar-checksums.sh \
+            ${{ steps.target.outputs.tag }}
+
+      - name: Open pull request
+        if: steps.pin.outputs.current != steps.target.outputs.tag
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: codexbar/bump-${{ steps.target.outputs.tag }}
+          base: main
+          commit-message: |
+            chore: bump CodexBar to ${{ steps.target.outputs.tag }}
+
+            Automated by .github/workflows/codexbar-watch.yml — pulls
+            the latest ``steipete/CodexBar`` release tarballs, verifies
+            sha256, and rewrites ``infra/deploy/codexbar/manifest.toml``.
+            See ``[[codexbar-adoption-2026-05-22]]``.
+          title: 'chore: bump CodexBar to ${{ steps.target.outputs.tag }}'
+          body: |
+            ## Summary
+
+            Automatic CodexBar pin bump from
+            **${{ steps.pin.outputs.current }}** → **${{ steps.target.outputs.tag }}**.
+
+            The workflow downloaded every platform tarball, sha256-verified
+            it, and rewrote ``infra/deploy/codexbar/manifest.toml`` in
+            place. Read the diff before merging — pinning to a CodexBar
+            release whose JSON contract drifts from
+            ``map_codexbar_payload`` would silently degrade the
+            secondary quota source.
+
+            ## Reviewer checklist
+            - [ ] ``manifest.toml`` diff looks plausible (single version
+              line + 4 sha256 lines)
+            - [ ] Local smoke: ``./infra/deploy/scripts/install-codexbar.sh
+              --prefix /tmp/cb`` succeeds with the new checksums
+            - [ ] ``CHANGELOG.md`` upstream review for breaking changes
+            - [ ] CI green (codexbar-watch tail must not have rewritten
+              anything else)
+          labels: |
+            codexbar
+            dependencies
+            auto-bump
+          add-paths: |
+            infra/deploy/codexbar/manifest.toml

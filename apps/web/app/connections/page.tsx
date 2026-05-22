@@ -196,6 +196,14 @@ export default function ConnectionsPage() {
                       Not signed in
                     </p>
                   )}
+                  {u?.proactive_source && (
+                    <p
+                      className="text-[11px] text-on-surface-variant/70 mt-1"
+                      title="Where the live secondary quota signal comes from"
+                    >
+                      Source: <span className="font-mono">{u.proactive_source}</span>
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   {signedIn ? (

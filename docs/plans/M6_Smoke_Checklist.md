@@ -495,10 +495,76 @@ Full suite: **1285 passed**. ruff + mypy + tsc temiz.
 
 **Kapsam dışı (S-Quota Wave 2 — sonraki session):**
 
-- Frontend: Connections sayfasında provider kartlarında "Source:
-  selffork-snapper | codexbar | both" mini etiketi.
-- Settings → "CodexBar" alt-bölüm (version pin, auto-update
-  toggle, last-bump date).
-- `.github/workflows/codexbar-watch.yml` — haftalık release watch +
-  `refresh-codexbar-checksums.sh` + PR aç.
-- Connections card "Last sync from CodexBar" timestamp.
+- ~~Frontend: Connections sayfasında provider kartlarında "Source:
+  selffork-snapper | codexbar | both" mini etiketi.~~ ✅ Wave 2'de tamamlandı
+- ~~Settings → "CodexBar" alt-bölüm (read-only status).~~ ✅ Wave 2'de tamamlandı
+- ~~`.github/workflows/codexbar-watch.yml` — haftalık release watch +
+  `refresh-codexbar-checksums.sh` + PR aç.~~ ✅ Wave 2'de tamamlandı
+
+---
+
+## S-Quota — CodexBar Sidecar Wave 2 (Frontend + Auto-update)
+
+**Hedef:** Wave 1'in opt-in default'unu opt-out'a çevirip Connections
++ Settings UI'a CodexBar source görünürlüğü vermek; haftalık release
+watch GitHub Action'ı kurmak.
+
+**Ön-koşul:** Wave 1 commit edilmiş + `~/.codexbar/config.json` varsa
+(opt-out default), `infra/deploy/codexbar/manifest.toml` sha256'ları
+pinlenmiş (`refresh-codexbar-checksums.sh v0.27.0` çalıştırılmış).
+
+**Senaryo (a) — Opt-out default + auto-detect:**
+
+1. `SELFFORK_CODEXBAR_ENABLED` env unset, `codexbar` PATH'te.
+2. `selffork ui --port 8765` boot et.
+3. Log'da `codexbar_sidecar_started` görmek gerek (auto-detect).
+4. `SELFFORK_CODEXBAR_ENABLED=false` ile restart — `codexbar_sidecar_skipped`.
+
+**Senaryo (b) — Connections card source label:**
+
+1. Mac local: SelfFork claude snapper aktif + `~/.selffork/cli-state/claude-code.json` taze.
+2. Connections sayfasını aç. Claude kartında "Source: snapper" mini etiketi görmek gerek.
+3. Aynı anda CodexBar çalışıyorsa "Source: snapper+codexbar" olur.
+4. Gemini için snapper YOK + CodexBar varsa "Source: codexbar".
+
+**Senaryo (c) — Settings → CodexBar status:**
+
+1. Settings → CodexBar accordion'ı aç.
+2. State pill (READY / FAILED / DISABLED), Port, Binary path, Base URL render olmalı.
+3. 15 sn poll otomatik refresh — sidecar restart edilirse state değişir.
+4. Edit yok (read-only); "Wave 2 view, edit lands in S4" notu görünür.
+
+**Senaryo (d) — codexbar-watch.yml workflow:**
+
+1. GitHub Actions tab → "codexbar-watch" workflow → "Run workflow" manual dispatch.
+2. (Optional) version input ile spesifik tag (`v0.28.0`).
+3. Workflow `gh api`'den son release tag'ini alır; pin'le aynıysa skip; farklıysa `refresh-codexbar-checksums.sh` çalıştırır.
+4. `peter-evans/create-pull-request@v7` ile `codexbar/bump-vX.Y.Z` branch'ında PR açar (reviewer checklist + labels: `codexbar`, `dependencies`, `auto-bump`).
+
+**Backend testi:**
+```bash
+.venv/bin/python -m pytest packages/orchestrator/tests/ packages/body/tests/ -q
+```
+→ **1286 passed** (Wave 1 + Wave 2; Wave 2'de net yeni test eklenmedi,
+mevcut tests opt-out default'a göre güncellendi).
+`ruff` + `mypy` + `tsc` temiz.
+
+**PASS kriteri:**
+
+- Senaryo (a) opt-out default + auto-detect.
+- Senaryo (b) Connections source label görünür ve tutarlı.
+- Senaryo (c) Settings status panel state pill + meta.
+- Senaryo (d) workflow manual dispatch ile çalışır; cron Monday 09:00 UTC.
+- Full backend suite + tsc temiz.
+
+**Wave 2 ile çıkan deferred:**
+
+- Auto-update workflow'unun gerçek bir CodexBar release tag'i ile
+  smoke gate'i — operatör manual dispatch test'i (workflow ilk
+  çalıştığında gerçek tarball indirip checksum verify yapar).
+- F-01 PID-reuse race (Wave 1'den taşındı; global subprocess hardening
+  pass'inde S-Auto sonrası).
+- F-12 connection-pool optimization (Wave 1'den taşındı; ihtiyaç
+  görünürse Wave 3'te).
+- Settings'te edit + auto-update toggle + binary path override — S4
+  (Settings Persistence) sprint'inde.

@@ -426,21 +426,29 @@ def _resolve_readiness_timeout() -> float:
 def build_default_codexbar_server() -> CodexBarServer:
     """Construct the sidecar from the env (dashboard lifespan helper).
 
-    Wave 1 ships **opt-in by default**: the sidecar only boots when
-    ``SELFFORK_CODEXBAR_ENABLED`` is explicitly truthy. Wave 2 (the
-    provider_router wire that consumes :class:`CodexBarFallbackReader`)
-    will flip this to opt-out; until then the boot path is gated to
-    avoid burning provider-API budget on a sidecar nobody reads
-    (audit-god S-Quota Wave 1 finding #F-02).
+    Wave 2 default is **opt-out**: the sidecar auto-boots whenever a
+    ``codexbar`` binary is resolvable on the host (env override, PATH,
+    or ``/usr/local/bin/codexbar``). Wave 1 shipped opt-in only —
+    audit-god #F-02 — because the dashboard had no consumer; the
+    provider_router wire (Wave 2 Faz B) now reads the sidecar through
+    :class:`CodexBarFallbackReader`, so auto-boot stops wasting cycles
+    and starts paying its way.
 
-    Truthy values: ``"true"`` / ``"1"`` / ``"yes"`` (case-insensitive).
-    Anything else — including unset — leaves the returned instance with
-    ``binary=None``; :meth:`CodexBarServer.start` becomes a graceful
-    no-op that logs ``codexbar_sidecar_skipped``.
+    Env switches:
+
+    * ``SELFFORK_CODEXBAR_ENABLED=false`` / ``"0"`` / ``"no"`` — hard
+      disable, even when a binary is on the host. The returned
+      instance has ``binary=None`` and :meth:`CodexBarServer.start`
+      becomes a graceful no-op that logs ``codexbar_sidecar_skipped``.
+    * ``SELFFORK_CODEXBAR_ENABLED=true`` / ``"1"`` / ``"yes"`` —
+      explicit opt-in (forwards-compat with Wave 1 invocations; no
+      effect today beyond the auto-detect default).
+    * Anything else (unset, empty) — auto-detect: boot if a binary is
+      found, gracefully skip otherwise.
     """
     enabled_raw = os.environ.get("SELFFORK_CODEXBAR_ENABLED", "").strip().lower()
-    explicitly_enabled = enabled_raw in {"true", "1", "yes"}
-    binary = _resolve_binary_path() if explicitly_enabled else None
+    explicitly_disabled = enabled_raw in {"false", "0", "no"}
+    binary = None if explicitly_disabled else _resolve_binary_path()
     return CodexBarServer(
         config=CodexBarServerConfig(
             binary=binary,
