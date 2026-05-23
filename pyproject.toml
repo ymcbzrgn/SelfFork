@@ -195,6 +195,10 @@ module = [
     "voyageai.*",
     "rank_bm25",
     "rank_bm25.*",
+    "lancedb",
+    "lancedb.*",
+    "pyarrow",
+    "pyarrow.*",
 ]
 ignore_missing_imports = true
 

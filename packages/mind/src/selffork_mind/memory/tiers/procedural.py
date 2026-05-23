@@ -92,11 +92,21 @@ class ProceduralDistiller:
         min_pair_count: int = 2,
         min_theme_count: int = 2,
         max_episodic_window: int = 200,
+        target_group_id: str | None = None,
     ) -> None:
+        """Distiller scope.
+
+        ``target_group_id`` (ADR-009 §3) — when set, every emitted Procedural
+        Note carries this ``group_id`` (e.g. ``"p:<slug>"`` for PROJECT pool,
+        ``"g:global"`` for GLOBAL pool). When ``None``, the column is left
+        unset and the read-time coalesce maps it to ``p:<project_slug>``
+        (backward compatible).
+        """
         self._store = store
         self._min_pair_count = min_pair_count
         self._min_theme_count = min_theme_count
         self._max_window = max_episodic_window
+        self._target_group_id = target_group_id
 
     async def distil(
         self,
@@ -117,9 +127,27 @@ class ProceduralDistiller:
         sentinels = self._extract_sentinel_routines(episodic)
 
         patterns: list[Note] = []
-        patterns.extend(self._tool_pair_patterns(tool_pairs, project_slug=project_slug))
-        patterns.extend(self._decision_theme_patterns(decisions, project_slug=project_slug))
-        patterns.extend(self._sentinel_routine_patterns(sentinels, project_slug=project_slug))
+        patterns.extend(
+            self._tool_pair_patterns(
+                tool_pairs,
+                project_slug=project_slug,
+                group_id=self._target_group_id,
+            ),
+        )
+        patterns.extend(
+            self._decision_theme_patterns(
+                decisions,
+                project_slug=project_slug,
+                group_id=self._target_group_id,
+            ),
+        )
+        patterns.extend(
+            self._sentinel_routine_patterns(
+                sentinels,
+                project_slug=project_slug,
+                group_id=self._target_group_id,
+            ),
+        )
 
         if patterns:
             await self._store.upsert_notes(patterns)
@@ -235,6 +263,7 @@ class ProceduralDistiller:
         pairs: dict[tuple[str, str], int],
         *,
         project_slug: str | None,
+        group_id: str | None = None,
     ) -> list[Note]:
         return [
             Note(
@@ -251,6 +280,7 @@ class ProceduralDistiller:
                 ),
                 intent=f"sequence:{a}->{b}",
                 project_slug=project_slug,
+                group_id=group_id,
                 importance=2.0 + min(count, 8) * 0.25,  # bump up to 4.0
             )
             for (a, b), count in pairs.items()
@@ -261,6 +291,7 @@ class ProceduralDistiller:
         themes: dict[str, list[Note]],
         *,
         project_slug: str | None,
+        group_id: str | None = None,
     ) -> list[Note]:
         out: list[Note] = []
         for theme, members in themes.items():
@@ -281,6 +312,7 @@ class ProceduralDistiller:
                     content=content,
                     intent=f"theme:{theme}",
                     project_slug=project_slug,
+                    group_id=group_id,
                     importance=3.0 + min(len(sources), 6) * 0.25,
                 ),
             )
@@ -291,6 +323,7 @@ class ProceduralDistiller:
         sentinels: dict[str, list[Note]],
         *,
         project_slug: str | None,
+        group_id: str | None = None,
     ) -> list[Note]:
         return [
             Note(
@@ -306,6 +339,7 @@ class ProceduralDistiller:
                 ),
                 intent=f"sentinel:{sentinel}",
                 project_slug=project_slug,
+                group_id=group_id,
                 importance=2.5,
             )
             for sentinel, members in sentinels.items()

@@ -412,12 +412,80 @@ tsc clean. Audit-god 0 CRITICAL.
 * Audit log rotation / size cap.
 * M7 dataset SSOT pipeline — Heartbeat audit.jsonl → eğitim verisi.
 
-### S-Memory — Cross-CLI shared memory (ADR-002 implement)
+### S-Memory — Dual-Pool Memory Scoping (ADR-009 implement)
 
-**Hedef:** Operator'un 2026-05-23 direktifi: Hivemind sadece ÖRNEKTİ,
-ek açık-kaynak araştırması + **iki ortogonal pool** (proje-bazlı +
-genel global). S-Auto sonrası S4 öncesi başlar; S6 RAG-affinity'nin
-ön-koşulu. Detay `[[s-memory-scope-2026-05-23]]` memory.
+**Hedef:** Operatör 2026-05-23 direktifi (verbatim): *"hivemind sadece
+örnekti başka açık kaynakları da araştırıcaz sonra ve en iyi proje
+bazlı ve ayrıca ortak genel memory havuzunu yaratıcaz!"* → iki ortogonal
+memory pool:
+
+* **PROJECT pool** — `~/.selffork/projects/<slug>/mind/` — proje bazlı
+  facts, decisions, kanban events, codebase patterns.
+* **GLOBAL pool** — `~/.selffork/global/mind/` — operator identity,
+  cross-project refleks, T5 Reflection lessons, dream consolidation.
+
+ADR-002 (6-tier cognitive memory) **immutable** kalır; ADR-009
+augment olarak yazıldı (`group_id` primitive + T-pool mapping + Auto
+Dream trigger).
+
+**Faz şeması (Faz A → Faz H tek sprint):**
+
+| Faz | Modül | Test |
+|-----|-------|------|
+| A — Envanter + 5+ kaynak paralel araştırma | explorer-god + 5 selffork-researcher | rapor |
+| B — Karar + ADR-009 | 4 MAJOR Q operatör onayı → ADR-009 yazıldı | dokümante |
+| C — Storage layer (dual-pool + LanceDB) | `store/base.py` PoolScope · `store/lance.py` (yeni) · `store/pool.py` (yeni) · `pyproject.toml` lancedb core dep · DuckDB DDL group_id migration | 53 yeni test |
+| D — T1 Working + T2 Episodic + Heartbeat ingest | `ingest/heartbeat.py` (yeni) · audit.jsonl → T2 ingest pipeline · idempotency_key dedup · tail-follow | 29 yeni test |
+| E — T4 Procedural PROJECT/GLOBAL split | `procedural.py` target_group_id parametresi · operator refleks distillation GLOBAL'a | 5 yeni test |
+| F — T3 Semantic Graph dual-pool | `graph/base.py` GraphTriple.group_id · `store/pool.py` add_triple/list_triples · per-pool InMemoryGraphStore | 12 yeni test |
+| G — T5 Reflection + Auto Dream 4-phase | `reflection/auto_dream.py` (yeni) · 4-condition gate · checkpoint persistence · force_run + maybe_run | 25 yeni test |
+| H — Smoke + audit + memory + commit-ready | M6_Smoke_Checklist § S-Memory · ADR-007 §4 patch · audit-god · operator commit | 9 close-out |
+
+**Smoke gate:** `M6_Smoke_Checklist.md` § S-Memory — Senaryo a-h.
+Backend ≥1926 test pass + tsc/ruff/mypy clean. LongMemEval
+extraction+abstention green; PerLTQA + LoCoMo Faz G+ ileride.
+
+**ADR-009 deliverables (Faz C-G implement):**
+
+1. `PoolScope` primitive — Graphiti `group_id` pattern (`p:<slug>` /
+   `g:global`); cross-pool union query.
+2. `PoolResolver` (DuckDB + LanceDB + Graph engine pair per pool) —
+   lazy init, parallel queries, deterministic merge.
+3. Heartbeat audit.jsonl → T2 Episodic ingest pipeline (`ingest/
+   heartbeat.py`) — structured-source bypass (Cognee pattern), no LLM.
+4. `ProceduralDistiller(target_group_id=...)` — T4 GLOBAL routing.
+5. `GraphTriple.group_id` field + per-pool graph store isolation.
+6. `AutoDreamRunner` — threshold-gated (24h + 5 sessions + not
+   rate-limited + idle) 4-phase pipeline; GLOBAL pool routing.
+
+**S-Memory sonrası deferred (sonraki sprintler):**
+
+* Async two-model graph consolidation LLM path (`graph/consolidation.py`
+  → `_llm_path`) — ADR-002 §10 Order 4 ileri.
+* MemoryAgentBench Test-Time Learning eval — Order 3 ADR'da
+  deferred ama Faz E kapsamına alınmadı.
+* PerLTQA + LoCoMo eval suite — Order 5+6 ADR'da.
+* Three-pillar bridge (Reflex training schedule) — Order 6, M7 öncesi
+  son sprint; S-Memory bridge/exporter scaffold zaten production
+  ama Reflex training worker M7 sprint scope.
+* Kuzu graph store dual-pool wire (şu an InMemoryGraphStore default;
+  KuzuGraphStore opsiyonel extra) — production-scale gerektiğinde.
+* Heartbeat dashboard wire (S4 Settings Persistence ile birlikte).
+* Plain-md projection GLOBAL pool için (`~/.selffork/global/mind/markdown/`)
+  — ADR-009 §8 Faz G+ ileride.
+
+**Bağımlılıklar:**
+
+* ADR-002 — DOMINANT, 6-tier; ADR-009 augment.
+* ADR-006 §7 — self-host vision (cloud-bound runtime YASAK).
+* ADR-008 — Heartbeat outer loop (audit.jsonl feed kaynağı).
+* S-Auto — Heartbeat audit.jsonl yazıyor; S-Memory T2'ye ingest eder.
+* S6 CLI Router — RAG affinity Memory T4'e bağlı; S-Memory önce.
+
+**Onay:** Operatör 2026-05-23 4 AskUserQuestion'da hepsinin
+"Recommended" seçimini onayladı: (1) group_id + physical separate DB,
+(2) Hybrid T-pool split, (3) Heartbeat idle + threshold trigger,
+(4) ADR-009 yeni dosya.
 
 ### S8 — Dashboard Activity + Final Cleanup
 

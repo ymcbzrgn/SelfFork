@@ -1,9 +1,10 @@
 # ADR-002: SelfFork Mind Architecture (Pillar 3)
 
-- **Status:** Approved
+- **Status:** Approved (Augmented by ADR-009 §1-§5, 2026-05-23 — dual-pool scoping + group_id primitive + Auto Dream trigger)
 - **Date:** 2026-05-07
 - **Supersedes:** —
 - **Superseded-by:** —
+- **Augmented-by:** [`ADR-009_DualPool_Memory_Scoping.md`](./ADR-009_DualPool_Memory_Scoping.md)
 - **Companion memory:** `project_yamac_jr_is_user_simulator.md`, `feedback_infra_before_finetune.md`, `feedback_brand_is_selffork_not_personal_name.md`
 
 ---

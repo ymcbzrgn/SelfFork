@@ -24,12 +24,50 @@ from selffork_mind.memory.model import Note, TierName
 from selffork_mind.memory.tags import Tag, TagMatchMode
 
 __all__ = [
+    "GLOBAL_GROUP_ID",
     "MindStore",
+    "PoolScope",
     "RetrievalHit",
     "RetrieveConfig",
     "StoreScope",
     "TierStats",
+    "derive_group_id",
+    "project_group_id",
 ]
+
+
+GLOBAL_GROUP_ID: str = "g:global"
+"""Per ADR-009 §1 — fixed literal for the GLOBAL pool."""
+
+
+def project_group_id(project_slug: str) -> str:
+    """Derive ``group_id`` for a PROJECT pool entry — per ADR-009 §1.
+
+    Format: ``p:<slug>``. ``slug`` validated upstream by
+    :class:`selffork_orchestrator.projects.store.ProjectStore`.
+    """
+    if not project_slug:
+        raise ValueError("project_slug cannot be empty when deriving group_id")
+    return f"p:{project_slug}"
+
+
+def derive_group_id(
+    *,
+    group_id: str | None,
+    project_slug: str | None,
+) -> str | None:
+    """Read-time coalesce: explicit ``group_id`` wins, else ``p:<project_slug>``.
+
+    Returns ``None`` when neither is set (legacy/global-implicit rows).
+
+    Per ADR-009 §1 backward-compat clause: existing PROJECT data without
+    ``group_id`` is treated as ``p:<project_slug>`` at query time.
+    """
+    if group_id:
+        return group_id
+    if project_slug:
+        return project_group_id(project_slug)
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,12 +91,67 @@ class StoreScope:
 
     Mirrors mem0's ``user_id / agent_id / run_id / app_id`` axes adapted to
     SelfFork's first-class concepts. ``None`` on any field means "any value".
+
+    Per ADR-009 §1 — ``group_id`` (Graphiti pattern) is the dual-pool primitive.
+    Single-pool queries set ``group_id`` directly; cross-pool queries go through
+    :class:`PoolScope` (which expands to ``group_id IN (...)``).
     """
 
     project_slug: str | None = None
     session_id: str | None = None
     cli_agent: str | None = None
     operator_id: str | None = None
+    group_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PoolScope:
+    """Cross-pool retrieval boundary — per ADR-009 §1, §6.
+
+    Expands to a list of ``group_id`` values consumed by the underlying
+    :class:`MindStore.retrieve`. Two physical pools today:
+
+    - PROJECT — ``p:<project_slug>`` (per-project DB at
+      ``~/.selffork/projects/<slug>/mind/``).
+    - GLOBAL — :data:`GLOBAL_GROUP_ID` (cross-project DB at
+      ``~/.selffork/global/mind/``).
+
+    Examples:
+
+        # Project-only retrieval (current default; backward-compatible)
+        PoolScope(project_slug="selffork")
+        # -> group_ids = ["p:selffork"]
+
+        # Project + Global (operator daily flow)
+        PoolScope(project_slug="selffork", include_global=True)
+        # -> group_ids = ["p:selffork", "g:global"]
+
+        # Global-only (cross-project identity recall)
+        PoolScope(include_global=True)
+        # -> group_ids = ["g:global"]
+    """
+
+    project_slug: str | None = None
+    include_global: bool = False
+
+    def group_ids(self) -> tuple[str, ...]:
+        """Return the ordered tuple of ``group_id`` values this scope covers.
+
+        Empty tuple means "no pools selected" — callers should treat this as
+        a no-op retrieval, not as "match everything".
+        """
+        ids: list[str] = []
+        if self.project_slug:
+            ids.append(project_group_id(self.project_slug))
+        if self.include_global:
+            ids.append(GLOBAL_GROUP_ID)
+        return tuple(ids)
+
+    def has_global(self) -> bool:
+        return self.include_global
+
+    def has_project(self) -> bool:
+        return self.project_slug is not None
 
 
 @dataclass(frozen=True, slots=True)

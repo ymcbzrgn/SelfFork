@@ -197,6 +197,16 @@ class Note(DataPoint):
         default=None,
         description="Project this note is scoped to; None = global.",
     )
+    group_id: str | None = Field(
+        default=None,
+        description=(
+            "Dual-pool partition key per ADR-009 §1 (Graphiti pattern). "
+            "``p:<slug>`` for PROJECT pool, ``g:global`` for GLOBAL pool. "
+            "When omitted, write-time defaults to ``p:<project_slug>`` if "
+            "``project_slug`` is set; otherwise stays None and is treated as "
+            "PROJECT-implicit at read time via ``derive_group_id``."
+        ),
+    )
     session_id: str | None = Field(
         default=None,
         description="Session that produced this note; None = manual.",

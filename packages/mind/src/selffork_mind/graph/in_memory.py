@@ -86,13 +86,15 @@ class InMemoryGraphStore:
             return False
         moment = at if at is not None else datetime.now(UTC)
         # Stamp the existing row's valid_until in place (the row stays
-        # under its original key).
+        # under its original key). ADR-009 §1: preserve group_id so the
+        # closed-row copy keeps its pool partition (audit-god finding #1).
         self._triples[live_key] = GraphTriple(
             subject=live_existing.subject,
             predicate=live_existing.predicate,
             obj=live_existing.obj,
             source_passage_id=live_existing.source_passage_id,
             project_slug=live_existing.project_slug,
+            group_id=live_existing.group_id,
             confidence=live_existing.confidence,
             valid_from=live_existing.valid_from,
             valid_until=moment,

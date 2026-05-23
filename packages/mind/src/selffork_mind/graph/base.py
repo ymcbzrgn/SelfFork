@@ -71,6 +71,16 @@ class GraphTriple:
     obj: str
     source_passage_id: UUID
     project_slug: str | None = None
+    group_id: str | None = None
+    """ADR-009 §1 dual-pool partition key (``p:<slug>`` / ``g:global``).
+
+    When ``None``, read-time coalesces to ``p:<project_slug>`` if set;
+    otherwise the triple belongs to the GLOBAL pool by default. The
+    actual storage isolation lives in the per-pool Kuzu engines
+    (:class:`~selffork_mind.store.pool.PoolResolver`) so this field is
+    informational at the model level — useful for cross-pool merges
+    when consolidators emit triples directly.
+    """
     confidence: float = 1.0
     valid_from: datetime = field(default_factory=lambda: datetime.now(UTC))
     valid_until: datetime | None = None
@@ -90,6 +100,7 @@ class GraphTriple:
             "object": self.obj,
             "source_passage_id": str(self.source_passage_id),
             "project_slug": self.project_slug,
+            "group_id": self.group_id,
             "confidence": self.confidence,
             "valid_from": self.valid_from.isoformat(),
             "valid_until": (self.valid_until.isoformat() if self.valid_until is not None else None),

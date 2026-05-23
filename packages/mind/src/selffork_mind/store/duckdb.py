@@ -44,6 +44,7 @@ from selffork_mind.store.base import (
     RetrieveConfig,
     StoreScope,
     TierStats,
+    derive_group_id,
 )
 
 __all__ = ["DuckDBMindStore"]
@@ -61,6 +62,7 @@ CREATE TABLE IF NOT EXISTS notes (
     valid_from TIMESTAMPTZ NOT NULL,
     valid_until TIMESTAMPTZ,
     project_slug TEXT,
+    group_id TEXT,
     session_id TEXT,
     source_pointer TEXT,
     path_scope_json TEXT NOT NULL DEFAULT '[]',
@@ -73,6 +75,12 @@ CREATE TABLE IF NOT EXISTS notes (
     written_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 """
+
+_GROUP_ID_MIGRATION_DDL = (
+    # ADR-009 §1: pre-existing PROJECT DBs need the new partition column.
+    # DuckDB 1.5+ supports ADD COLUMN IF NOT EXISTS, idempotent on re-open.
+    "ALTER TABLE notes ADD COLUMN IF NOT EXISTS group_id TEXT;",
+)
 
 _TAGS_DDL = """
 CREATE TABLE IF NOT EXISTS tags (
@@ -87,6 +95,7 @@ CREATE TABLE IF NOT EXISTS tags (
 _INDICES = (
     "CREATE INDEX IF NOT EXISTS idx_notes_tier ON notes(tier);",
     "CREATE INDEX IF NOT EXISTS idx_notes_project_slug ON notes(project_slug);",
+    "CREATE INDEX IF NOT EXISTS idx_notes_group_id ON notes(group_id);",
     "CREATE INDEX IF NOT EXISTS idx_notes_session_id ON notes(session_id);",
     "CREATE INDEX IF NOT EXISTS idx_notes_content_hash ON notes(content_hash);",
     "CREATE INDEX IF NOT EXISTS idx_tags_note_id ON tags(note_id);",
@@ -116,6 +125,10 @@ class DuckDBMindStore(MindStore):
         assert self._conn is not None  # noqa: S101
         self._conn.execute(_NOTES_DDL)
         self._conn.execute(_TAGS_DDL)
+        # ADR-009 §1: migrate pre-existing PROJECT DBs (Order 1 production
+        # data) by adding group_id column idempotently before index creation.
+        for ddl in _GROUP_ID_MIGRATION_DDL:
+            self._conn.execute(ddl)
         for ddl in _INDICES:
             self._conn.execute(ddl)
 
@@ -148,11 +161,11 @@ class DuckDBMindStore(MindStore):
             """
             INSERT INTO notes (
                 id, schema_version, tier, kind, content, intent, content_hash,
-                valid_from, valid_until, project_slug, session_id,
+                valid_from, valid_until, project_slug, group_id, session_id,
                 source_pointer, path_scope_json, always_apply,
                 importance, pinned, embedding, embedder_name, embedder_dim,
                 written_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET
                 schema_version = EXCLUDED.schema_version,
                 tier = EXCLUDED.tier,
@@ -163,6 +176,7 @@ class DuckDBMindStore(MindStore):
                 valid_from = EXCLUDED.valid_from,
                 valid_until = EXCLUDED.valid_until,
                 project_slug = EXCLUDED.project_slug,
+                group_id = EXCLUDED.group_id,
                 session_id = EXCLUDED.session_id,
                 source_pointer = EXCLUDED.source_pointer,
                 path_scope_json = EXCLUDED.path_scope_json,
@@ -179,6 +193,13 @@ class DuckDBMindStore(MindStore):
 
     @staticmethod
     def _note_to_row(note: Note) -> tuple[object, ...]:
+        # ADR-009 §1: write-time group_id derivation. Caller-supplied value
+        # wins; otherwise fall back to p:<project_slug>. Notes without either
+        # remain NULL — read path treats them as project-implicit.
+        derived_group_id = derive_group_id(
+            group_id=note.group_id,
+            project_slug=note.project_slug,
+        )
         return (
             note.id,
             note.schema_version,
@@ -190,6 +211,7 @@ class DuckDBMindStore(MindStore):
             note.valid_from,
             note.valid_until,
             note.project_slug,
+            derived_group_id,
             note.session_id,
             note.source_pointer,
             json.dumps(list(note.path_scope)),
@@ -350,6 +372,17 @@ class DuckDBMindStore(MindStore):
                 assert self._conn is not None  # noqa: S101
                 clauses = ["valid_until IS NULL"]
                 params: list[object] = []
+                if scope.group_id is not None:
+                    clauses.append(
+                        "(group_id = ? OR (group_id IS NULL AND project_slug = ?))",
+                    )
+                    params.append(scope.group_id)
+                    legacy_slug = (
+                        scope.group_id.removeprefix("p:")
+                        if scope.group_id.startswith("p:")
+                        else None
+                    )
+                    params.append(legacy_slug)
                 if scope.project_slug is not None:
                     clauses.append("project_slug = ?")
                     params.append(scope.project_slug)
@@ -506,6 +539,13 @@ class DuckDBMindStore(MindStore):
         path_scope = tuple(json.loads(path_scope_raw))
         valid_from = row["valid_from"]
         valid_until = row.get("valid_until")
+        # ADR-009 §1: legacy rows may have NULL group_id; coalesce on read.
+        raw_group_id = row.get("group_id")
+        project_slug_val = row.get("project_slug")
+        coalesced_group_id = derive_group_id(
+            group_id=raw_group_id if isinstance(raw_group_id, str) else None,
+            project_slug=project_slug_val if isinstance(project_slug_val, str) else None,
+        )
         return Note.model_validate(
             {
                 "id": row["id"],
@@ -518,6 +558,7 @@ class DuckDBMindStore(MindStore):
                 "valid_from": valid_from,
                 "valid_until": valid_until,
                 "project_slug": row["project_slug"],
+                "group_id": coalesced_group_id,
                 "session_id": row["session_id"],
                 "source_pointer": row.get("source_pointer"),
                 "path_scope": path_scope,
@@ -564,6 +605,16 @@ def _build_retrieve_sql(config: RetrieveConfig) -> tuple[str, list[object]]:
 
 def _scope_clauses(scope: StoreScope, params: list[object]) -> list[str]:
     out: list[str] = []
+    if scope.group_id is not None:
+        # ADR-009 §1: group_id is the dual-pool primitive. Treat NULL rows
+        # belonging to the implicit PROJECT pool via the COALESCE coalesce
+        # path so legacy data still matches ``p:<slug>`` lookups.
+        out.append("(group_id = ? OR (group_id IS NULL AND project_slug = ?))")
+        params.append(scope.group_id)
+        # Strip the ``p:`` prefix once so the legacy column comparison is
+        # symmetric with the new column.
+        legacy_slug = scope.group_id.removeprefix("p:") if scope.group_id.startswith("p:") else None
+        params.append(legacy_slug)
     if scope.project_slug is not None:
         out.append("project_slug = ?")
         params.append(scope.project_slug)

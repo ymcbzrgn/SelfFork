@@ -34,7 +34,8 @@ classifiers = [
 dependencies = [
     "selffork-shared",
     "pydantic>=2.9.0",
-    "duckdb>=1.0.0",
+    "duckdb>=1.5.0",
+    "lancedb>=0.30.0",
     "numpy>=1.26.0",
     "structlog>=24.4.0",
     "anyio>=4.4.0",
@@ -76,7 +77,8 @@ all = [
     "selffork-mind[rerankers-voyage]",
 ]
 
-# Order 4 (T3 Semantic Graph) will add LanceDB + Kuzu under separate extras.
+# LanceDB is now core (ADR-009 §1, dual-pool T2 Episodic vectors).
+# Kuzu remains the only optional extra (Order 4 T3 Semantic Graph, see above).
 
 [build-system]
 requires = ["hatchling>=1.25"]

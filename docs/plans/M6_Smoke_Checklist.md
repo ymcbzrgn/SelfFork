@@ -726,3 +726,127 @@ Full suite:
 - ADR-007 §4'e S-Auto sprint blok eklenmesi (sprint sonu commit ayrı).
 - Sabah raporu (`/api/heartbeat/morning-report`) — Autonomy panel'da
   flag var ama generator deferred.
+
+## S-Memory — Dual-Pool Memory Scoping (ADR-009 implement, 8 Faz Tek Sprint)
+
+**Bağlam:** Operatör 2026-05-23 direktifi (verbatim): *"hivemind sadece
+örnekti başka açık kaynakları da araştırıcaz sonra ve en iyi proje
+bazlı ve ayrıca ortak genel memory havuzunu yaratıcaz!"*. ADR-002
+6-tier locked; ADR-009 dual-pool augment olarak yazıldı; gerek koşul
+S6 CLI Router RAG affinity için.
+
+### Ön-Koşullar
+
+1. `git status` clean; S-Auto commit `575ec8c` upstream.
+2. ADR-002 + ADR-009 + ADR-006 §7 + ADR-008 §3-§5 okundu.
+3. `examples_crucial/` 6+ memory repo: letta, mem0, cognee, graphiti,
+   Hivemind, Auto Dream deep-read'leri Faz A'da tamamlandı.
+4. Operatör 4 AskUserQuestion'a "Recommended" onayı (Faz B).
+
+### Senaryo a — Storage layer (Faz C)
+
+- [ ] `from selffork_mind.store import PoolResolver, PoolScope,
+      LanceDBVectorStore, DuckDBMindStore, GLOBAL_GROUP_ID` import OK.
+- [ ] `PoolScope(project_slug="foo")` → `group_ids() == ("p:foo",)`.
+- [ ] `PoolScope(project_slug="foo", include_global=True)` → `("p:foo", "g:global")`.
+- [ ] `PoolScope(include_global=True)` → `("g:global",)`.
+- [ ] DuckDB DDL migration: yeni DB'de `group_id TEXT` column var;
+      eski DB'de `ALTER TABLE ADD COLUMN IF NOT EXISTS` idempotent.
+- [ ] LanceDB `episodic_vectors` tablo schema = `note_id, group_id,
+      project_slug, session_id, tier, vector, content_hash, written_at`.
+- [ ] `lancedb>=0.30.0` pyproject.toml core dep.
+
+### Senaryo b — Heartbeat ingest (Faz D)
+
+- [ ] `~/.selffork/heartbeat/audit.jsonl` mevcut entries için
+      `HeartbeatIngester.ingest_pending()` → her tick için bir T2
+      Episodic Note (content `tick=N | trigger=X | action=Y | outcome=Z`).
+- [ ] Idempotency: aynı log re-ingest edildiğinde Note sayısı
+      değişmiyor (UUID5 collapse).
+- [ ] Checkpoint persistence: `audit.ingest-checkpoint.json` atomic
+      temp+rename; restart sonrası resume offset.
+- [ ] `world_state.last_active_workspace` PROJECT pool routing;
+      `None` → GLOBAL pool routing.
+- [ ] AIR alert entries → importance=1.5; default importance=1.0.
+- [ ] Malformed line → `skipped_malformed` counter; ingest devam.
+
+### Senaryo c — T4 Procedural dual-pool (Faz E)
+
+- [ ] `ProceduralDistiller(store=resolver._project.notes)` PROJECT
+      pool'a yazar; `target_group_id=None` default davranış.
+- [ ] `ProceduralDistiller(store=resolver._global.notes,
+      target_group_id=GLOBAL_GROUP_ID)` GLOBAL pool'a yazar.
+- [ ] Cross-pool retrieval `PoolScope(project_slug=..., include_global=True)`
+      her iki pool'un T4 pattern'lerini union eder.
+- [ ] Mevcut 13 procedural test pass (regression yok).
+
+### Senaryo d — T3 Semantic Graph dual-pool (Faz F)
+
+- [ ] `GraphTriple.group_id` field default None; `to_payload()` set'liyse
+      payload'a girer.
+- [ ] `resolver.add_triple(triple, pool="project")` → `group_id="p:<slug>"`
+      stamped.
+- [ ] `resolver.add_triple(triple, pool="global")` → `group_id="g:global"`
+      stamped.
+- [ ] `resolver.list_triples(pool_scope=PoolScope(..., include_global=True))`
+      paralel sorgu + (subject, predicate, obj, source_passage_id) sırasıyla
+      deterministic merge.
+- [ ] İki ayrı PROJECT resolver (`alpha` + `beta`) filesystem-isolated graph.
+
+### Senaryo e — Auto Dream pipeline (Faz G)
+
+- [ ] `AutoDreamGate` 4 kondisyon ayrı ayrı bloklar: hours, sessions,
+      rate-limited, idle.
+- [ ] Hepsi geçerse `should_run=True`, `failed_conditions=()`.
+- [ ] `AutoDreamRunner.maybe_run()` gate fail → None.
+- [ ] `AutoDreamRunner.force_run()` gate'i bypass eder; reflection
+      report döner; checkpoint güncellenir.
+- [ ] `sessions_counter` async callback hatası gate'i crash etmez
+      (telemetry-only; log warning).
+- [ ] `bump_sessions(delta=N)` atomic; negatif değer → 0'a clamp.
+
+### Senaryo f — Full backend gate
+
+- [ ] `.venv/bin/python -m pytest packages/mind/tests/ packages/orchestrator/tests/
+      packages/body/tests/ -q` → ≥1926 pass.
+- [ ] `.venv/bin/python -m ruff check packages/mind/` → All checks passed.
+- [ ] `.venv/bin/python -m mypy packages/mind/src/` → Success, no issues.
+- [ ] `cd apps/web && npx tsc --noEmit` → clean (frontend wire S4'te,
+      bu sprint frontend dokunmadı).
+
+### Senaryo g — audit-god rigorous review
+
+- [ ] `audit-god` agent dispatch — 1 rapor:
+      * ADR-009 §1-§5 lock invariants kod ile teyit.
+      * Cross-pool query ordering deterministic.
+      * Heartbeat ingest idempotency_key dedup atomic.
+      * Auto Dream gate 4 condition tüm fail kombinasyonlarında doğru.
+      * GLOBAL pool corruption riski (atomic write, çift teardown,
+        race condition) test edildi.
+      * `target_group_id` ProceduralDistiller geriye uyumlu (mevcut
+        13 test pass).
+- [ ] Bulgular MAJOR/MINOR sınıflı; CRITICAL = 0 hedef.
+
+### Senaryo h — Commit-ready
+
+- [ ] Memory entry: `project_s_memory_complete_2026_05_23.md` yazıldı.
+- [ ] `MEMORY.md` index güncel.
+- [ ] ADR-007 §4 S-Memory blok geniş yazıldı (S-Auto bloğu yanına).
+- [ ] ADR-002 header'a "Augmented-by: ADR-009" eklendi.
+- [ ] Commit message draft operatöre sunuldu (S-Auto formatında).
+- [ ] Operatör onayı sonrası tek commit (MANDATE 1).
+
+### S-Memory sonrası deferred (sonraki sprintler)
+
+- Async two-model graph consolidation LLM path (Order 4 ileri).
+- MemoryAgentBench Test-Time Learning + PerLTQA + LoCoMo eval suite.
+- Three-pillar bridge (Reflex training schedule) — M7 öncesi son sprint.
+- Kuzu graph store dual-pool wire (default InMemoryGraphStore;
+  Kuzu opsiyonel `[graph-kuzu]` extra altında).
+- Heartbeat dashboard wire (S4 Settings Persistence ile birlikte).
+- Plain-md projection GLOBAL pool için (`~/.selffork/global/mind/markdown/`).
+- ADR-009 §8 AGENTS.md BEGIN/END idempotent insertion (Hivemind H3
+  lift; sprint sonu küçük iş).
+- `selffork mind dream` CLI komutu (Auto Dream force_run wrapper).
+- S6 CLI Router RAG affinity — T4 Procedural query API'sini
+  consume edecek; ayrı sprint.
