@@ -171,11 +171,47 @@ def build_app(config: DashboardConfig) -> FastAPI:
     # the daemon sees a fully-up dependency graph. Default opt-in
     # (``SELFFORK_HEARTBEAT_ENABLED=true``); a disabled scheduler is
     # a no-op at start/stop time so the unconditional wire is safe.
+    #
+    # S4 F-AG #3 — wire the executor's action callables in here so
+    # Heartbeat decisions actually move the world (Telegram outbound,
+    # ``selffork run`` task launch, kanban card append). The
+    # NullTelegramBridge is treated as "not wired" so the executor
+    # surfaces a clean ``skipped`` outcome rather than silently
+    # dropping messages.
+    from selffork_orchestrator.dashboard.heartbeat_wire import (
+        make_kanban_card_creator,
+        make_task_starter,
+    )
     from selffork_orchestrator.heartbeat.config import (
         build_default_heartbeat,
     )
+    from selffork_orchestrator.telegram.bridge import NullTelegramBridge
 
-    heartbeat = build_default_heartbeat()
+    _telegram_for_heartbeat = (
+        None
+        if isinstance(wrapped_bridge, NullTelegramBridge)
+        else wrapped_bridge
+    )
+    _task_starter = make_task_starter(
+        selffork_script=config.selffork_script,
+        projects_root=config.projects_root,
+    )
+    _kanban_card_creator = make_kanban_card_creator(
+        projects_root=config.projects_root,
+    )
+    heartbeat = build_default_heartbeat(
+        telegram_bridge=_telegram_for_heartbeat,
+        task_starter=_task_starter,
+        kanban_card_creator=_kanban_card_creator,
+    )
+    _log.info(
+        "heartbeat_callables_wired",
+        extra={
+            "telegram_wired": _telegram_for_heartbeat is not None,
+            "task_starter_wired": True,
+            "kanban_creator_wired": True,
+        },
+    )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):

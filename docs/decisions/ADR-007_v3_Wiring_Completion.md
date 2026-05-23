@@ -248,7 +248,15 @@ mesaj yazar → Talk feed'e Self Jr context'inde düşer.
 **Bağımlılık:** Telegram bot token (operatör BotFather'dan alır).
 S1 (Talk kanalı inbound hedefi) yardımcı.
 
-### S4 — Settings Persistence
+### S4 — Settings Persistence ✅ done (2026-05-23)
+
+> Memory: [[s4-complete-2026-05-23]] · Smoke: M6_Smoke_Checklist § S4
+> (Senaryo a-l) · Tests: 1962 backend pass (1928 baseline + 34 new) ·
+> Audit-god: 0 CRITICAL + 1 MAJOR fix + 4 MINOR addressed · Scope
+> expansion: 3 sahte UI section (Theme + Workspace defaults +
+> Advanced toggles) **silindi** (operatör no-mock S4-S8 kuralı); F-AG
+> #3 callable inject (telegram_bridge + task_starter +
+> kanban_card_creator) S-Auto deferred listesinden çıktı.
 
 **Hedef:** Ayarlar gerçekten kaydedilir; Settings'teki tüm sahte canlı
 veri silinir (no-mock ihlali kapatılır).

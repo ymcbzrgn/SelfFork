@@ -169,7 +169,12 @@ def build_default_heartbeat_config() -> HeartbeatConfig:
     )
 
 
-def build_default_heartbeat() -> HeartbeatScheduler:
+def build_default_heartbeat(
+    *,
+    telegram_bridge: object | None = None,
+    task_starter: object | None = None,
+    kanban_card_creator: object | None = None,
+) -> HeartbeatScheduler:
     """Construct the daemon from env (dashboard lifespan helper).
 
     Returns a :class:`HeartbeatScheduler` with config resolved from env
@@ -179,6 +184,25 @@ def build_default_heartbeat() -> HeartbeatScheduler:
     single Self Jr powers both surfaces (ADR-008 §12 unification note).
     When either env is missing the daemon ticks without selecting an
     action (Faz B behaviour preserved).
+
+    Args:
+        telegram_bridge: Optional
+            :class:`selffork_orchestrator.telegram.bridge.TelegramBridge`
+            instance for ``OPERATOR_ASK`` outbound messages
+            (F-AG #3 wire — S4). Falls back to ``None`` (handler
+            returns ``skipped``).
+        task_starter: Optional coroutine matching
+            :data:`selffork_orchestrator.heartbeat.executor.TaskStarter`
+            that spawns ``selffork run`` for ``TASK_START`` decisions
+            (F-AG #3 wire — S4).
+        kanban_card_creator: Optional coroutine matching
+            :data:`selffork_orchestrator.heartbeat.executor.KanbanCardCreator`
+            that appends a card for ``KANBAN_SUGGEST`` decisions
+            (F-AG #3 wire — S4).
+
+    The parameters are typed ``object`` here to avoid pulling the
+    heavy executor/telegram imports into :mod:`heartbeat.config`'s
+    import surface; the executor itself validates the contract.
 
     Imports are local so :mod:`heartbeat.config` stays importable
     without instantiating the full PTB dependency chain.
@@ -214,13 +238,17 @@ def build_default_heartbeat() -> HeartbeatScheduler:
             ),
         )
 
-    # Default executor with Ideation wired (Lab workspace persistence is
-    # always safe — it only writes files under ``~/.selffork/lab/``).
-    # The dashboard's Faz H integration patches in the Telegram bridge,
-    # the ``selffork run`` task starter, and the ProjectStore kanban
-    # writer. Until then, those action handlers return ``skipped``
-    # outcomes so the daemon is still observable end-to-end.
-    executor = ActionExecutor(ideation_manager=IdeationManager())
+    # F-AG #3 (S4): the dashboard process wires telegram_bridge /
+    # task_starter / kanban_card_creator here; any of them may be
+    # ``None`` (test fixtures, headless deployments) — the executor
+    # falls back to a ``skipped`` outcome with a clear reason.
+    # Ideation is always safe (Lab writes under ``~/.selffork/lab/``).
+    executor = ActionExecutor(
+        ideation_manager=IdeationManager(),
+        telegram_bridge=telegram_bridge,  # type: ignore[arg-type]
+        task_starter=task_starter,  # type: ignore[arg-type]
+        kanban_card_creator=kanban_card_creator,  # type: ignore[arg-type]
+    )
 
     # Settings UI wins when a YAML file exists; env is bootstrap only
     # (Faz G — Autonomy Settings panel). The dashboard's PUT endpoint

@@ -691,15 +691,24 @@ def _resolve_pending_audit_path() -> Path:
 
 
 def _load_destructive_whitelist() -> DestructiveWhitelist:
-    """Load the default whitelist (``packages/body/.../destructive_actions.yaml``).
+    """Load the currently-effective destructive whitelist.
 
-    Honour ``SELFFORK_DESTRUCTIVE_WHITELIST_PATH`` env var to point at a
-    custom YAML — same shape, used by the operator's Settings UI in S4.
+    Delegates to the shared resolver so the warden process and the
+    dashboard's Settings GET endpoint always look at the same file.
+
+    Precedence (S4):
+
+    1. ``SELFFORK_DESTRUCTIVE_WHITELIST_PATH`` env var (operator pinned).
+    2. ``~/.selffork/settings/destructive-whitelist.yaml`` operator
+       override (written by the Settings UI editor).
+    3. Bundled default at
+       ``packages/body/.../data/destructive_actions.yaml``.
     """
-    env = os.environ.get("SELFFORK_DESTRUCTIVE_WHITELIST_PATH")
-    if env:
-        return DestructiveWhitelist.load(Path(env).expanduser())
-    return DestructiveWhitelist.load()
+    from selffork_orchestrator.dashboard.settings import (
+        load_effective_destructive_whitelist,
+    )
+
+    return load_effective_destructive_whitelist()
 
 
 def _build_pending_store(

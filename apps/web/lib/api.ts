@@ -722,11 +722,20 @@ export interface TrainingJobResponse {
 }
 
 export interface ReflexAdapterInfo {
-  version: string;
+  /**
+   * S4 honesty pass: ``adapter_trained=false`` means no manifest exists
+   * yet (pre-M7). The UI must render an empty state instead of fake
+   * version / age / examples. M7 worker writes a real manifest at
+   * ``~/.selffork/reflex/adapters/current/manifest.json`` and flips
+   * this flag to ``true``.
+   */
+  adapter_trained: boolean;
+  version: string | null;
   trained_at: string | null;
-  age_days: number;
-  examples: number;
-  method: string;
+  age_days: number | null;
+  examples: number | null;
+  method: string | null;
+  message: string | null;
 }
 
 export function startTraining(
@@ -895,4 +904,120 @@ export function applyHeartbeatPreset(
 
 export function getHeartbeatState(): Promise<HeartbeatStateResponse> {
   return request<HeartbeatStateResponse>("/api/heartbeat/state");
+}
+
+// ── Settings persistence — S4 (ADR-007 §4) ─────────────────────────────────
+
+export interface ModelEndpointConfig {
+  url: string;
+  protocol: "openai" | "mlx" | "ollama";
+  model_name: string;
+  auth_kind: "none" | "api-key" | "bearer";
+  auth_secret: string;
+  training_endpoint: string;
+}
+
+export interface ModelEndpointHealth {
+  ok: boolean;
+  status_code: number | null;
+  latency_ms: number | null;
+  detail: string;
+}
+
+export function getModelEndpoint(): Promise<ModelEndpointConfig> {
+  return request<ModelEndpointConfig>("/api/settings/model-endpoint");
+}
+
+export function putModelEndpoint(
+  payload: ModelEndpointConfig,
+): Promise<ModelEndpointConfig> {
+  return request<ModelEndpointConfig>("/api/settings/model-endpoint", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function testModelEndpoint(
+  payload?: ModelEndpointConfig,
+): Promise<ModelEndpointHealth> {
+  // Audit-god INFO #4: backend accepts an omitted body (FastAPI
+  // ``payload: ModelEndpointConfig | None = None``); when the operator
+  // hits "Test connection" after restart we send no body so the
+  // backend falls back to the persisted config.
+  return request<ModelEndpointHealth>(
+    "/api/settings/model-endpoint/test",
+    payload
+      ? { method: "POST", body: JSON.stringify(payload) }
+      : { method: "POST" },
+  );
+}
+
+// ── Destructive whitelist ───────────────────────────────────────────────────
+
+export interface DestructiveCategoryView {
+  id: string;
+  description: string;
+  confirm_window_hours: number;
+  rule_count: number;
+}
+
+export interface DestructiveWhitelistResponse {
+  source: "override" | "default" | "env";
+  path: string;
+  categories: DestructiveCategoryView[];
+  raw_yaml: string;
+}
+
+export function getDestructiveWhitelist(): Promise<DestructiveWhitelistResponse> {
+  return request<DestructiveWhitelistResponse>(
+    "/api/settings/destructive-whitelist",
+  );
+}
+
+export function putDestructiveWhitelist(
+  yamlBody: string,
+): Promise<DestructiveWhitelistResponse> {
+  return request<DestructiveWhitelistResponse>(
+    "/api/settings/destructive-whitelist",
+    {
+      method: "PUT",
+      body: JSON.stringify({ yaml_body: yamlBody }),
+    },
+  );
+}
+
+export function putDestructiveCategoryWindow(
+  categoryId: string,
+  confirmWindowHours: number,
+): Promise<DestructiveWhitelistResponse> {
+  return request<DestructiveWhitelistResponse>(
+    `/api/settings/destructive-whitelist/${encodeURIComponent(categoryId)}/window`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        confirm_window_hours: confirmWindowHours,
+      }),
+    },
+  );
+}
+
+// ── CodexBar user knobs ─────────────────────────────────────────────────────
+
+export interface CodexBarUserConfig {
+  version_pin: string;
+  auto_update: boolean;
+  binary_path_override: string;
+}
+
+export function getCodexBarSettings(): Promise<CodexBarUserConfig> {
+  return request<CodexBarUserConfig>("/api/settings/codexbar");
+}
+
+export function putCodexBarSettings(
+  payload: CodexBarUserConfig,
+): Promise<CodexBarUserConfig> {
+  return request<CodexBarUserConfig>("/api/settings/codexbar", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
 }

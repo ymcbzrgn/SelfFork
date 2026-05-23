@@ -850,3 +850,190 @@ S6 CLI Router RAG affinity için.
 - `selffork mind dream` CLI komutu (Auto Dream force_run wrapper).
 - S6 CLI Router RAG affinity — T4 Procedural query API'sini
   consume edecek; ayrı sprint.
+
+## S4 — Settings Persistence (ADR-007 §4)
+
+**Hedef:** Settings sayfasındaki tüm sahte canlı veriyi yok et;
+gerçek persistence ile her form/buton arka uca bağlanır. No-mock
+S4-S8 kuralı sertleştirildi: dead UI ya wire'lanır ya silinir.
+
+**Backend (yeni):**
+
+- `GET/PUT /api/settings/model-endpoint` (URL/protocol/model/auth).
+- `POST /api/settings/model-endpoint/test` (gerçek health ping).
+- `GET/PUT /api/settings/destructive-whitelist` (operatör override —
+  YAML full editor).
+- `PUT /api/settings/destructive-whitelist/{id}/window` (per-category
+  soft-confirm window).
+- `GET/PUT /api/settings/codexbar` (version pin / auto_update /
+  binary path override).
+- `/api/reflex/adapter` honest empty state (manifest reader).
+- `/api/reflex/train` fake `estimated_seconds=5h 18m` SİLİNDİ.
+
+**Frontend (`apps/web/app/settings/page.tsx` rewrite):**
+
+- Model Endpoint accordion: controlled inputs + Save + Test connection.
+- Fine-tune accordion: hyperparams form + Start training queue.
+- Telegram bridge accordion: destructive whitelist full editor + per-
+  category window dropdown.
+- CodexBar accordion: read-only status + writable knobs.
+- Autonomy accordion: preset switcher + creative dial + 8 knob inputs.
+- SİLİNDİ: Theme section, Workspace defaults section, Advanced
+  toggles section (no-consumer mock).
+- "Power user / Vision adapter → `/cockpit/settings/vision`" link kaldı.
+
+**S-Auto F-AG #3 callable inject (S4'le birlikte tamamlandı):**
+
+- `server.py` lifespan'da `HeartbeatScheduler`'a `telegram_bridge`
+  (NullBridge → None) + `task_starter` + `kanban_card_creator`
+  wire'lı.
+- `build_default_heartbeat()` 3 yeni kwarg kabul ediyor.
+- Boot log: `heartbeat_callables_wired{telegram, task, kanban}`.
+
+### Senaryo a — Model Endpoint persistence + restart
+
+1. `selffork ui --port 8765` başlat (`SELFFORK_HEARTBEAT_ENABLED=false`
+   opsiyonel; daemon kapalıyken de UI tam çalışır).
+2. UI Settings → Model Endpoint accordion'unu aç. URL alanını
+   `http://10.0.0.42:8080` yap. Protocol `mlx`, Model name
+   `gemma-4-26b-a4b-it-4bit`, Auth `api-key` + secret `sk-test`.
+3. **Save** → 200 + "Saved ✓" görünür.
+4. `cat ~/.selffork/settings/model-endpoint.yaml` → YAML payload
+   beklenen değerlerle.
+5. UI'yı kapat, orchestrator'ı restart et, UI'yı tekrar aç → form
+   aynı değerlerle yüklenmiş olmalı (round-trip).
+
+### Senaryo b — Model Endpoint health probe
+
+1. `Test connection` → endpoint kapalıyken `Unreachable · NNNms ·
+   ConnectError` pill'i görünür (sahte "Online · 187ms" yok).
+2. `python -m http.server 8080` ile localhost'ta dummy server kaldır,
+   yeniden test → `Online · NNNms · status=...` pill'i.
+
+### Senaryo c — Destructive whitelist editor + per-category window
+
+1. Telegram bridge accordion'u aç → "X categories enabled (default)"
+   listesi 7 madde (bundled).
+2. "Open editor →" tıkla → raw YAML textarea açılır.
+3. `prod_deploy` kategorisinin `confirm_window_hours: 4` → `12` yap,
+   `Save whitelist` → response `source: override`.
+4. `cat ~/.selffork/settings/destructive-whitelist.yaml` → dosya
+   yazıldı.
+5. Per-category dropdown: `social_outbound`'un 1 saatini 8 saate çek
+   → backend `PUT .../social_outbound/window`. `~/.selffork/settings/
+   destructive-whitelist.yaml` `social_outbound` window = 8.
+6. Orchestrator restart → warden `_load_destructive_whitelist()` aynı
+   override path'ten okur (dashboard ve warden senkron).
+
+### Senaryo d — Reflex adapter honest empty state
+
+1. `rm -rf ~/.selffork/reflex/` (M7 öncesi henüz adapter yok).
+2. Fine-tune accordion: "Current adapter: No adapter trained yet.
+   Reflex fine-tune worker lands in M7..." — sahte `v1.2 · 47 days
+   old` YOK.
+3. Manuel manifest yaz: `mkdir -p ~/.selffork/reflex/adapters/current
+   && echo '{"version":"v0.1","examples":5000,"method":"QLoRA",
+   "trained_at":"2026-05-23T12:00:00Z"}' >
+   ~/.selffork/reflex/adapters/current/manifest.json`. Sayfayı
+   yenile → gerçek `v0.1 · 0 days old · QLoRA · 5000 examples`.
+
+### Senaryo e — Fine-tune queue contract
+
+1. Start training (auto dataset) → 202 + UI'da "Queued · job <id>
+   (M7 worker pending)".
+2. `curl /api/reflex/training-status/<id>` → `status: queued`,
+   `estimated_seconds: null` (sahte 5h 18m YOK).
+3. `log_tail` "Real training worker lands in M7" satırını içerir.
+
+### Senaryo f — Autonomy preset + knob edit
+
+1. Autonomy accordion'da `tam` butonuna tıkla → preset değişir,
+   `creative_dial` `spark_only` (pre-M7 ceiling).
+2. `tick_seconds`'i 1.5'e çek → "Save knobs".
+3. `cat ~/.selffork/heartbeat/autonomy.yaml` → `tick_seconds: 1.5`,
+   `preset: tam`, `creative_dial: spark_only`.
+4. Orchestrator restart → `/api/heartbeat/autonomy` aynı değerlerle
+   geri döner.
+5. "Save & restart" sonrası daemon kapalı/açık knob'larında değişiklik
+   uygulanır (effect-on-restart notu UI'da).
+
+### Senaryo g — CodexBar settings
+
+1. CodexBar accordion'a Version pin `v0.27.0`, Binary path override
+   `/usr/local/bin/codexbar`, Auto-update toggle kapalı.
+2. Save → `cat ~/.selffork/settings/codexbar.yaml` payload.
+3. Restart sonrası dashboard'da değerler aynı; CodexBar status
+   "ready/inactive" canlı poll'lanmaya devam.
+
+### Senaryo h — F-AG #3 callable wire (dashboard boot log)
+
+1. `selffork ui` başlat. Log'larda `heartbeat_callables_wired
+   telegram_wired=<bool> task_starter_wired=true
+   kanban_creator_wired=true` satırı görmek gerek.
+2. Telegram bot token configure edilmediyse `telegram_wired=false`
+   ama task + kanban wire'lı.
+3. `SELFFORK_HEARTBEAT_ENABLED=true` + Self Jr Talk endpoint env
+   konfigüre edilmişse daemon `OPERATOR_ASK` action seçtiğinde
+   gerçek Telegram mesajı düşmeli (operatör chat'inde); `TASK_START`
+   seçtiğinde `~/.selffork/projects/<slug>/heartbeat-prds/<ts>.md`
+   PRD dosyası + spawn'lanan selffork run subprocess pid'i audit
+   JSONL'inde görünür; `KANBAN_SUGGEST` seçtiğinde aktif project'in
+   Kanban board'unda yeni card belirir.
+
+### Senaryo i — No-mock kuralı tam sweep
+
+1. Settings page'inde sahte literal taraması:
+   `grep -E '187ms|8,432|v1.2 ·|47 days|7 categories|coming soon|
+   Wire-in pending|Self Jr raw thinking' apps/web/app/settings/
+   page.tsx` → sıfır eşleşme.
+2. 3 dead section silindi: `grep -n 'theme\|workspace\|advanced'
+   apps/web/app/settings/page.tsx` → sadece dosya yorumlarında
+   referans varsa OK; Section type union'da yok.
+3. **API cost slot** hiçbir Settings ekranında yok
+   ([[subscription-based-cli-no-cost-dashboard]]).
+
+### Senaryo j — Full backend gate
+
+- [ ] `.venv/bin/python -m pytest packages/mind/tests/
+      packages/orchestrator/tests/ packages/body/tests/ -q` → ≥1957 pass.
+- [ ] `.venv/bin/python -m ruff check packages/orchestrator/src/
+      selffork_orchestrator/dashboard/
+      packages/orchestrator/src/selffork_orchestrator/heartbeat/
+      config.py packages/orchestrator/tests/dashboard/` →
+      All checks passed.
+- [ ] `.venv/bin/python -m mypy packages/orchestrator/src/
+      selffork_orchestrator/dashboard/settings/
+      packages/orchestrator/src/selffork_orchestrator/dashboard/
+      settings_router.py packages/orchestrator/src/
+      selffork_orchestrator/dashboard/reflex_router.py
+      packages/orchestrator/src/selffork_orchestrator/dashboard/
+      heartbeat_wire.py packages/orchestrator/src/
+      selffork_orchestrator/heartbeat/config.py` → Success.
+- [ ] `cd apps/web && npx tsc --noEmit` → clean.
+
+### Senaryo k — audit-god rigorous review
+
+- [ ] `audit-god` agent dispatch — bulgular CRITICAL/MAJOR/MINOR
+      sınıflı; CRITICAL = 0 hedef.
+
+### Senaryo l — Commit-ready
+
+- [ ] Memory entry: `project_s4_complete_2026_05_23.md` yazıldı.
+- [ ] `MEMORY.md` index güncel.
+- [ ] ADR-007 §4 S4 blok "✅ done" damgası.
+- [ ] Commit message draft operatöre sunuldu (S-Auto + S-Memory
+      formatında).
+- [ ] Operatör onayı sonrası tek commit (MANDATE 1).
+
+### S4 sonrası deferred (sonraki sprintlere)
+
+- Settings hot-reload (PUT effect-now) — model endpoint + autonomy
+  şu an restart gerektiriyor; S-Vision veya M7 öncesi ek sprint
+  adayı.
+- Real M7 Reflex training worker — `/train` queue contract zaten
+  hazır; worker M7 Reflex sprint'inde.
+- Vision adapter inline section (şu an separate page) — operatör
+  kararı: separate kalır.
+- CLI Agent selection in Settings — S6 (CLI Router) sprint scope.
+- Body daemon Settings panel — S-Vision genişletmesi.
+- Voice modality Settings panel — S-Vision'da netleşecek.
