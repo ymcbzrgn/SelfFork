@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 __all__ = [
     "PreprocessConfig",
@@ -54,7 +54,15 @@ def preprocess(image_bytes: bytes, cfg: PreprocessConfig | None = None) -> bytes
             "preprocess() requires Pillow; install via `uv pip install Pillow`."
         ) from exc
 
-    img = Image.open(io.BytesIO(image_bytes))
+    # ``Image.open`` returns an :class:`ImageFile` subclass; subsequent
+    # ``crop`` / ``resize`` / ``convert`` return the base :class:`Image`
+    # class. Annotate the variable as the base so reassignments type
+    # cleanly. ``Image.LANCZOS`` is the legacy alias still present on
+    # Pillow >= 9.1; modern code prefers
+    # :class:`Image.Resampling.LANCZOS` but stubs ship only the new
+    # location, so we read via ``getattr`` for forward/back compat.
+    img: Any = Image.open(io.BytesIO(image_bytes))
+    lanczos = getattr(Image, "Resampling", Image).LANCZOS
     if cfg.roi is not None:
         x, y, w, h = cfg.roi
         if w <= 0 or h <= 0:
@@ -66,7 +74,7 @@ def preprocess(image_bytes: bytes, cfg: PreprocessConfig | None = None) -> bytes
         scale = cfg.target_long_edge / long_edge
         new_w = _round_to_multiple(int(img.size[0] * scale), cfg.multiple_of)
         new_h = _round_to_multiple(int(img.size[1] * scale), cfg.multiple_of)
-        img = img.resize((new_w, new_h), Image.LANCZOS)
+        img = img.resize((new_w, new_h), lanczos)
 
     out = io.BytesIO()
     save_format = "PNG" if cfg.output_format == "png" else "JPEG"
@@ -91,10 +99,11 @@ def delta_image(before: bytes, after: bytes, *, threshold: int = 10) -> bytes:
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError("delta_image() requires Pillow") from exc
 
-    a = Image.open(io.BytesIO(before)).convert("RGB")
-    b = Image.open(io.BytesIO(after)).convert("RGB")
+    a: Any = Image.open(io.BytesIO(before)).convert("RGB")
+    b: Any = Image.open(io.BytesIO(after)).convert("RGB")
+    lanczos = getattr(Image, "Resampling", Image).LANCZOS
     if a.size != b.size:
-        b = b.resize(a.size, Image.LANCZOS)
+        b = b.resize(a.size, lanczos)
     diff = ImageChops.difference(a, b)
     bbox = diff.getbbox()
     if bbox is None:

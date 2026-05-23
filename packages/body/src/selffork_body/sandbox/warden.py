@@ -24,7 +24,7 @@ import asyncio
 import dataclasses
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, Literal, assert_never
 
 from selffork_body.sandbox.risk_taxonomy import RiskTier, tier_for_action
 
@@ -184,7 +184,11 @@ class PermissionWarden:
             if risk_tier in ("T0", "T1", "T2"):
                 return PermissionDecision(True, "allow", "danger:auto_logged", now, "auto")
             return None  # T3 → two-key gate
-        return None
+        # All :class:`WardenMode` values handled above; the type
+        # checker confirms this branch is unreachable. We keep the
+        # explicit ``assert_never`` so a future mode addition fails
+        # loudly at type-check time instead of silently falling through.
+        assert_never(self._mode)
 
     async def request(self, req: PermissionRequest) -> PermissionDecision:
         if self._state in (WardenState.KILLED, WardenState.INACTIVE):

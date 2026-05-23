@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, cast
 
 from selffork_body.drivers.web.dom_extractor import extract_dom_tree
 from selffork_body.drivers.web.security_watchdog import SecurityWatchdog
@@ -47,10 +47,14 @@ class PlaywrightWebDriver:
         self.project_slug = project_slug
         self.storage = WebStorageStateManager(root=storage_root)
         self.security = SecurityWatchdog(allowed_domains=allowed_domains)
-        self._playwright = None
-        self._browser = None
-        self._context = None
-        self._page = None
+        # Playwright handles are typed ``Any`` because the package is
+        # imported lazily inside ``start()`` and mypy can't see the
+        # concrete types under ``ignore_missing_imports`` (CI / dev
+        # boxes without the optional dep).
+        self._playwright: Any = None
+        self._browser: Any = None
+        self._context: Any = None
+        self._page: Any = None
         self._autosave: StorageStateAutoSave | None = None
 
     @property
@@ -68,8 +72,10 @@ class PlaywrightWebDriver:
                 "Install via `uv pip install playwright && playwright install chromium`."
             ) from exc
         self._playwright = await async_playwright().start()
-        self._browser = await self._playwright.chromium.launch(headless=self.headless)
-        ctx_kwargs: dict = {}
+        self._browser = await self._playwright.chromium.launch(
+            headless=self.headless
+        )
+        ctx_kwargs: dict[str, Any] = {}
         if self.storage_state_path is not None and self.storage_state_path.exists():
             ctx_kwargs["storage_state"] = str(self.storage_state_path)
         self._context = await self._browser.new_context(**ctx_kwargs)
@@ -77,7 +83,7 @@ class PlaywrightWebDriver:
         # Wire navigation watchdog
         self._page.on(
             "framenavigated",
-            lambda frame: self._page.context._loop.create_task(  # type: ignore[attr-defined]
+            lambda frame: self._page.context._loop.create_task(
                 self.security.on_framenavigated(frame)
             ),
         )
@@ -105,7 +111,7 @@ class PlaywrightWebDriver:
             self._playwright = None
         self._page = None
 
-    def _require_page(self):  # type: ignore[no-untyped-def]
+    def _require_page(self) -> Any:
         if self._page is None:
             raise RuntimeError("PlaywrightWebDriver: call start() first")
         return self._page
@@ -147,16 +153,19 @@ class PlaywrightWebDriver:
     async def screenshot(self, rect: tuple[int, int, int, int] | None = None) -> bytes:
         page = self._require_page()
         if rect is not None:
-            return await page.screenshot(
-                clip={
-                    "x": rect[0],
-                    "y": rect[1],
-                    "width": rect[2],
-                    "height": rect[3],
-                },
-                type="png",
+            return cast(
+                bytes,
+                await page.screenshot(
+                    clip={
+                        "x": rect[0],
+                        "y": rect[1],
+                        "width": rect[2],
+                        "height": rect[3],
+                    },
+                    type="png",
+                ),
             )
-        return await page.screenshot(full_page=True, type="png")
+        return cast(bytes, await page.screenshot(full_page=True, type="png"))
 
     async def scroll(self, direction: str = "down", amount: int = 300) -> None:
         page = self._require_page()
@@ -185,12 +194,12 @@ class PlaywrightWebDriver:
         page = self._require_page()
         await page.wait_for_selector(selector, timeout=int(timeout * 1000))
 
-    async def evaluate(self, js_code: str):  # type: ignore[no-untyped-def]
+    async def evaluate(self, js_code: str) -> Any:
         """Run arbitrary JS — caller must gate at T2 risk_tier."""
         page = self._require_page()
         return await page.evaluate(js_code)
 
-    async def dump_dom_tree(self) -> list[dict]:
+    async def dump_dom_tree(self) -> list[dict[str, Any]]:
         return await extract_dom_tree(self._require_page())
 
     async def storage_state_save(

@@ -20,7 +20,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from .destructive_whitelist import CandidateAction, DestructiveCategory
 
@@ -46,7 +46,7 @@ class PendingConfirmation:
     category_id: str
     category_description: str
     command_summary: str
-    action_payload: dict
+    action_payload: dict[str, Any]
     asked_at: str
     expires_at: str
     status: PendingStatus = "pending"
@@ -345,14 +345,13 @@ def _summarize(action: CandidateAction) -> str:
         args = " ".join(action.args)
         return f"{action.tool} {args}".strip()
     if action.sql:
-        snippet = action.sql.strip().splitlines()[0][:80]
-        return snippet
+        return action.sql.strip().splitlines()[0][:80]
     if action.url:
         return f"{action.http_method or 'GET'} {action.url}"
     return "(unknown action)"
 
 
-def _action_to_dict(action: CandidateAction) -> dict:
+def _action_to_dict(action: CandidateAction) -> dict[str, Any]:
     return {
         "tool": action.tool,
         "args": list(action.args),

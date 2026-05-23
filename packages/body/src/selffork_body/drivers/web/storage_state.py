@@ -17,6 +17,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 __all__ = ["StorageStateAutoSave", "WebStorageStateManager"]
 
@@ -42,7 +43,7 @@ class WebStorageStateManager:
 
     async def save(
         self,
-        context,  # type: ignore[no-untyped-def]
+        context: Any,
         provider: str,
         project_slug: str | None = None,
     ) -> Path:

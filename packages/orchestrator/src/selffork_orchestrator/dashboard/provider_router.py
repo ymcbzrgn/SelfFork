@@ -159,11 +159,11 @@ def build_provider_router(
     async def sign_in_start(name: str) -> SignInStartResponse:
         if name not in PROVIDER_NAMES:
             raise HTTPException(status_code=404, detail=f"unknown provider {name!r}")
-        provider = name  # type: ignore[assignment]
+        provider = name
         session_id = secrets.token_urlsafe(16)
         return SignInStartResponse(
             session_id=session_id,
-            provider=provider,  # type: ignore[arg-type]
+            provider=provider,
             started_at=datetime.now(UTC).isoformat(),
         )
 
@@ -177,7 +177,7 @@ def build_provider_router(
     async def disconnect(name: str) -> ProviderView:
         if name not in PROVIDER_NAMES:
             raise HTTPException(status_code=404, detail=f"unknown provider {name!r}")
-        record = registry.get(name)  # type: ignore[arg-type]
+        record = registry.get(name)
         # M5 audit-fix wave — delete the on-disk storage_state JSON so the
         # next sign-in flow starts fresh (no ghost session cookies).
         if record.storage_state_path:
@@ -189,7 +189,7 @@ def build_provider_router(
                     path.unlink()
             except OSError:
                 pass
-        return _serialise(registry.mark_disconnected(name))  # type: ignore[arg-type]
+        return _serialise(registry.mark_disconnected(name))
 
     @router.post(
         "/{name}/auth-expired",

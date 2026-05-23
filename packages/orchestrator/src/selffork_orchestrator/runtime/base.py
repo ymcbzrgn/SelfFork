@@ -39,7 +39,7 @@ ChatMessage = dict[str, str]
 # text-only ``ChatMessage`` and ``LLMRuntime`` ABC remain untouched. Body's
 # vision pipeline uses ``MultimodalLLMRuntime`` Protocol below; backends opt in
 # by implementing it (currently ``MlxServerRuntime`` via ``mlx_vlm.server``).
-from typing import Literal, Protocol, TypedDict
+from typing import Literal, Protocol, TypedDict  # noqa: E402
 
 
 class ContentPartText(TypedDict):

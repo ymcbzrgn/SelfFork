@@ -15,7 +15,7 @@ the driver via :class:`selffork_orchestrator.tools.body` ``body_*`` tools.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from selffork_body.drivers.android.docker_runtime import (
     AndroidRuntimeError,
@@ -124,11 +124,15 @@ class AndroidDriver:
         except Exception:
             await self.fallback.install_apk(apk_path)
 
-    async def ax_tree(self, bundle_id: str | None = None) -> dict:
+    async def ax_tree(self, bundle_id: str | None = None) -> dict[str, Any]:
         return await self.mcp.dump_a11y_tree()
 
-    async def storage_state_save(self, provider: str, project_slug: str | None = None):  # type: ignore[no-untyped-def]
+    async def storage_state_save(
+        self, provider: str, project_slug: str | None = None
+    ) -> None:
         raise NotImplementedError("Android driver storage_state is not applicable; use cloud Account state instead")
 
-    async def storage_state_load(self, provider: str, project_slug: str | None = None):  # type: ignore[no-untyped-def]
+    async def storage_state_load(
+        self, provider: str, project_slug: str | None = None
+    ) -> None:
         raise NotImplementedError("Android driver storage_state is not applicable")

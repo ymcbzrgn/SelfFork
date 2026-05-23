@@ -92,7 +92,7 @@ class MacOSAxDriver:
         except ImportError as exc:  # pragma: no cover
             raise RuntimeError("PyObjC required for summarise") from exc
 
-        def _read(attr) -> Any | None:
+        def _read(attr: Any) -> Any | None:
             # PyObjC ``AXUIElementCopyAttributeValue`` returns ``(error, value)``
             # tuple when the out-parameter is None; defensive handling for
             # forward-compatible bindings that may swap the order.

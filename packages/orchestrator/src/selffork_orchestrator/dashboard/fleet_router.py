@@ -18,6 +18,7 @@ import asyncio
 import secrets
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -36,7 +37,7 @@ class DaemonRecord:
     last_heartbeat: datetime | None = None
     latency_ms: int | None = None
     online: bool = False
-    snapper_states: dict[str, dict] = field(default_factory=dict)
+    snapper_states: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class FleetRegistry:
@@ -90,7 +91,7 @@ class FleetRegistry:
             return record
 
     async def update_state(
-        self, *, machine_id: str, cli: str, state: dict
+        self, *, machine_id: str, cli: str, state: dict[str, Any]
     ) -> None:
         async with self._lock:
             record = self._records.get(machine_id)
@@ -130,7 +131,7 @@ class HeartbeatRequest(BaseModel):
 class StateUpdateRequest(BaseModel):
     machine_id: str = Field(min_length=1, max_length=100)
     cli: str = Field(min_length=1, max_length=64)
-    state: dict
+    state: dict[str, Any]
     sent_at: str | None = None
 
 

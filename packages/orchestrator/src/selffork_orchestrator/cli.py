@@ -20,7 +20,7 @@ import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 
@@ -70,7 +70,7 @@ _DEFAULT_PENDING_AUDIT_PATH = Path(
 # Strong references to in-flight Telegram notify tasks so they don't get
 # garbage-collected mid-await. The callback in :func:`_build_pending_telegram_hook`
 # removes finished tasks; the set stays tiny under normal load.
-_PENDING_TELEGRAM_TASKS: set[asyncio.Task] = set()
+_PENDING_TELEGRAM_TASKS: set[asyncio.Task[Any]] = set()
 
 __all__ = ["app"]
 
@@ -750,7 +750,7 @@ def _build_pending_store(
     return store
 
 
-def _build_pending_telegram_hook(telegram_bridge: object):
+def _build_pending_telegram_hook(telegram_bridge: object) -> Any:
     """Wrap ``bridge.notify(...)`` as a sync :class:`NotifyHook`.
 
     The store invokes the hook from inside ``request/_decide/expire``
@@ -772,7 +772,7 @@ def _build_pending_telegram_hook(telegram_bridge: object):
         return None
     bridge = telegram_bridge
 
-    def hook(entry, op) -> None:
+    def hook(entry: Any, op: Any) -> None:
         from selffork_orchestrator.telegram.bridge import TelegramMessage
 
         outbound = build_message(entry, op)

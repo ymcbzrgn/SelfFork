@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from collections.abc import Callable
+from typing import Any
 
 from selffork_body.sandbox import normalize_domain
 
@@ -81,11 +82,11 @@ class SecurityWatchdog:
         with contextlib.suppress(Exception):
             await popup.close()
 
-    def attach(self, page) -> None:  # type: ignore[no-untyped-def]
+    def attach(self, page: Any) -> None:
         """Wire the watchdog to a Playwright page's events."""
-        page.on("framenavigated", lambda frame: page.context.event_loop.create_task(  # type: ignore[attr-defined]
+        page.on("framenavigated", lambda frame: page.context.event_loop.create_task(
             self.on_framenavigated(frame)
         ) if hasattr(page.context, "event_loop") else None)
-        page.on("popup", lambda popup: page.context.event_loop.create_task(  # type: ignore[attr-defined]
+        page.on("popup", lambda popup: page.context.event_loop.create_task(
             self.on_popup(popup)
         ) if hasattr(page.context, "event_loop") else None)

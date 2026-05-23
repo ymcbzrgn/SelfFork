@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
+from typing import Any
 
 __all__ = ["UiAutomator2Fallback"]
 
@@ -22,9 +23,12 @@ class UiAutomator2Fallback:
 
     def __init__(self, device_serial: str | None = None) -> None:
         self.device_serial = device_serial
-        self._device = None
+        # Lazy-imported uiautomator2 device handle. Typed ``Any`` so
+        # mypy doesn't narrow ``None`` and flag the warm-cache branch
+        # as unreachable.
+        self._device: Any = None
 
-    def _get_device(self):  # type: ignore[no-untyped-def]
+    def _get_device(self) -> Any:
         if self._device is not None:
             return self._device
         try:

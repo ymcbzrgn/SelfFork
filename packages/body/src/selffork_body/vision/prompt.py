@@ -13,7 +13,7 @@ Three tiers of escalating context:
 from __future__ import annotations
 
 import json
-from typing import Literal
+from typing import Any, Literal
 
 __all__ = [
     "Tier",
@@ -92,7 +92,7 @@ def build_prompt(
     raise ValueError(f"unknown tier: {tier!r}")
 
 
-def parse_decision(raw: str) -> dict:
+def parse_decision(raw: str) -> dict[str, Any]:
     """Parse the LLM-emitted single-line JSON decision.
 
     Strips fences and leading/trailing junk that some models still produce.

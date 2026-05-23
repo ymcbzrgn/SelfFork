@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import base64
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any, cast
 
 from selffork_body.vision.prompt import Tier, build_prompt, parse_decision
 from selffork_shared.config import VisionConfig
@@ -34,18 +35,21 @@ class VisionDecision:
     action: str
     target: str
     bbox: tuple[int, int, int, int] | None
-    args: dict
+    args: dict[str, Any]
     confidence: float
     reason: str
     tier: Tier
     duration_ms: int
 
 
-def _decision_from_dict(payload: dict, *, tier: Tier, duration_ms: int) -> VisionDecision:
+def _decision_from_dict(
+    payload: dict[str, Any], *, tier: Tier, duration_ms: int
+) -> VisionDecision:
     bbox_raw = payload.get("bbox")
     bbox: tuple[int, int, int, int] | None = None
     if isinstance(bbox_raw, (list, tuple)) and len(bbox_raw) == 4:
-        bbox = tuple(int(v) for v in bbox_raw)  # type: ignore[assignment]
+        coerced = tuple(int(v) for v in bbox_raw)
+        bbox = cast("tuple[int, int, int, int]", coerced)
     return VisionDecision(
         action=str(payload["action"]),
         target=str(payload.get("target", "")),
@@ -100,7 +104,7 @@ class MlxVlmAdapter:
 
     async def invoke_with_images(
         self,
-        messages,  # type: ignore[no-untyped-def]
+        messages: Sequence[dict[str, Any]],
         images: Sequence[bytes],
         max_tokens: int = 256,
         temperature: float = 0.0,
@@ -115,7 +119,7 @@ class MlxVlmAdapter:
             raise ValueError("MlxVlmAdapter currently supports a single image per request")
         image_b64 = base64.b64encode(images[0]).decode("ascii")
         # Compose openai-style multimodal content
-        rendered_messages: list[dict] = []
+        rendered_messages: list[dict[str, Any]] = []
         for msg in messages:
             role = msg.get("role", "user")
             content = msg.get("content", "")
@@ -148,7 +152,7 @@ class MlxVlmAdapter:
             )
             response.raise_for_status()
             data = response.json()
-            return data["choices"][0]["message"]["content"]
+            return cast(str, data["choices"][0]["message"]["content"])
 
 
 class OllamaVisionAdapter:
@@ -183,7 +187,7 @@ class OllamaVisionAdapter:
 
     async def invoke_with_images(
         self,
-        messages,  # type: ignore[no-untyped-def]
+        messages: Sequence[dict[str, Any]],
         images: Sequence[bytes],
         max_tokens: int = 256,
         temperature: float = 0.0,
@@ -194,7 +198,7 @@ class OllamaVisionAdapter:
         except ImportError as exc:  # pragma: no cover
             raise RuntimeError("ollama adapter requires httpx") from exc
 
-        rendered: list[dict] = []
+        rendered: list[dict[str, Any]] = []
         encoded_images = [base64.b64encode(img).decode("ascii") for img in images]
         for idx, msg in enumerate(messages):
             role = msg.get("role", "user")
@@ -204,7 +208,7 @@ class OllamaVisionAdapter:
                 if isinstance(content, str)
                 else "\n".join(part["text"] for part in content if part.get("type") == "text")
             )
-            entry: dict = {"role": role, "content": text}
+            entry: dict[str, Any] = {"role": role, "content": text}
             if idx == len(messages) - 1 and encoded_images:
                 entry["images"] = encoded_images
             rendered.append(entry)
@@ -222,7 +226,7 @@ class OllamaVisionAdapter:
             response = await client.post(f"{self.host}/api/chat", json=payload)
             response.raise_for_status()
             data = response.json()
-            return data["message"]["content"]
+            return cast(str, data["message"]["content"])
 
 
 class VisionOrchestrator:
@@ -236,12 +240,12 @@ class VisionOrchestrator:
 
     def __init__(
         self,
-        runtime,  # type: ignore[no-untyped-def]
+        runtime: Any,
         *,
         tier1_threshold: float = 0.7,
         tier2_threshold: float = 0.5,
-        audit_emit=None,  # type: ignore[no-untyped-def]
-        clock=None,  # type: ignore[no-untyped-def]
+        audit_emit: Callable[..., None] | None = None,
+        clock: Callable[[], float] | None = None,
         model_id: str | None = None,
         backend: str | None = None,
     ) -> None:
@@ -274,7 +278,7 @@ class VisionOrchestrator:
         config: VisionConfig,
         *,
         adapter: str = "mlx",
-        audit_emit=None,  # type: ignore[no-untyped-def]
+        audit_emit: Callable[..., None] | None = None,
     ) -> "VisionOrchestrator":  # noqa: UP037
         """Build orchestrator from :class:`VisionConfig` with traceability tagged.
 

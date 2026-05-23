@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, cast
 
 __all__ = ["MobileMcpAdapter"]
 
@@ -22,9 +22,12 @@ class MobileMcpAdapter:
 
     def __init__(self, mcp_url: str = "http://127.0.0.1:8000") -> None:
         self.mcp_url = mcp_url.rstrip("/")
-        self._client = None
+        # ``httpx.AsyncClient`` is lazily constructed inside
+        # ``_ensure_client`` so module import is cheap; typed ``Any``
+        # so the lazy import doesn't surface as ``None`` everywhere.
+        self._client: Any = None
 
-    def _ensure_client(self):  # type: ignore[no-untyped-def]
+    def _ensure_client(self) -> Any:
         if self._client is None:
             import httpx
 
@@ -77,7 +80,7 @@ class MobileMcpAdapter:
         client = self._ensure_client()
         r = await client.get(f"{self.mcp_url}/screenshot")
         r.raise_for_status()
-        return r.content
+        return cast(bytes, r.content)
 
     async def install_apk(self, apk_path: Path) -> None:
         client = self._ensure_client()
@@ -99,8 +102,8 @@ class MobileMcpAdapter:
         r = await client.post(f"{self.mcp_url}/press_key", json={"key": key})
         r.raise_for_status()
 
-    async def dump_a11y_tree(self) -> dict:
+    async def dump_a11y_tree(self) -> dict[str, Any]:
         client = self._ensure_client()
         r = await client.get(f"{self.mcp_url}/a11y_tree")
         r.raise_for_status()
-        return r.json()
+        return cast("dict[str, Any]", r.json())

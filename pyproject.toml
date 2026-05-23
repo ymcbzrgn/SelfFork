@@ -199,6 +199,18 @@ module = [
     "lancedb.*",
     "pyarrow",
     "pyarrow.*",
+    # M5 Body pillar optional system / OS deps. Each is loaded lazily
+    # from the corresponding driver constructor (raises clean
+    # ``ImportError`` when missing) so the dev box / CI doesn't need
+    # to install them.
+    "ApplicationServices",
+    "Quartz",
+    "appium",
+    "appium.*",
+    "playwright",
+    "playwright.*",
+    "uiautomator2",
+    "uiautomator2.*",
 ]
 ignore_missing_imports = true
 

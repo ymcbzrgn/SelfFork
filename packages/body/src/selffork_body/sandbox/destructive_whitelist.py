@@ -15,9 +15,10 @@ when the operator edits categories or per-category window overrides.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import yaml
 
@@ -41,7 +42,7 @@ class MatchRule:
     url_contains: tuple[str, ...] = ()
     http_method: str | None = None
 
-    def matches(self, action: "CandidateAction") -> bool:
+    def matches(self, action: CandidateAction) -> bool:
         # Tool name must equal (case-insensitive) when specified.
         if self.tool is not None:
             if (action.tool or "").lower() != self.tool.lower():
@@ -75,7 +76,7 @@ class MatchRule:
         # If no field of this rule was set, it should NOT fire — that
         # would be a vacuously-true rule (catch-all). Require at least
         # one constraint.
-        if not any(
+        return any(
             (
                 self.tool,
                 self.args_contains,
@@ -84,10 +85,7 @@ class MatchRule:
                 self.url_contains,
                 self.http_method,
             )
-        ):
-            return False
-
-        return True
+        )
 
 
 @dataclass(frozen=True)
@@ -99,7 +97,7 @@ class DestructiveCategory:
     confirm_window_hours: int
     match_any: tuple[MatchRule, ...]
 
-    def matches(self, action: "CandidateAction") -> bool:
+    def matches(self, action: CandidateAction) -> bool:
         return any(rule.matches(action) for rule in self.match_any)
 
 
@@ -135,7 +133,7 @@ class DestructiveWhitelist:
         return None
 
     @classmethod
-    def load(cls, path: Path | None = None) -> "DestructiveWhitelist":
+    def load(cls, path: Path | None = None) -> DestructiveWhitelist:
         target = path or DEFAULT_CONFIG_PATH
         if not target.is_file():
             return cls(categories=())
@@ -144,7 +142,7 @@ class DestructiveWhitelist:
         return cls.from_raw(data)
 
     @classmethod
-    def from_raw(cls, data: dict[str, Any]) -> "DestructiveWhitelist":
+    def from_raw(cls, data: dict[str, Any]) -> DestructiveWhitelist:
         raw_categories = data.get("destructive_actions") or []
         categories: list[DestructiveCategory] = []
         for entry in raw_categories:

@@ -18,7 +18,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol, assert_never
 
 __all__ = [
     "AndroidScreenshotCapture",
@@ -116,9 +116,12 @@ class AndroidScreenshotCapture:
 
     def __init__(self, device_serial: str | None = None) -> None:
         self.device_serial = device_serial
-        self._device = None
+        # Lazy-imported uiautomator2 device handle. Typed ``Any`` so
+        # mypy doesn't narrow ``None`` and flag the warm-cache branch
+        # as unreachable.
+        self._device: Any = None
 
-    def _get_device(self):  # type: ignore[no-untyped-def]
+    def _get_device(self) -> Any:
         if self._device is not None:
             return self._device
         try:  # pragma: no cover - import guard
@@ -165,15 +168,21 @@ def get_screenshot_capture(driver: DriverKind) -> ScreenshotCapture:
         )
     if driver == "windows":
         raise NotImplementedError("Windows desktop driver lands in M6")
-    raise ValueError(f"unknown driver kind: {driver!r}")
+    # All ``DriverKind`` literals handled above; ``assert_never`` keeps
+    # mypy happy and surfaces future enum additions as a type error
+    # instead of a silent fall-through.
+    assert_never(driver)
 
 
 def detect_driver() -> DriverKind:
     """Best-effort driver detection from ``sys.platform``. Used for M5 dev smoke."""
-    if sys.platform == "darwin":
+    platform = sys.platform
+    if platform == "darwin":
         return "macos"
-    if sys.platform.startswith("linux"):
+    if platform.startswith("linux"):
         return "linux"
-    if sys.platform == "win32":
+    if platform == "win32":
         return "windows"
-    return "linux"  # conservative default
+    # Other platforms (BSD, cygwin, etc.) — fall back to linux as a
+    # best-effort guess so the dev smoke path doesn't crash.
+    return "linux"

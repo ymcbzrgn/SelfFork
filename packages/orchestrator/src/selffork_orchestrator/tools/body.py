@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from typing import Any, Literal
 
 from pydantic import Field
@@ -210,7 +211,7 @@ async def _invoke(
     action_type: str,
     target_uri: str | None,
     args_summary: dict[str, Any],
-    coro_factory,
+    coro_factory: Callable[[], Awaitable[Any]],
 ) -> dict[str, Any]:
     """Common wrapper: gate → execute → audit-friendly result.
 

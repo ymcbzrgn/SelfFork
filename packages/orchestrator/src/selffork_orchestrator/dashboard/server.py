@@ -15,9 +15,11 @@ import asyncio
 import contextlib
 import json
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import anyio
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -27,6 +29,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from selffork_mind.projections.provenance import ProvenanceRecorder
+
+if TYPE_CHECKING:
+    from selffork_orchestrator.dashboard.settings import (
+        TelegramConfig,
+        YamlSettingsStore,
+    )
 from selffork_orchestrator.dashboard.audit_reader import (
     list_recent_sessions,
     read_session_events,
@@ -159,10 +167,11 @@ def build_app(config: DashboardConfig) -> FastAPI:
         attach_outbound_recorder,
     )
 
-    telegram_store = (
-        config.telegram_store  # type: ignore[assignment]
+    telegram_store = cast(
+        "YamlSettingsStore[TelegramConfig]",
+        config.telegram_store
         if config.telegram_store is not None
-        else default_telegram_store()
+        else default_telegram_store(),
     )
     telegram_cfg = resolve_telegram_config(telegram_store)
     app_telegram_cfg = telegram_cfg
@@ -236,12 +245,12 @@ def build_app(config: DashboardConfig) -> FastAPI:
     )
 
     @asynccontextmanager
-    async def lifespan(_app: FastAPI):
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         # Late-bound — the inbound app is configured only after
         # `_register_telegram_routes` has built the InboundRouter and
         # PtbApplication and stashed them on ``app.state``.
         ptb_app = getattr(_app.state, "telegram_application", None)
-        expire_task: asyncio.Task | None = None
+        expire_task: asyncio.Task[None] | None = None
         pending_store = getattr(_app.state, "pending_confirmation_store", None)
         codexbar_server = getattr(_app.state, "codexbar_server", None)
         heartbeat = getattr(_app.state, "heartbeat", None)
@@ -566,12 +575,12 @@ def build_app(config: DashboardConfig) -> FastAPI:
     return app
 
 
-_DASHBOARD_NOTIFY_TASKS: set[asyncio.Task] = set()
+_DASHBOARD_NOTIFY_TASKS: set[asyncio.Task[Any]] = set()
 """Strong refs to in-flight Telegram notify tasks scheduled from the
 dashboard side (mirrors ``cli._PENDING_TELEGRAM_TASKS``)."""
 
 
-def _build_dashboard_notify_hook(bridge):
+def _build_dashboard_notify_hook(bridge: object) -> Any:
     """Sync :class:`NotifyHook` that schedules ``bridge.notify`` as a task.
 
     Cockpit approve/cancel → store mutates → ``_invoke_hook(entry, op)``
@@ -594,7 +603,7 @@ def _build_dashboard_notify_hook(bridge):
     if not isinstance(bridge, TelegramBridge):
         return None
 
-    def hook(entry, op) -> None:
+    def hook(entry: Any, op: Any) -> None:
         outbound = build_message(entry, op)
         message = TelegramMessage(
             level=outbound.level,
@@ -613,7 +622,7 @@ def _build_dashboard_notify_hook(bridge):
     return hook
 
 
-def _build_outbound_bridge(token: str = ""):
+def _build_outbound_bridge(token: str = "") -> Any:
     """Pick a Telegram bridge based on the resolved YAML/env token.
 
     Lazy import keeps PTB out of the test path for non-Telegram tests
@@ -642,9 +651,9 @@ def _build_outbound_bridge(token: str = ""):
 def _wire_telegram_inbound(
     *,
     app: FastAPI,
-    pending_store,
+    pending_store: Any,
     talk_db_path: Path | None,
-    outbound_bridge,
+    outbound_bridge: Any,
     bot_token: str = "",
     mode: str = "polling",
     webhook_url: str | None = None,
@@ -705,7 +714,9 @@ def _wire_telegram_inbound(
     if not bot_token:
         app.state.telegram_application = None
         return
-    normalised_mode = "webhook" if mode == "webhook" else "polling"
+    normalised_mode: Literal["polling", "webhook"] = (
+        "webhook" if mode == "webhook" else "polling"
+    )
     try:
         ptb_app = build_telegram_application(
             config=TelegramAppConfig(

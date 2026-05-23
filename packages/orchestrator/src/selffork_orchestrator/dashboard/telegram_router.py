@@ -344,7 +344,7 @@ def build_telegram_router(
 
         payload = await request.json()
         try:
-            update = Update.de_json(payload, application.bot)  # type: ignore[arg-type]
+            update = Update.de_json(payload, application.bot)
         except Exception as exc:
             raise HTTPException(
                 status_code=400, detail=f"invalid Telegram update: {exc}"
@@ -476,7 +476,9 @@ def attach_outbound_recorder(
     """
 
     class _Wrapping(TelegramBridge):
-        async def notify(self, message: TelegramMessage):
+        async def notify(
+            self, message: TelegramMessage
+        ) -> Any:
             attempt = await bridge.notify(message)
             if attempt.delivered:
                 log.record_outbound(

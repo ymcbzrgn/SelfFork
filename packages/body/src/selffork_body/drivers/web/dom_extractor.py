@@ -22,6 +22,8 @@ Output rows::
 
 from __future__ import annotations
 
+from typing import Any
+
 __all__ = ["DOM_TREE_JS", "extract_dom_tree", "summarise_dom_tree"]
 
 
@@ -87,12 +89,15 @@ DOM_TREE_JS = r"""
 """
 
 
-async def extract_dom_tree(page) -> list[dict]:  # type: ignore[no-untyped-def]
+async def extract_dom_tree(page: Any) -> list[dict[str, Any]]:
     """Run :data:`DOM_TREE_JS` against ``page`` and return the row list."""
-    return await page.evaluate(DOM_TREE_JS)
+    result: list[dict[str, Any]] = await page.evaluate(DOM_TREE_JS)
+    return result
 
 
-def summarise_dom_tree(rows: list[dict], *, limit: int = 60) -> str:
+def summarise_dom_tree(
+    rows: list[dict[str, Any]], *, limit: int = 60
+) -> str:
     """Render a compact, prompt-friendly summary of DOM rows.
 
     One line per element: ``[idx] <tag> "text" (id/class/role/aria) bbox=[x,y,w,h]``.
