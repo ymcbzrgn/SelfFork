@@ -1,10 +1,12 @@
 """FastAPI router for the Provider Auth UI (M5 — ADR-005 §M5-E).
 
-Five endpoints + storage_state catalogue helpers. Browser-driven sign-in
-flows are stubbed in M5: the route emits a session_id immediately and the
-caller polls / subscribes to ``provider.auth.*`` audit events for progress.
-Full OAuth orchestration (browser-use callback intercept) lands in the
-follow-up Order 9 implementation work; this module owns the REST contract.
+Five endpoints + storage_state catalogue helpers. The sign_in_start /
+refresh routes stay as REST stubs — S5 (ADR-007 §4) confirmed that
+CLI-native sign-in is the way (operator runs ``<cli> login`` in the
+terminal) — but S5 adds the operator-facing **alert** surface: when
+something detects an expired session (snapper layer, CLI invocation
+wrapper) it POSTs to ``/{name}/auth-expired`` and we fan that out as
+a Telegram nudge via :class:`ProviderAuthMonitor`.
 """
 
 from __future__ import annotations
@@ -15,7 +17,11 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+
+from selffork_orchestrator.dashboard.provider_auth_monitor import (
+    ProviderAuthMonitor,
+)
 
 __all__ = [
     "ProviderName",
@@ -107,6 +113,25 @@ class SignInStartResponse(BaseModel):
     started_at: str
 
 
+class AuthExpiredRequest(BaseModel):
+    """Payload for ``POST /{name}/auth-expired`` — S5 alert hook."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = "auth expired"
+
+
+class AuthExpiredResponse(BaseModel):
+    """Outcome of ``/{name}/auth-expired`` (visible to the caller)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: ProviderName
+    alerted_at: str
+    delivered: bool
+    cooldown_skipped: bool
+
+
 def _serialise(record: ProviderRecord) -> ProviderView:
     return ProviderView(
         name=record.name,
@@ -118,8 +143,13 @@ def _serialise(record: ProviderRecord) -> ProviderView:
     )
 
 
-def build_provider_router(*, registry: ProviderRegistry) -> APIRouter:
+def build_provider_router(
+    *,
+    registry: ProviderRegistry,
+    auth_monitor: ProviderAuthMonitor | None = None,
+) -> APIRouter:
     router = APIRouter(prefix="/api/providers", tags=["providers"])
+    monitor = auth_monitor or ProviderAuthMonitor()
 
     @router.get("", response_model=list[ProviderView])
     async def list_providers() -> list[ProviderView]:
@@ -160,5 +190,46 @@ def build_provider_router(*, registry: ProviderRegistry) -> APIRouter:
             except OSError:
                 pass
         return _serialise(registry.mark_disconnected(name))  # type: ignore[arg-type]
+
+    @router.post(
+        "/{name}/auth-expired",
+        response_model=AuthExpiredResponse,
+        status_code=202,
+    )
+    async def auth_expired(
+        name: str,
+        payload: AuthExpiredRequest | None = None,
+    ) -> AuthExpiredResponse:
+        """Signal that the operator's session for this provider expired.
+
+        Called by:
+
+        * the snapper layer when it sees a 401 / 403 from the provider,
+        * the CLI invocation wrapper when ``<cli>`` returns
+          ``authentication_required``,
+        * the operator manually from the Connections card if Self Jr
+          loops on a dead session before the snapper notices.
+
+        Fans the signal out to Telegram via
+        :class:`ProviderAuthMonitor` (subject to cooldown so a
+        hammering snapper doesn't spam the chat) and marks the
+        registry record as failed so the Connections card reflects
+        the state until the operator re-authenticates.
+        """
+        if name not in PROVIDER_NAMES:
+            raise HTTPException(
+                status_code=404, detail=f"unknown provider {name!r}"
+            )
+        reason = (payload.reason if payload else "auth expired").strip()
+        if not reason:
+            reason = "auth expired"
+        registry.mark_failed(name, f"auth_expired: {reason}")
+        alert = await monitor.notify_auth_expired(name, reason)
+        return AuthExpiredResponse(
+            provider=name,
+            alerted_at=alert.alerted_at.isoformat(),
+            delivered=alert.delivered,
+            cooldown_skipped=alert.cooldown_skipped,
+        )
 
     return router

@@ -636,10 +636,24 @@ export function getTelegramStatus(): Promise<TelegramStatusResponse> {
   return request<TelegramStatusResponse>("/api/telegram/status");
 }
 
-export function setupTelegram(payload: {
+export interface TelegramSetupPayload {
+  /**
+   * S5 wizard payload — matches
+   * :class:`selffork_orchestrator.dashboard.telegram_router.TelegramSetupRequest`.
+   * The dashboard persists to ``~/.selffork/settings/telegram.yaml``
+   * and (in webhook mode) calls Telegram's setWebhook API.
+   */
   bot_token: string;
+  chat_id?: string;
+  mode?: "polling" | "webhook";
   webhook_url?: string;
-}): Promise<TelegramStatusResponse> {
+  webhook_secret?: string;
+  soft_confirm_window_hours?: number;
+}
+
+export function setupTelegram(
+  payload: TelegramSetupPayload,
+): Promise<TelegramStatusResponse> {
   return request<TelegramStatusResponse>("/api/telegram/setup", {
     method: "POST",
     body: JSON.stringify(payload),
@@ -1020,4 +1034,54 @@ export function putCodexBarSettings(
     method: "PUT",
     body: JSON.stringify(payload),
   });
+}
+
+// ── Telegram settings (S5) ──────────────────────────────────────────────────
+
+export interface TelegramConfig {
+  bot_token: string;
+  chat_id: string;
+  mode: "polling" | "webhook";
+  webhook_url: string;
+  webhook_secret: string;
+  soft_confirm_window_hours: number;
+}
+
+export function getTelegramSettings(): Promise<TelegramConfig> {
+  return request<TelegramConfig>("/api/settings/telegram");
+}
+
+// ── Provider Auth (S5 — CLI-native + Telegram alert) ────────────────────────
+
+export interface ProviderView {
+  name: "claude_pro" | "codex" | "gemini" | "opencode" | "mmx";
+  status: "connected" | "disconnected" | "expired" | "expiring_soon";
+  expires_at: string | null;
+  last_sign_in: string | null;
+  last_error: string | null;
+  storage_state_path: string | null;
+}
+
+export interface ProviderAuthExpiredResponse {
+  provider: ProviderView["name"];
+  alerted_at: string;
+  delivered: boolean;
+  cooldown_skipped: boolean;
+}
+
+export function listProviders(): Promise<ProviderView[]> {
+  return request<ProviderView[]>("/api/providers");
+}
+
+export function markProviderAuthExpired(
+  name: ProviderView["name"],
+  reason: string,
+): Promise<ProviderAuthExpiredResponse> {
+  return request<ProviderAuthExpiredResponse>(
+    `/api/providers/${encodeURIComponent(name)}/auth-expired`,
+    {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    },
+  );
 }

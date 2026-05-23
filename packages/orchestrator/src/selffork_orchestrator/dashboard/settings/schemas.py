@@ -1,4 +1,4 @@
-"""Pydantic schemas for per-topic operator settings stores (S4).
+"""Pydantic schemas for per-topic operator settings stores (S4 + S5).
 
 These mirror the operator's view of Settings UI fields one-to-one so
 the GET/PUT round trip is trivial. Each schema is the entire payload
@@ -9,12 +9,13 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = [
     "CodexBarUserConfig",
     "ModelEndpointConfig",
     "ModelEndpointHealth",
+    "TelegramConfig",
 ]
 
 
@@ -106,3 +107,53 @@ class CodexBarUserConfig(BaseModel):
     (``SELFFORK_CODEXBAR_BIN`` env > PATH search > vendored
     ``infra/deploy/codexbar/<platform>/codexbar``). When set, the
     next dashboard boot uses this path verbatim."""
+
+
+class TelegramConfig(BaseModel):
+    """Operator Telegram bridge persistence (S5 — ADR-007 §4).
+
+    Persisted at ``~/.selffork/settings/telegram.yaml``. Replaces the
+    pre-S5 env-only resolution (``SELFFORK_TELEGRAM_BOT_TOKEN`` etc.)
+    while keeping env as a fallback for CI / fixture deployments.
+    The first-run wizard in the Connections card POSTs into this
+    schema; the dashboard's outbound bridge + inbound PTB application
+    read it during ``build_app`` (effect on next dashboard restart —
+    hot-reload is deferred, same surgical-scope rule as S4 Autonomy
+    and Model Endpoint).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    bot_token: str = ""
+    """The BotFather-issued token. Stored plain in operator-local
+    YAML — single-operator local system, comparable to shell history
+    exposure. Empty means the bridge stays in :class:`NullTelegramBridge`
+    mode and the Connections card surfaces "not configured"."""
+
+    chat_id: str = ""
+    """Allow-list chat id. The Connections card's first-run wizard
+    persists the operator's chat id here AND merges it into
+    ``~/.selffork/operators.json`` (the canonical
+    :class:`selffork_orchestrator.telegram.allowlist.AllowList`
+    source) so :class:`PtbTelegramBridge.notify` actually delivers.
+    Empty leaves the existing ``operators.json`` untouched."""
+
+    mode: Literal["polling", "webhook"] = "polling"
+    """Inbound dispatch mode. ``polling`` is the default and the
+    operator-laptop deployment; ``webhook`` is the server self-host
+    deployment (ADR-006 §4 single-container Linux). When ``webhook``
+    is selected the setup endpoint also calls Telegram's
+    ``setWebhook`` API to register ``webhook_url``."""
+
+    webhook_url: str = ""
+    """Public HTTPS URL Telegram POSTs ``Update`` JSON to. Required
+    when ``mode == "webhook"``; ignored in polling mode."""
+
+    webhook_secret: str = ""
+    """``X-Telegram-Bot-Api-Secret-Token`` header value Telegram
+    echoes on every webhook POST. Empty disables the secret check;
+    setting one closes the spoofing window (S3 audit fix #2)."""
+
+    soft_confirm_window_hours: int = Field(default=4, ge=1, le=72)
+    """Destructive action approval window (ADR-006 §4.5). Silence
+    after this many hours = automatic cancel (fail-safe NO)."""

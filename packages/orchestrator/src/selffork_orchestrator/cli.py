@@ -651,20 +651,32 @@ async def _amain(
 
 
 def _build_telegram_bridge() -> object:
-    """Pick a Telegram bridge based on environment.
+    """Pick a Telegram bridge based on YAML (S5) > env (legacy).
 
-    PTB v22.7 (``PtbTelegramBridge``) when ``SELFFORK_TELEGRAM_BOT_TOKEN``
-    is set AND ``~/.selffork/operators.json`` carries at least one
-    chat_id; otherwise :class:`NullTelegramBridge` (safe default,
+    Audit-god MEDIUM #5 (2026-05-23): the dashboard wizard writes the
+    bot token to ``~/.selffork/settings/telegram.yaml`` via
+    :func:`resolve_telegram_config`; the warden must read the same
+    source so an operator who configured Telegram from the UI sees
+    destructive prompts in their chat. Env still wins when explicitly
+    set (``SELFFORK_TELEGRAM_BOT_TOKEN``) so CI / scripted deployments
+    aren't broken.
+
+    Returns :class:`PtbTelegramBridge` when (a) a token resolves AND
+    (b) ``~/.selffork/operators.json`` has at least one chat_id;
+    otherwise :class:`NullTelegramBridge` (safe default,
     ``notify_telegram`` tool calls record intent in audit only).
     """
+    from selffork_orchestrator.dashboard.settings import (
+        resolve_telegram_config,
+    )
     from selffork_orchestrator.telegram import (
         AllowList,
         NullTelegramBridge,
         PtbTelegramBridge,
     )
 
-    token = os.environ.get("SELFFORK_TELEGRAM_BOT_TOKEN", "").strip()
+    cfg = resolve_telegram_config()
+    token = cfg.bot_token.strip()
     if not token:
         return NullTelegramBridge()
     allowlist = AllowList.load()

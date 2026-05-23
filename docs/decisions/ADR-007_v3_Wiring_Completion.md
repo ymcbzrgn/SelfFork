@@ -286,7 +286,23 @@ kalmaz.
 
 **Bağımlılık:** Yok — bağımsız sprint.
 
-### S5 — Connections Actions
+### S5 — Connections Actions + Provider Auth Alert ✅ done (2026-05-23)
+
+> Memory: [[s5-complete-2026-05-23]] · Smoke: M6_Smoke_Checklist § S5
+> (Senaryo a-i) · Tests: 1989 backend pass (1962 baseline + 27 new) ·
+> Audit-god: 0 CRITICAL + 3 HIGH + 2 MEDIUM + 1 LOW + 2 INFO; HIGH/
+> MEDIUM/LOW hepsi fix uygulandı (lifespan polling-gate YAML mode,
+> webhook handler YAML secret, chat_id → operators.json merge,
+> _format_alert plain text, warden YAML resolve, docstring drift).
+> **Operatör direktifi:** CLI-native sign-in (panel browser launch
+> REDDEDİLDİ — her CLI kendi `<cli> login` flow'unu yönetir);
+> Connections page sahte Sign in/Sign out/Test connection/Browser
+> preview button + "Subscription: Pro" label TAMAMEN SİLİNDİ; yerine
+> her satıra `<cli> login` komut ipucu + auth-expired badge. **Yeni
+> özellik:** auth kendi kendine çıkarsa
+> `ProviderAuthMonitor.notify_auth_expired` → Telegram alert
+> (per-provider 5dk cooldown'lı, snapper layer ileride otomatik POST
+> /auth-expired'a fire eder).
 
 **Hedef:** Provider sign-in + Telegram setup çalışır.
 

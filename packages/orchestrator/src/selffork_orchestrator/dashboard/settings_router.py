@@ -51,11 +51,14 @@ from selffork_orchestrator.dashboard.settings import (
     CodexBarUserConfig,
     ModelEndpointConfig,
     ModelEndpointHealth,
+    TelegramConfig,
     YamlSettingsStore,
     default_codexbar_user_store,
     default_model_endpoint_store,
+    default_telegram_store,
     destructive_whitelist_source,
     resolve_destructive_whitelist_path,
+    resolve_telegram_config,
 )
 from selffork_shared.config import VisionConfig, load_settings
 
@@ -151,6 +154,7 @@ def build_settings_router(
     config_path: Path | None = None,
     model_endpoint_store: YamlSettingsStore[ModelEndpointConfig] | None = None,
     codexbar_user_store: YamlSettingsStore[CodexBarUserConfig] | None = None,
+    telegram_store: YamlSettingsStore[TelegramConfig] | None = None,
     destructive_override_path: Path | None = None,
 ) -> APIRouter:
     """Build the ``/api/settings`` router.
@@ -163,6 +167,11 @@ def build_settings_router(
             store (test injection point).
         codexbar_user_store: Override the default CodexBar user
             settings store.
+        telegram_store: Override the default Telegram user settings
+            store. ``GET /telegram`` reads the effective config
+            (YAML > env > defaults); writes happen via
+            ``/api/telegram/setup`` so the webhook side effect can
+            be applied atomically.
         destructive_override_path: Override the operator-edit path for
             the destructive whitelist. Defaults to
             ``~/.selffork/settings/destructive-whitelist.yaml``.
@@ -171,6 +180,7 @@ def build_settings_router(
     router = APIRouter(prefix="/api/settings", tags=["settings"])
     me_store = model_endpoint_store or default_model_endpoint_store()
     cx_store = codexbar_user_store or default_codexbar_user_store()
+    tg_store = telegram_store or default_telegram_store()
     dw_override = destructive_override_path or _DEFAULT_DW_OVERRIDE
 
     def _load_vision() -> VisionConfig:
@@ -349,6 +359,18 @@ def build_settings_router(
     ) -> CodexBarUserConfig:
         cx_store.write(payload)
         return payload
+
+    # ── Telegram (S5) ─────────────────────────────────────────────────────
+
+    @router.get("/telegram", response_model=TelegramConfig)
+    def get_telegram_settings() -> TelegramConfig:
+        """Return the effective Telegram config (YAML > env > defaults).
+
+        Writes happen via ``POST /api/telegram/setup`` so the
+        ``setWebhook`` side effect can be applied atomically with
+        the YAML write.
+        """
+        return resolve_telegram_config(tg_store)
 
     return router
 

@@ -133,6 +133,10 @@ class DashboardConfig(BaseModel):
     # ``vision:`` section back here. ``None`` disables persistent
     # updates (``POST /api/settings/vision`` returns 503).
     config_path: Path | None = None
+    # S5 — Telegram bridge persistence store. ``None`` falls back to
+    # ``~/.selffork/settings/telegram.yaml``. Tests can pin a
+    # ``tmp_path``-rooted store so HOME mutation isn't required.
+    telegram_store: object | None = None
 
 
 def build_app(config: DashboardConfig) -> FastAPI:
@@ -143,13 +147,31 @@ def build_app(config: DashboardConfig) -> FastAPI:
     # S3 Phase E: Telegram bridge + inbound application live for the
     # process lifetime. Created sync (PTB constructors don't touch
     # the network); ``initialize/start`` happens inside ``lifespan``.
+    # S5 (ADR-007 §4): the resolved :class:`TelegramConfig`
+    # (~/.selffork/settings/telegram.yaml > env > defaults) drives
+    # all token / mode / webhook decisions on this boot.
+    from selffork_orchestrator.dashboard.settings import (
+        default_telegram_store,
+        resolve_telegram_config,
+    )
     from selffork_orchestrator.dashboard.telegram_router import (
         TelegramActivityLog,
         attach_outbound_recorder,
     )
 
+    telegram_store = (
+        config.telegram_store  # type: ignore[assignment]
+        if config.telegram_store is not None
+        else default_telegram_store()
+    )
+    telegram_cfg = resolve_telegram_config(telegram_store)
+    app_telegram_cfg = telegram_cfg
+    # Stash the resolved mode so the lifespan polling-gate uses it
+    # instead of an env probe (audit-god HIGH #1 fix).
+    _app_telegram_mode = telegram_cfg.mode
+
     telegram_activity_log = TelegramActivityLog()
-    outbound_bridge = _build_outbound_bridge()
+    outbound_bridge = _build_outbound_bridge(token=telegram_cfg.bot_token)
     wrapped_bridge = (
         attach_outbound_recorder(outbound_bridge, telegram_activity_log)
         if outbound_bridge.__class__.__name__ != "NullTelegramBridge"
@@ -242,10 +264,20 @@ def build_app(config: DashboardConfig) -> FastAPI:
                 try:
                     await ptb_app.initialize()
                     await ptb_app.start()
-                    mode = os.environ.get(
-                        "SELFFORK_TELEGRAM_MODE", "polling"
-                    ).strip().lower()
-                    if mode != "webhook" and ptb_app.updater is not None:
+                    # S5 audit-god HIGH #1 fix: the canonical mode is
+                    # the one ``build_app`` resolved (YAML > env >
+                    # defaults), stashed at ``app.state.telegram_mode``.
+                    # Reading env here would race a YAML-only webhook
+                    # config into starting both updater.poll AND a
+                    # registered webhook simultaneously (Telegram
+                    # rejects with 409 Conflict).
+                    resolved_mode = getattr(
+                        _app.state, "telegram_mode", "polling"
+                    )
+                    if (
+                        resolved_mode != "webhook"
+                        and ptb_app.updater is not None
+                    ):
                         await ptb_app.updater.start_polling(
                             drop_pending_updates=True
                         )
@@ -307,6 +339,8 @@ def build_app(config: DashboardConfig) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.telegram_outbound_bridge = wrapped_bridge
+    app.state.telegram_mode = _app_telegram_mode
+    app.state.telegram_webhook_secret = app_telegram_cfg.webhook_secret
     app.state.telegram_activity_log = telegram_activity_log
     app.state.codexbar_server = codexbar_server
     app.state.heartbeat = heartbeat
@@ -384,8 +418,24 @@ def build_app(config: DashboardConfig) -> FastAPI:
     app.state.provider_registry = provider_registry
     app.state.body_watchdog = body_watchdog
 
+    # S5 — Provider auth monitor (operator direktifi 2026-05-23:
+    # "auth kendi kendine çıktıysa telegramdan uyarmamız lazım").
+    # Shares the wrapped Telegram bridge so alerts land in the same
+    # operator chat as destructive confirmations.
+    from selffork_orchestrator.dashboard.provider_auth_monitor import (
+        ProviderAuthMonitor,
+    )
+
+    provider_auth_monitor = ProviderAuthMonitor(bridge=wrapped_bridge)
+    app.state.provider_auth_monitor = provider_auth_monitor
+
     app.include_router(build_fleet_router(registry=fleet_registry))
-    app.include_router(build_provider_router(registry=provider_registry))
+    app.include_router(
+        build_provider_router(
+            registry=provider_registry,
+            auth_monitor=provider_auth_monitor,
+        ),
+    )
     app.include_router(build_body_router(watchdog=body_watchdog))
 
     # Cockpit Settings → Vision (M5+) — operator-driven vision adapter
@@ -394,7 +444,12 @@ def build_app(config: DashboardConfig) -> FastAPI:
         build_settings_router,
     )
 
-    app.include_router(build_settings_router(config_path=config.config_path))
+    app.include_router(
+        build_settings_router(
+            config_path=config.config_path,
+            telegram_store=telegram_store,
+        ),
+    )
 
     # M6 Live Run Theater (workspace 3-pane) + global active-loop
     # introspection (ADR-007 §4 S2). Both routers tail the shared theater
@@ -457,6 +512,9 @@ def build_app(config: DashboardConfig) -> FastAPI:
         pending_store=pending_store,
         talk_db_path=config.talk_db_path,
         outbound_bridge=wrapped_bridge,
+        bot_token=app_telegram_cfg.bot_token,
+        mode=app_telegram_cfg.mode,
+        webhook_url=app_telegram_cfg.webhook_url or None,
     )
 
     # M6 Telegram bridge status + Reflex training surface (ADR-006).
@@ -472,6 +530,7 @@ def build_app(config: DashboardConfig) -> FastAPI:
             bridge=wrapped_bridge,
             application=getattr(app.state, "telegram_application", None),
             activity_log=telegram_activity_log,
+            store=telegram_store,
         ),
     )
     app.include_router(build_reflex_router())
@@ -554,11 +613,14 @@ def _build_dashboard_notify_hook(bridge):
     return hook
 
 
-def _build_outbound_bridge():
-    """Pick a Telegram bridge based on env (same logic as ``cli.py``).
+def _build_outbound_bridge(token: str = ""):
+    """Pick a Telegram bridge based on the resolved YAML/env token.
 
     Lazy import keeps PTB out of the test path for non-Telegram tests
-    that import :func:`build_app`.
+    that import :func:`build_app`. S5 (ADR-007 §4) — the resolved
+    token is now passed in by ``build_app`` after consulting
+    ``~/.selffork/settings/telegram.yaml``; an empty string keeps the
+    bridge in :class:`NullTelegramBridge` mode (unconfigured).
     """
     from selffork_orchestrator.telegram import (
         AllowList,
@@ -566,12 +628,6 @@ def _build_outbound_bridge():
         PtbTelegramBridge,
     )
 
-    token = ""
-    for name in ("SELFFORK_TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_TOKEN"):
-        candidate = os.environ.get(name, "").strip()
-        if candidate:
-            token = candidate
-            break
     if not token:
         return NullTelegramBridge()
     allowlist = AllowList.load()
@@ -589,6 +645,9 @@ def _wire_telegram_inbound(
     pending_store,
     talk_db_path: Path | None,
     outbound_bridge,
+    bot_token: str = "",
+    mode: str = "polling",
+    webhook_url: str | None = None,
 ) -> None:
     """Construct ``InboundRouter`` + PTB ``Application`` and stash on ``app.state``.
 
@@ -636,31 +695,23 @@ def _wire_telegram_inbound(
 
     # Decide whether to build the PTB Application. ``NullTelegramBridge``
     # means we cannot deliver outbound, and the operator has no way to
-    # send commands either — keep the inbound app off too.
+    # send commands either — keep the inbound app off too. S5 (ADR-007
+    # §4): the bot token / mode / webhook URL come from the resolved
+    # :class:`TelegramConfig` (YAML > env > defaults) handed in by
+    # ``build_app``; no env lookup here.
     if isinstance(outbound_bridge, NullTelegramBridge):
         app.state.telegram_application = None
         return
-    token = ""
-    for name in ("SELFFORK_TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_TOKEN"):
-        candidate = os.environ.get(name, "").strip()
-        if candidate:
-            token = candidate
-            break
-    if not token:
+    if not bot_token:
         app.state.telegram_application = None
         return
-    mode = os.environ.get(
-        "SELFFORK_TELEGRAM_MODE", "polling"
-    ).strip().lower()
-    webhook_url = os.environ.get(
-        "SELFFORK_TELEGRAM_WEBHOOK_URL", ""
-    ).strip() or None
+    normalised_mode = "webhook" if mode == "webhook" else "polling"
     try:
         ptb_app = build_telegram_application(
             config=TelegramAppConfig(
-                bot_token=token,
-                mode="webhook" if mode == "webhook" else "polling",
-                webhook_url=webhook_url,
+                bot_token=bot_token,
+                mode=normalised_mode,
+                webhook_url=webhook_url or None,
             ),
             router=inbound_router,
         )

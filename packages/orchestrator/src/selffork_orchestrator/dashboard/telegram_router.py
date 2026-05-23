@@ -6,11 +6,16 @@ the **operator-facing** surface — Connections + Settings render from
 its responses, and the inbound webhook lands here (for production
 deployments).
 
-S3 (ADR-007 §4) promoted the router from "env stub" to a real surface:
+S3 (ADR-007 §4) promoted the router from "env stub" to a real surface;
+S5 (this revision) persists the operator wizard's payload to YAML
+(``~/.selffork/settings/telegram.yaml``) and actually calls Telegram's
+``setWebhook`` API when the operator picks webhook mode:
 
-* ``/status`` reports the live bridge state (connected / not).
-* ``/setup`` persists token + webhook URL to env (the Settings UI
-  uses this for the first-run wizard; S4 moves persistence to YAML).
+* ``/status`` reports the live bridge state. YAML > env > defaults.
+* ``/setup`` writes the wizard payload to YAML and (if webhook mode)
+  registers the public URL with Telegram. **Effect on next dashboard
+  restart** — the bridge + inbound application are constructed at
+  ``build_app`` time, so the new token does not flip the live bridge.
 * ``/test`` actually calls :meth:`PtbTelegramBridge.notify` so the
   operator sees a Telegram message confirming the wiring.
 * ``/webhook`` receives Telegram update POSTs in webhook mode and
@@ -22,19 +27,32 @@ S3 (ADR-007 §4) promoted the router from "env stub" to a real surface:
 
 from __future__ import annotations
 
+import logging
 import os
 from collections import deque
 from datetime import UTC, datetime
 from typing import Any, Literal
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
+from selffork_orchestrator.dashboard.settings import (
+    TelegramConfig,
+    YamlSettingsStore,
+    default_telegram_store,
+    resolve_telegram_config,
+)
+from selffork_orchestrator.telegram.allowlist import (
+    default_allowlist_path,
+)
 from selffork_orchestrator.telegram.bridge import (
     NullTelegramBridge,
     TelegramBridge,
     TelegramMessage,
 )
+
+_log = logging.getLogger(__name__)
 
 
 class TelegramStatusResponse(BaseModel):
@@ -51,8 +69,23 @@ class TelegramStatusResponse(BaseModel):
 
 
 class TelegramSetupRequest(BaseModel):
+    """First-run wizard payload from the Connections card.
+
+    S5 (ADR-007 §4) — the wizard persists to
+    ``~/.selffork/settings/telegram.yaml`` and, when ``mode='webhook'``,
+    registers ``webhook_url`` with Telegram's Bot API before returning.
+    Bot token is the only required field; the rest carry sane defaults
+    matching :class:`TelegramConfig`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
     bot_token: str
-    webhook_url: str | None = None
+    chat_id: str = ""
+    mode: Literal["polling", "webhook"] = "polling"
+    webhook_url: str = ""
+    webhook_secret: str = ""
+    soft_confirm_window_hours: int = Field(default=4, ge=1, le=72)
 
 
 class TelegramTestRequest(BaseModel):
@@ -129,6 +162,7 @@ def build_telegram_router(
     bridge: TelegramBridge | None = None,
     application: Any = None,
     activity_log: TelegramActivityLog | None = None,
+    store: YamlSettingsStore[TelegramConfig] | None = None,
 ) -> APIRouter:
     """Construct the /api/telegram/* router.
 
@@ -139,45 +173,27 @@ def build_telegram_router(
         application: PTB :class:`Application` for inbound webhook
             forwarding. ``None`` keeps webhook 503 (no inbound).
         activity_log: optional ring buffer for the Connections card.
+        store: YAML store for :class:`TelegramConfig`. ``None`` falls
+            back to ``~/.selffork/settings/telegram.yaml`` (S5).
     """
     router = APIRouter(prefix="/api/telegram", tags=["telegram"])
     bridge = bridge or NullTelegramBridge()
     log = activity_log or TelegramActivityLog()
-
-    def _resolve_mode() -> Literal["polling", "webhook"]:
-        raw = os.environ.get("SELFFORK_TELEGRAM_MODE", "").strip().lower()
-        return "webhook" if raw == "webhook" else "polling"
-
-    def _resolve_webhook_url() -> str | None:
-        for name in (
-            "SELFFORK_TELEGRAM_WEBHOOK_URL",
-            "TELEGRAM_WEBHOOK_URL",
-        ):
-            value = os.environ.get(name, "").strip()
-            if value:
-                return value
-        return None
-
-    def _resolve_bot_token() -> str:
-        for name in ("SELFFORK_TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_TOKEN"):
-            value = os.environ.get(name, "").strip()
-            if value:
-                return value
-        return ""
+    telegram_store = store or default_telegram_store()
 
     @router.get("/status", response_model=TelegramStatusResponse)
     async def status() -> TelegramStatusResponse:
-        bot_token = _resolve_bot_token()
-        webhook_url = _resolve_webhook_url()
-        soft_window = int(os.environ.get("SELFFORK_SOFT_CONFIRM_HOURS", "4"))
-        mode = _resolve_mode()
+        cfg = resolve_telegram_config(telegram_store)
         latest = log.latest()
-        if not bot_token:
+        if not cfg.bot_token:
             return TelegramStatusResponse(
                 state="not_configured",
-                soft_confirm_window_hours=soft_window,
-                detail="Set SELFFORK_TELEGRAM_BOT_TOKEN to enable the bridge.",
-                mode=mode,
+                soft_confirm_window_hours=cfg.soft_confirm_window_hours,
+                detail=(
+                    "Open the Connections card or PUT "
+                    "/api/telegram/setup to register a bot token."
+                ),
+                mode=cfg.mode,
             )
         state: Literal["not_configured", "connected", "errored"] = (
             "connected"
@@ -187,27 +203,80 @@ def build_telegram_router(
         return TelegramStatusResponse(
             state=state,
             bot_username=os.environ.get("TELEGRAM_BOT_USERNAME") or None,
-            webhook_url=webhook_url,
-            soft_confirm_window_hours=soft_window,
+            webhook_url=cfg.webhook_url or None,
+            soft_confirm_window_hours=cfg.soft_confirm_window_hours,
             last_activity_at=latest.at if latest else None,
             last_activity_summary=latest.summary if latest else None,
             detail=(
                 None
                 if not isinstance(bridge, NullTelegramBridge)
-                else "Bridge is NullTelegramBridge (token set but PTB not initialised)."
+                else (
+                    "Token configured but the bridge is still "
+                    "NullTelegramBridge. Restart the dashboard so PTB "
+                    "picks up the new YAML."
+                )
             ),
-            mode=mode,
+            mode=cfg.mode,
         )
 
     @router.post("/setup", response_model=TelegramStatusResponse)
     async def setup(req: TelegramSetupRequest) -> TelegramStatusResponse:
-        if not req.bot_token.strip():
+        bot_token = req.bot_token.strip()
+        if not bot_token:
             raise HTTPException(
                 status_code=400, detail="bot_token must not be empty"
             )
-        os.environ["SELFFORK_TELEGRAM_BOT_TOKEN"] = req.bot_token.strip()
-        if req.webhook_url:
-            os.environ["SELFFORK_TELEGRAM_WEBHOOK_URL"] = req.webhook_url.strip()
+        webhook_url = req.webhook_url.strip()
+        if req.mode == "webhook" and not webhook_url:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "webhook_url is required when mode='webhook'; "
+                    "Telegram setWebhook needs the public HTTPS URL."
+                ),
+            )
+        config = TelegramConfig(
+            bot_token=bot_token,
+            chat_id=req.chat_id.strip(),
+            mode=req.mode,
+            webhook_url=webhook_url,
+            webhook_secret=req.webhook_secret.strip(),
+            soft_confirm_window_hours=req.soft_confirm_window_hours,
+        )
+        telegram_store.write(config)
+        # S5 audit-god HIGH #3 fix: the wizard's chat_id must feed
+        # into the allowlist (operators.json), otherwise the bridge
+        # comes up "connected" but every notify is dropped with
+        # "empty operator allowlist". Merge instead of replace so
+        # multi-operator deployments aren't clobbered.
+        if config.chat_id:
+            _merge_chat_id_into_allowlist(config.chat_id)
+        if config.mode == "webhook":
+            try:
+                await _register_telegram_webhook(
+                    bot_token=config.bot_token,
+                    webhook_url=config.webhook_url,
+                    webhook_secret=config.webhook_secret,
+                )
+            except httpx.HTTPError as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail=(
+                        "Telegram setWebhook call failed: "
+                        f"{type(exc).__name__}: {exc}"
+                    ),
+                ) from exc
+        log.record_outbound(
+            summary="Setup wizard applied",
+            detail=(
+                f"mode={config.mode} "
+                + (
+                    f"webhook_url={config.webhook_url}"
+                    if config.webhook_url
+                    else "no_webhook"
+                )
+            ),
+        )
         return await status()
 
     @router.post("/test")
@@ -252,15 +321,16 @@ def build_telegram_router(
                 status_code=503,
                 detail="Telegram inbound application not initialised.",
             )
-        # S3 audit fix #2 — webhook secret-token check. When
-        # SELFFORK_TELEGRAM_WEBHOOK_SECRET is set the operator's
-        # setWebhook call must include it; every inbound POST then
-        # carries X-Telegram-Bot-Api-Secret-Token. Without this gate
-        # anyone with the webhook URL can spoof callback_query
-        # updates and approve destructive actions.
-        expected_secret = os.environ.get(
-            "SELFFORK_TELEGRAM_WEBHOOK_SECRET", ""
-        ).strip()
+        # S3 audit fix #2 + S5 audit-god HIGH #2 — webhook secret-token
+        # check. The operator's setWebhook call (S5 wizard or env)
+        # tells Telegram to attach X-Telegram-Bot-Api-Secret-Token on
+        # every push; without verification anyone reaching the webhook
+        # URL can spoof callback_query updates and approve destructive
+        # actions. We resolve the secret via the SAME resolver as
+        # /setup so YAML-only operators are guarded too (env wins when
+        # explicitly set, falls back to the YAML config otherwise).
+        resolved_cfg = resolve_telegram_config(telegram_store)
+        expected_secret = (resolved_cfg.webhook_secret or "").strip()
         if expected_secret:
             provided = request.headers.get(
                 "X-Telegram-Bot-Api-Secret-Token", ""
@@ -303,6 +373,96 @@ def _summarise_inbound(update: Any) -> str:
         text = getattr(message, "text", "") or ""
         return f"message: {text[:80]}"
     return "update (unsupported type)"
+
+
+def _merge_chat_id_into_allowlist(chat_id_text: str) -> None:
+    """Merge ``chat_id_text`` into ``~/.selffork/operators.json``.
+
+    The wizard collects a string (operators copy-paste it from Telegram
+    chat info), so we parse defensively: non-integer entries are
+    skipped silently — the operator can still hand-edit the file.
+    The merge is atomic (temp+rename) so concurrent
+    ``AllowList.load()`` always sees a coherent file.
+
+    Audit-god HIGH #3 (2026-05-23): without this, the wizard appears
+    to ask for everything but the bridge actually requires this file.
+    """
+    import json
+
+    try:
+        chat_id_int = int(chat_id_text.strip())
+    except (TypeError, ValueError):
+        _log.info(
+            "telegram_setup_chat_id_not_numeric_skipped",
+            extra={"value": chat_id_text},
+        )
+        return
+    path = default_allowlist_path()
+    existing: dict[str, Any] = {}
+    if path.is_file():
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                existing = raw
+        except (OSError, json.JSONDecodeError):
+            existing = {}
+    raw_ids = existing.get("chat_ids")
+    ids: list[int] = []
+    if isinstance(raw_ids, list):
+        for x in raw_ids:
+            if isinstance(x, int) and not isinstance(x, bool):
+                ids.append(x)
+    if chat_id_int not in ids:
+        ids.append(chat_id_int)
+    existing["chat_ids"] = ids
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_suffix(path.suffix + ".tmp")
+    temp.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+    temp.replace(path)
+
+
+async def _register_telegram_webhook(
+    *,
+    bot_token: str,
+    webhook_url: str,
+    webhook_secret: str,
+) -> dict[str, Any]:
+    """Call Telegram's ``setWebhook`` API.
+
+    Wired by ``/api/telegram/setup`` when the operator picks webhook
+    mode. Telegram will reject the request if the URL isn't HTTPS
+    on a public port, so we surface its error verbatim — the
+    Connections card displays it.
+    """
+    url = f"https://api.telegram.org/bot{bot_token}/setWebhook"
+    payload: dict[str, Any] = {"url": webhook_url}
+    if webhook_secret:
+        payload["secret_token"] = webhook_secret
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.post(url, json=payload)
+    if resp.status_code != 200:
+        raise httpx.HTTPStatusError(
+            f"setWebhook returned HTTP {resp.status_code}: {resp.text}",
+            request=resp.request,
+            response=resp,
+        )
+    raw = resp.json()
+    if not isinstance(raw, dict):
+        raise httpx.HTTPStatusError(
+            f"setWebhook returned non-object body: {raw!r}",
+            request=resp.request,
+            response=resp,
+        )
+    body: dict[str, Any] = raw
+    if not body.get("ok"):
+        # Telegram returns 200 + ok=false for application-level errors
+        # (bad URL, mismatched token, etc). Surface as transport error.
+        raise httpx.HTTPStatusError(
+            f"setWebhook ok=false: {body!r}",
+            request=resp.request,
+            response=resp,
+        )
+    return body
 
 
 def attach_outbound_recorder(

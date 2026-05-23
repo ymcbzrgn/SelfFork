@@ -1037,3 +1037,137 @@ S4-S8 kuralı sertleştirildi: dead UI ya wire'lanır ya silinir.
 - CLI Agent selection in Settings — S6 (CLI Router) sprint scope.
 - Body daemon Settings panel — S-Vision genişletmesi.
 - Voice modality Settings panel — S-Vision'da netleşecek.
+
+## S5 — Connections Actions + Provider Auth Alert (ADR-007 §4)
+
+**Hedef:** Connections page sahte button'lar SİL (operatör 2026-05-23:
+"hepsi CLI sonuçta gitsin giriş yapsın eşşek değilse"). Telegram bridge
+YAML persist (`~/.selffork/settings/telegram.yaml`) + gerçek `setWebhook`
+API çağrısı. CLI auth kendi kendine çıkarsa Telegram alert
+(ProviderAuthMonitor, cooldown'lı).
+
+**Backend (yeni / upgrade):**
+
+- `TelegramConfig` schema (bot_token + chat_id + mode polling/webhook
+  + webhook_url + webhook_secret + soft_confirm_window_hours).
+- `~/.selffork/settings/telegram.yaml` YamlSettingsStore.
+- `GET /api/settings/telegram` (YAML > env > defaults).
+- `POST /api/telegram/setup` upgrade: YAML'a yaz, webhook mode'da
+  `setWebhook` Telegram API + secret token + secret YAML'dan resolve,
+  chat_id `operators.json` allowlist'e merge.
+- `POST /api/providers/{name}/auth-expired` — ProviderAuthMonitor
+  Telegram alert (cooldown'lı, AIR alert pattern emsali).
+- Server.py refactor: env-based bot_token/mode/webhook_url resolution
+  → resolve_telegram_config; lifespan polling-gate `app.state.
+  telegram_mode` okur (YAML-only webhook config polling+webhook
+  conflict önlenir).
+- cli.py `_build_telegram_bridge` resolve_telegram_config kullanır
+  (warden + dashboard same source).
+
+**Frontend (`connections/page.tsx` full rewrite):**
+
+- Provider 5 satır: Sign in/Sign out/Test connection/Browser preview
+  button'lar SİL; "Subscription: Pro/Plus/Free Tier" hardcoded
+  label'lar SİL; her satıra `<cli> login` komut ipucu eklendi.
+- Provider auth_expired badge (registry last_error tabanlı).
+- Telegram "Connect" button → modal form (bot_token + chat_id + mode
+  + webhook_url + webhook_secret + soft_confirm hours).
+- Send test + activity table KORUNDU (canlı).
+
+### Senaryo a — Telegram bridge wizard polling mode
+
+1. `selffork ui` başlat (env'de bot_token YOK).
+2. UI Connections → "Connect" → modal'da bot_token + chat_id (örn
+   12345678) gir, mode=polling, soft_confirm=4. Save.
+3. `cat ~/.selffork/settings/telegram.yaml` → bot_token persist.
+4. `cat ~/.selffork/operators.json` → chat_ids: [12345678] merge.
+5. Orchestrator restart → /api/telegram/status `state=connected`,
+   `mode=polling`.
+
+### Senaryo b — Webhook mode + setWebhook API call
+
+1. Wizard'da mode=webhook, webhook_url=https://<host>/api/telegram/
+   webhook, webhook_secret=<secret> gir. Save.
+2. Backend Telegram setWebhook API'ya gerçek POST atar; başarısızsa
+   502 ile geri döner + YAML zaten persist.
+3. Inbound `/api/telegram/webhook` çağrısı X-Telegram-Bot-Api-Secret-
+   Token check eder (YAML webhook_secret'i resolve ediliyor).
+4. Yanlış secret → 401. Boş secret → gate kapalı (legacy).
+5. Lifespan: webhook mode → updater polling BAŞLAMAZ (YAML mode
+   tabanlı, env değil).
+
+### Senaryo c — Provider auth alert end-to-end
+
+1. `curl -X POST http://127.0.0.1:8765/api/providers/claude_pro/
+   auth-expired -d '{"reason":"401 from API"}' -H 'Content-Type:
+   application/json'` → 202 + alert YAML resolved bridge'e gönderilir.
+2. Telegram'da: "🔐 Auth expired: claude_pro / Reason: 401 from API /
+   Run this in your terminal to re-authenticate: claude /login".
+3. 1 sn içinde aynı endpoint'e tekrar POST → response
+   `cooldown_skipped=true`, Telegram mesajı YOK (5dk cooldown).
+4. Connections page'inde claude_pro row'unda kırmızı badge:
+   "Auth expired — Self Jr will keep nudging you in Telegram. Run
+   `claude /login` to re-authenticate."
+
+### Senaryo d — Connections sahte UI tamamen silinmiş
+
+1. `grep -E "Subscription: Pro|Sign out|Browser preview|Test connection"
+   apps/web/app/connections/page.tsx` → sıfır eşleşme.
+2. Provider row'larında her button gerçek (login komut hint sadece
+   read-only).
+3. Telegram bridge "Connect" button → modal canlı; iptal,
+   submit, validation hepsi çalışıyor.
+4. Activity table real veri (S3 mevcut).
+
+### Senaryo e — Operators.json merge (yeni operatör eklenince)
+
+1. Mevcut `~/.selffork/operators.json` 2 chat_id ile: [111, 222].
+2. Wizard chat_id=98765 ile çalıştır.
+3. operators.json `chat_ids: [111, 222, 98765]` (merge, clobber yok).
+4. default_project_slug korunur.
+
+### Senaryo f — Warden YAML resolve (cross-process consistency)
+
+1. `selffork ui` + wizard tamamla (bot_token YAML'da).
+2. Yeni terminal: `selffork run prd.md` başlat.
+3. Self Jr destructive eylem isterse warden Telegram bridge'i kullanır
+   (resolve_telegram_config tabanlı, env değil).
+4. Operator destructive eylem onayı Telegram'da görür.
+
+### Senaryo g — Full backend gate
+
+- [ ] `.venv/bin/python -m pytest packages/mind/tests/
+      packages/orchestrator/tests/ packages/body/tests/ -q` → ≥1989 pass.
+- [ ] `.venv/bin/python -m ruff check packages/orchestrator/src/
+      selffork_orchestrator/dashboard/ packages/orchestrator/src/
+      selffork_orchestrator/cli.py packages/orchestrator/tests/
+      dashboard/` → All checks passed.
+- [ ] `.venv/bin/python -m mypy packages/orchestrator/src/
+      selffork_orchestrator/dashboard/provider_auth_monitor.py
+      packages/orchestrator/src/selffork_orchestrator/dashboard/
+      settings/` → Success.
+- [ ] `cd apps/web && npx tsc --noEmit` → clean.
+
+### Senaryo h — audit-god rigorous review
+
+- [ ] `audit-god` agent dispatch — bulgular CRITICAL/HIGH/MEDIUM/LOW/
+      INFO sınıflı; CRITICAL = 0 hedef; HIGH bulgularda her biri
+      regression test'ine bağlı fix uygulandı.
+
+### Senaryo i — Commit-ready
+
+- [ ] Memory entry: `project_s5_complete_2026_05_23.md` yazıldı.
+- [ ] `MEMORY.md` index güncel.
+- [ ] ADR-007 §4 S5 blok "✅ done" damgası.
+- [ ] Commit message draft operatöre sunuldu.
+- [ ] Operatör onayı sonrası tek commit (MANDATE 1).
+
+### S5 sonrası deferred (sonraki sprintlere)
+
+- Snapper layer auth_failed signal otomatik `/auth-expired` POST'a
+  fire eder — şu an manuel POST gerek. S6 router veya S7 işine ek.
+- Bot token leak self-host CORS scenario — auth middleware ekleme
+  S7 veya server self-host hardening sprint'inde.
+- Provider sign-in storage_state per-project — M5-E close-out
+  görevi ileri sprint'e ertelendi (CLI-native ile çelişki yok ama
+  Self Jr "anti-bot trip" fallback'i bir gün gerekirse).
