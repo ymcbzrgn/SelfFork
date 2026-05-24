@@ -42,6 +42,11 @@ from selffork_orchestrator.resume.cron import (
     is_macos,
 )
 from selffork_orchestrator.resume.store import ScheduledResume, ScheduledResumeStore
+from selffork_orchestrator.router import (
+    CliOverrideStore,
+    default_cli_override_store,
+    default_cli_runtime_store,
+)
 from selffork_orchestrator.runtime.factory import build_runtime
 from selffork_orchestrator.runtime.mlx_server import MlxServerRuntime
 from selffork_orchestrator.sandbox.factory import build_sandbox
@@ -141,6 +146,31 @@ def run(
             ),
         ),
     ] = None,
+    cli: Annotated[
+        str | None,
+        typer.Option(
+            "--cli",
+            help=(
+                "Override the CLI agent for this run "
+                "(claude-code/codex/gemini-cli/opencode/minimax-cli). "
+                "The S6 router passes the selected CLI here."
+            ),
+        ),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option(
+            "--model",
+            help="Override the CLI's model for this run (S6 in-CLI routing).",
+        ),
+    ] = None,
+    effort: Annotated[
+        str | None,
+        typer.Option(
+            "--effort",
+            help="Override the CLI's reasoning effort for this run (S6).",
+        ),
+    ] = None,
 ) -> None:
     """Run a PRD end-to-end via opencode + the configured local LLM runtime."""
     try:
@@ -158,6 +188,21 @@ def run(
             raise typer.Exit(code=2)
         settings = settings.model_copy(
             update={"sandbox": settings.sandbox.model_copy(update={"mode": mode})},
+        )
+
+    # S6 (ADR-006 §4.6): the router selects cli + model + effort and passes
+    # them here; they override the static ``cli_agent`` config so the
+    # CLIAgent applies the chosen model/effort via its capability.
+    if cli is not None or model is not None or effort is not None:
+        cli_update: dict[str, object] = {}
+        if cli is not None:
+            cli_update["agent"] = cli
+        if model is not None:
+            cli_update["model"] = model
+        if effort is not None:
+            cli_update["effort"] = effort
+        settings = settings.model_copy(
+            update={"cli_agent": settings.cli_agent.model_copy(update=cli_update)},
         )
 
     setup_logging(settings.logging)
@@ -605,6 +650,13 @@ async def _amain(
     # Returns a TelegramBridge subclass at runtime; declared `object` in
     # the helper signature so the telegram package import can stay lazy.
     telegram_bridge_for_tools = _build_telegram_bridge()
+    # S6 (ADR-006 §4.6) — Self Jr CLI-router control stores. Default YAML
+    # paths (shared with the dashboard router) so a ``set_cli_*`` tool call
+    # in the round-loop is visible to the dashboard's next select_cli.
+    cli_override_store_for_tools = CliOverrideStore(
+        sticky_store=default_cli_override_store(),
+    )
+    cli_runtime_store_for_tools = default_cli_runtime_store()
     snapper_runner = SnapperRunner(
         snappers=build_default_snappers(),
         config=SnapperRunnerConfig(),
@@ -630,6 +682,8 @@ async def _amain(
         proactive_reader=proactive_reader,
         launchd_scheduler=launchd_scheduler_for_tools,
         resume_store=resume_store_for_tools,
+        cli_override_store=cli_override_store_for_tools,
+        cli_runtime_store=cli_runtime_store_for_tools,
         telegram_bridge=telegram_bridge_for_tools,
         theater_producer=theater_producer,
         destructive_whitelist=_load_destructive_whitelist(),
@@ -647,6 +701,39 @@ async def _amain(
             snapper_runner.stop()
             if theater_store is not None:
                 await theater_store.teardown()
+
+    # S6 (ADR-006 §4.6) — feed the CLI-affinity store the turn-to-complete
+    # signal. The dashboard (sole DuckDB writer) drains this JSONL before
+    # its next read; here we only append (POSIX O_APPEND is atomic).
+    # Skip PAUSED/rate-limit outcomes — they're not a quality signal.
+    if project_slug is not None and outcome in (
+        SessionState.COMPLETED,
+        SessionState.FAILED,
+    ):
+        from selffork_orchestrator.cli_agent.capabilities import capability_for
+        from selffork_orchestrator.router.outcomes import (
+            SessionOutcome,
+            append_session_outcome,
+            default_outcome_log_path,
+        )
+
+        _cap = capability_for(settings.cli_agent.agent)
+        outcome_model = settings.cli_agent.model or (
+            _cap.default_model if _cap is not None else settings.cli_agent.agent
+        )
+        try:
+            append_session_outcome(
+                default_outcome_log_path(),
+                SessionOutcome(
+                    workspace_slug=project_slug,
+                    cli=settings.cli_agent.agent,
+                    model=outcome_model,
+                    succeeded=outcome == SessionState.COMPLETED,
+                    turns=session.rounds_completed,
+                ),
+            )
+        except OSError as exc:
+            _log.warning("affinity_outcome_write_failed", error=str(exc))
     return outcome, session.failure_reason
 
 

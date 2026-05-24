@@ -73,19 +73,20 @@ def test_compose_initial_messages_contains_prd_and_workspace() -> None:
 def test_build_command_first_round() -> None:
     agent = _make_agent()
     cmd = agent.build_command(message="hello", is_first_round=True)
-    assert cmd == ["chat", "-p", "hello"]
+    assert cmd == ["text", "chat", "--message", "hello"]
 
 
-def test_build_command_continuation() -> None:
+def test_build_command_continuation_is_single_shot() -> None:
+    # mmx text chat has no session continuation; is_first_round is ignored.
     agent = _make_agent()
     cmd = agent.build_command(message="hello", is_first_round=False)
-    assert cmd == ["chat", "-c", "-p", "hello"]
+    assert cmd == ["text", "chat", "--message", "hello"]
 
 
 def test_build_command_includes_extra_args() -> None:
     agent = _make_agent(extra_args=["--region", "global"])
     cmd = agent.build_command(message="hi", is_first_round=True)
-    assert cmd == ["chat", "-p", "--region", "global", "hi"]
+    assert cmd == ["text", "chat", "--region", "global", "--message", "hi"]
 
 
 def test_build_env_disables_color() -> None:

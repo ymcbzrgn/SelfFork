@@ -1085,3 +1085,117 @@ export function markProviderAuthExpired(
     },
   );
 }
+
+// ── S6 CLI Router (ADR-006 4.6) ─────────────────────────────────────────────
+// Self Jr's CLI/model/effort control surface, backed by /api/router/* (see
+// dashboard/router_router.py) — the same stores Self Jr's router tools mutate.
+// No hardcoded model/effort lists: every menu sources from /capabilities.
+
+export interface RouterOverrideRequest {
+  workspace: string;
+  cli: string;
+  model?: string | null;
+  sticky?: boolean;
+}
+
+export interface RouterOverride {
+  workspace: string;
+  cli: string;
+  model: string | null;
+  sticky: boolean;
+}
+
+export interface CliScore {
+  cli: string;
+  model: string;
+  score: number;
+  match_level: string;
+  observations: number;
+  avg_turns: number | null;
+}
+
+export interface RouterAffinityView {
+  workspace: string;
+  task_type: string | null;
+  active_override: RouterOverride | null;
+  candidates: CliScore[];
+  efforts: Record<string, string | null>;
+}
+
+export interface CliCapability {
+  cli: string;
+  models: string[];
+  default_model: string;
+  effort_levels: string[];
+  default_effort: string | null;
+  per_model_quota: boolean;
+}
+
+export interface CliRuntimeConfig {
+  efforts: Record<string, string>;
+  enabled_models: Record<string, string[]>;
+}
+
+export function setRouterOverride(
+  payload: RouterOverrideRequest,
+): Promise<RouterOverride> {
+  return request<RouterOverride>("/api/router/override", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getRouterOverride(
+  workspace: string,
+): Promise<RouterOverride | null> {
+  return request<RouterOverride | null>(
+    `/api/router/override/${encodeURIComponent(workspace)}`,
+  );
+}
+
+export function clearRouterOverride(
+  workspace: string,
+): Promise<{ cleared: boolean }> {
+  return request<{ cleared: boolean }>(
+    `/api/router/override/${encodeURIComponent(workspace)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function getRouterAffinity(
+  workspace: string,
+  taskType?: string,
+): Promise<RouterAffinityView> {
+  const query = taskType ? `?task_type=${encodeURIComponent(taskType)}` : "";
+  return request<RouterAffinityView>(
+    `/api/router/affinity/${encodeURIComponent(workspace)}${query}`,
+  );
+}
+
+export function listCliCapabilities(): Promise<CliCapability[]> {
+  return request<CliCapability[]>("/api/router/capabilities");
+}
+
+export function getCliConfig(): Promise<CliRuntimeConfig> {
+  return request<CliRuntimeConfig>("/api/router/config");
+}
+
+export function putCliEffort(
+  cli: string,
+  effort: string | null,
+): Promise<CliRuntimeConfig> {
+  return request<CliRuntimeConfig>("/api/router/config/effort", {
+    method: "PUT",
+    body: JSON.stringify({ cli, effort }),
+  });
+}
+
+export function putCliEnabledModels(
+  cli: string,
+  models: string[],
+): Promise<CliRuntimeConfig> {
+  return request<CliRuntimeConfig>("/api/router/config/models", {
+    method: "PUT",
+    body: JSON.stringify({ cli, models }),
+  });
+}

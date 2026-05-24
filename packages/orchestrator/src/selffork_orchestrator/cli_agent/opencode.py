@@ -148,6 +148,7 @@ class OpenCodeAgent(CLIAgent):
         args: list[str] = ["run"]
         if not is_first_round:
             args.append("--continue")
+        args.extend(self._model_args())
         args.extend(self._config.extra_args)
         # Trailing positional: the user message we want opencode to act on.
         args.append(message)

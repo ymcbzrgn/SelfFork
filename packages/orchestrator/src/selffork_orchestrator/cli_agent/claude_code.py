@@ -151,6 +151,7 @@ class ClaudeCodeAgent(CLIAgent):
         if not is_first_round:
             args.append("--continue")
         args.append("--dangerously-skip-permissions")
+        args.extend(self._model_args())
         args.extend(self._config.extra_args)
         # Trailing positional: the user message we want claude to act on.
         args.append(message)

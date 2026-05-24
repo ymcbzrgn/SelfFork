@@ -145,6 +145,12 @@ class DashboardConfig(BaseModel):
     # ``~/.selffork/settings/telegram.yaml``. Tests can pin a
     # ``tmp_path``-rooted store so HOME mutation isn't required.
     telegram_store: object | None = None
+    # S6 — CLI router stores + affinity home. ``None`` ⇒ defaults
+    # (``~/.selffork/settings/*.yaml`` + ``~/.selffork`` affinity DBs).
+    # Tests pin ``tmp_path``-rooted stores so HOME mutation isn't required.
+    cli_override_store: object | None = None
+    cli_runtime_store: object | None = None
+    cli_affinity_home: Path | None = None
 
 
 def build_app(config: DashboardConfig) -> FastAPI:
@@ -209,23 +215,83 @@ def build_app(config: DashboardConfig) -> FastAPI:
     # NullTelegramBridge is treated as "not wired" so the executor
     # surfaces a clean ``skipped`` outcome rather than silently
     # dropping messages.
+    from selffork_orchestrator.cli_agent.capabilities import capability_for
     from selffork_orchestrator.dashboard.heartbeat_wire import (
+        make_cli_selector,
         make_kanban_card_creator,
         make_task_starter,
     )
     from selffork_orchestrator.heartbeat.config import (
         build_default_heartbeat,
     )
+    from selffork_orchestrator.router import (
+        CliAffinityProvider,
+        CliOverrideStore,
+        CLIRouter,
+        CliRuntimeStore,
+        default_cli_override_store,
+        default_cli_runtime_store,
+        default_outcome_log_path,
+    )
     from selffork_orchestrator.telegram.bridge import NullTelegramBridge
+    from selffork_orchestrator.usage.codexbar_fallback import (
+        build_codexbar_fallback_reader,
+    )
+    from selffork_orchestrator.usage.proactive import ProactiveUsageReader
+    from selffork_shared.quota import QuotaSnapshot
 
     _telegram_for_heartbeat = (
         None
         if isinstance(wrapped_bridge, NullTelegramBridge)
         else wrapped_bridge
     )
+
+    # S6 (ADR-006 §4.6) — CLI + model router. One quota reader (CodexBar
+    # fallback over the proactive snapper) serves both the heartbeat filter
+    # (per-cli) and the router's per-(cli, model) gate; ``gemini-cli`` keys
+    # per model (operator 2026-05-24: gemini quota is per-model).
+    _quota_fallback_reader = build_codexbar_fallback_reader(
+        primary=ProactiveUsageReader(),
+        codexbar_base_url=codexbar_server.base_url,
+    )
+
+    async def _per_cli_quota(cli_id: str) -> QuotaSnapshot | None:
+        return await _quota_fallback_reader.read(cli_id)
+
+    async def _model_quota(cli: str, model: str) -> QuotaSnapshot | None:
+        cap = capability_for(cli)
+        key = (
+            f"{cli}__{model}"
+            if cap is not None and cap.per_model_quota
+            else cli
+        )
+        return await _quota_fallback_reader.read(key)
+
+    cli_override_store = (
+        cast("CliOverrideStore", config.cli_override_store)
+        if config.cli_override_store is not None
+        else CliOverrideStore(sticky_store=default_cli_override_store())
+    )
+    cli_runtime_store = (
+        cast("CliRuntimeStore", config.cli_runtime_store)
+        if config.cli_runtime_store is not None
+        else default_cli_runtime_store()
+    )
+    cli_affinity_provider = CliAffinityProvider(
+        home=config.cli_affinity_home,
+        outcome_log_path=default_outcome_log_path(),
+    )
+    cli_router = CLIRouter(
+        affinity=cli_affinity_provider,
+        override_store=cli_override_store,
+        runtime_store=cli_runtime_store,
+        quota_reader=_model_quota,
+    )
+
     _task_starter = make_task_starter(
         selffork_script=config.selffork_script,
         projects_root=config.projects_root,
+        cli_router=cli_router,
     )
     _kanban_card_creator = make_kanban_card_creator(
         projects_root=config.projects_root,
@@ -234,6 +300,8 @@ def build_app(config: DashboardConfig) -> FastAPI:
         telegram_bridge=_telegram_for_heartbeat,
         task_starter=_task_starter,
         kanban_card_creator=_kanban_card_creator,
+        cli_selector=make_cli_selector(cli_router),
+        quota_reader=_per_cli_quota,
     )
     _log.info(
         "heartbeat_callables_wired",
@@ -241,6 +309,7 @@ def build_app(config: DashboardConfig) -> FastAPI:
             "telegram_wired": _telegram_for_heartbeat is not None,
             "task_starter_wired": True,
             "kanban_creator_wired": True,
+            "cli_router_wired": True,
         },
     )
 
@@ -254,6 +323,9 @@ def build_app(config: DashboardConfig) -> FastAPI:
         pending_store = getattr(_app.state, "pending_confirmation_store", None)
         codexbar_server = getattr(_app.state, "codexbar_server", None)
         heartbeat = getattr(_app.state, "heartbeat", None)
+        cli_affinity_provider = getattr(
+            _app.state, "cli_affinity_provider", None
+        )
         try:
             # S-Quota Faz B/E — boot the CodexBar sidecar first so the
             # secondary quota source is up before anything starts serving
@@ -306,6 +378,14 @@ def build_app(config: DashboardConfig) -> FastAPI:
             # Telegram bridge). ``start`` is a no-op when the daemon
             # is disabled via env; any failure logs + leaves the rest
             # of the dashboard serving HTTP.
+            # S6 — open the CLI-affinity DuckDB stores before the heartbeat
+            # daemon (its CLI_SELECT reads them). Lazy-open is the fallback;
+            # eager setup fails fast on a broken DB.
+            if cli_affinity_provider is not None:
+                try:
+                    await cli_affinity_provider.setup()
+                except Exception:
+                    _log.exception("cli_affinity_provider_start_failed")
             if heartbeat is not None:
                 try:
                     await heartbeat.start()
@@ -320,6 +400,11 @@ def build_app(config: DashboardConfig) -> FastAPI:
             if heartbeat is not None:
                 with contextlib.suppress(Exception):
                     await heartbeat.stop()
+            # S6 — close affinity DuckDB handles after the heartbeat daemon
+            # (which reads them) has stopped.
+            if cli_affinity_provider is not None:
+                with contextlib.suppress(Exception):
+                    await cli_affinity_provider.teardown()
             if expire_task is not None:
                 expire_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):
@@ -360,6 +445,9 @@ def build_app(config: DashboardConfig) -> FastAPI:
     from selffork_orchestrator.dashboard.heartbeat_router import (
         build_heartbeat_router,
     )
+    from selffork_orchestrator.dashboard.router_router import (
+        build_router_router,
+    )
     from selffork_orchestrator.heartbeat.autonomy import AutonomyStore
 
     autonomy_store = AutonomyStore.default()
@@ -367,6 +455,12 @@ def build_app(config: DashboardConfig) -> FastAPI:
     app.include_router(
         build_heartbeat_router(store=autonomy_store, scheduler=heartbeat),
     )
+    # S6 — CLI router API + state (override / affinity / capabilities /
+    # config). Self Jr's CLI+model selections + the operator UI both go
+    # through this router; the affinity provider is set up in ``lifespan``.
+    app.state.cli_router = cli_router
+    app.state.cli_affinity_provider = cli_affinity_provider
+    app.include_router(build_router_router(router=cli_router))
     # Permissive CORS for local dev (Next.js dev server on a different
     # port). Production static-export build is same-origin so this has
     # no effect there.

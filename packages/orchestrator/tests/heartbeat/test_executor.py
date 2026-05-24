@@ -104,11 +104,55 @@ async def test_session_resume_defers() -> None:
 
 
 @pytest.mark.asyncio
-async def test_cli_select_defers() -> None:
+async def test_cli_select_skipped_when_unwired() -> None:
+    # S6: no cli_selector wired ⇒ skipped (was a deferred stub pre-S6).
     executor = ActionExecutor()
     result = await executor.execute(_decision(LegalAction.CLI_SELECT, ""), _state())
-    assert result.outcome == "deferred"
-    assert "S6" in result.summary or "router" in result.summary
+    assert result.outcome == "skipped"
+    assert "not wired" in result.summary
+
+
+@pytest.mark.asyncio
+async def test_cli_select_executes_with_selector() -> None:
+    # S6: a wired cli_selector picks a (cli, model) + effort; the
+    # selection metadata lands on the ActionResult (audit observability).
+    from selffork_orchestrator.heartbeat.executor import CliSelectionOutcome
+
+    async def _selector(state: WorldState) -> CliSelectionOutcome:
+        return CliSelectionOutcome(
+            cli="codex",
+            reasoning=(
+                f"affinity → codex/gpt-5.5 for {state.last_active_workspace}"
+            ),
+            metadata={
+                "chosen_cli": "codex",
+                "chosen_model": "gpt-5.5",
+                "effort": "high",
+            },
+        )
+
+    executor = ActionExecutor(cli_selector=_selector)
+    result = await executor.execute(_decision(LegalAction.CLI_SELECT, ""), _state())
+    assert result.outcome == "executed"
+    assert result.action is LegalAction.CLI_SELECT
+    assert result.metadata["chosen_model"] == "gpt-5.5"
+
+
+@pytest.mark.asyncio
+async def test_cli_select_skipped_when_no_eligible_cli() -> None:
+    # S6: selector returns cli=None (fleet-wide quota exhaustion) ⇒ skipped.
+    from selffork_orchestrator.heartbeat.executor import CliSelectionOutcome
+
+    async def _selector(state: WorldState) -> CliSelectionOutcome:
+        return CliSelectionOutcome(
+            cli=None,
+            reasoning="all CLIs quota-exhausted",
+            metadata={"quota_exhausted": True},
+        )
+
+    executor = ActionExecutor(cli_selector=_selector)
+    result = await executor.execute(_decision(LegalAction.CLI_SELECT, ""), _state())
+    assert result.outcome == "skipped"
 
 
 @pytest.mark.asyncio

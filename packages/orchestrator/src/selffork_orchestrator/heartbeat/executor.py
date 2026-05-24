@@ -16,9 +16,11 @@ Per-action behaviour (ADR-008 §4.4):
   it to ``selffork run --project <slug>`` subprocess fan-out.
 * ``KANBAN_SUGGEST`` — :class:`KanbanCardCreator` callable; appends a
   card to the active project's kanban.
-* ``SESSION_RESUME`` / ``CLI_SELECT`` / ``IDEATE`` — record intent only
-  in Faz D; wired by later sprints (resume daemon, S6 router, Faz F
-  Yaratma mode).
+* ``SESSION_RESUME`` / ``IDEATE`` — record intent only in Faz D; wired
+  by later sprints (resume daemon, Faz F Yaratma mode).
+* ``CLI_SELECT`` — :class:`CliSelector` callable picks a CLI via the S6
+  router (ADR-006 §4.6 — override → quota → affinity). ``None`` selector
+  ⇒ ``skipped``; fleet-wide quota exhaustion ⇒ ``skipped``.
 
 Every action returns an :class:`ActionResult` with an ``outcome`` of
 ``executed``, ``deferred``, ``skipped`` or ``failed`` so the audit
@@ -46,6 +48,8 @@ __all__ = [
     "ActionExecutor",
     "ActionOutcome",
     "ActionResult",
+    "CliSelectionOutcome",
+    "CliSelector",
     "KanbanCardCreator",
     "TaskStarter",
 ]
@@ -84,6 +88,32 @@ KanbanCardCreator = Callable[[str, str, str], Awaitable[str]]
 Wired by the dashboard to
 :meth:`selffork_orchestrator.projects.store.ProjectStore.load_board` +
 ``add_card`` + ``save_board`` (ADR-006 §5.4 Kanban data path).
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class CliSelectionOutcome:
+    """Result of a CLI-router ``select_cli`` call (executor-facing).
+
+    Kept deliberately small + defined here (not imported from the
+    orchestrator router) so :mod:`heartbeat` never imports the router —
+    the router imports :mod:`heartbeat.filter`, so the dependency stays
+    one-way. ``cli is None`` means no eligible CLI (fleet-wide quota
+    exhaustion); the handler then surfaces ``skipped``.
+    """
+
+    cli: str | None
+    reasoning: str
+    metadata: dict[str, object] = field(default_factory=dict)
+
+
+CliSelector = Callable[["WorldState"], Awaitable[CliSelectionOutcome]]
+"""``async (world_state) → CliSelectionOutcome`` (S6 CLI router).
+
+The dashboard wires this to the ADR-006 §4.6 router: it reads
+``world_state.last_active_workspace`` and returns the chosen CLI plus the
+selection metadata (``chosen_cli`` / ``method`` / ``scores`` / ...). When
+``None`` the ``CLI_SELECT`` handler returns ``skipped``.
 """
 
 
@@ -127,11 +157,13 @@ class ActionExecutor:
         task_starter: TaskStarter | None = None,
         kanban_card_creator: KanbanCardCreator | None = None,
         ideation_manager: IdeationManager | None = None,
+        cli_selector: CliSelector | None = None,
     ) -> None:
         self._telegram = telegram_bridge
         self._task_starter = task_starter
         self._kanban_creator = kanban_card_creator
         self._ideation = ideation_manager
+        self._cli_selector = cli_selector
 
     async def execute(
         self, decision: ActionDecision, world_state: WorldState
@@ -156,7 +188,7 @@ class ActionExecutor:
         if action is LegalAction.SESSION_RESUME:
             return _session_resume_result(decision)
         if action is LegalAction.CLI_SELECT:
-            return _cli_select_result(decision)
+            return await self._cli_select(world_state)
         if action is LegalAction.IDEATE:
             return self._ideate(decision, world_state)
         # Exhaustive — :func:`assert_never` ensures the enum stays in
@@ -340,6 +372,39 @@ class ActionExecutor:
             },
         )
 
+    async def _cli_select(self, state: WorldState) -> ActionResult:
+        if self._cli_selector is None:
+            return ActionResult(
+                action=LegalAction.CLI_SELECT,
+                outcome="skipped",
+                summary="cli selector not wired",
+            )
+        try:
+            selection = await self._cli_selector(state)
+        except Exception as exc:
+            _log.warning(
+                "heartbeat_cli_select_raised",
+                extra={"error": str(exc)},
+            )
+            return ActionResult(
+                action=LegalAction.CLI_SELECT,
+                outcome="failed",
+                summary=f"cli selector raised: {exc}",
+            )
+        if selection.cli is None:
+            return ActionResult(
+                action=LegalAction.CLI_SELECT,
+                outcome="skipped",
+                summary=selection.reasoning or "no eligible cli for selection",
+                metadata=selection.metadata,
+            )
+        return ActionResult(
+            action=LegalAction.CLI_SELECT,
+            outcome="executed",
+            summary=selection.reasoning,
+            metadata=selection.metadata,
+        )
+
 
 # ── pure handlers (no I/O) ────────────────────────────────────────
 
@@ -367,17 +432,6 @@ def _session_resume_result(decision: ActionDecision) -> ActionResult:
         summary=(
             decision.reasoning.strip()
             or "session resume — wired by Faz E (resume store dispatch)"
-        ),
-    )
-
-
-def _cli_select_result(decision: ActionDecision) -> ActionResult:
-    return ActionResult(
-        action=LegalAction.CLI_SELECT,
-        outcome="deferred",
-        summary=(
-            decision.reasoning.strip()
-            or "cli selection deferred to S6 router (ADR-006 §4.6)"
         ),
     )
 

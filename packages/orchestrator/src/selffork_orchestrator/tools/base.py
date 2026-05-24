@@ -104,6 +104,11 @@ class ToolContext:
     permission_warden: object | None = None  # selffork_body.sandbox.PermissionWarden
     screenshot_store: object | None = None  # selffork_body.storage.ScreenshotStore
     audit_logger: object | None = None  # selffork_shared.audit.AuditLogger (body.* emit)
+    # S6 (ADR-006 §4.6) — Self Jr CLI-router control. Optional, None when the
+    # router stores aren't wired (e.g. legacy/orphan run); tools that require
+    # them return an "unauthorized" :class:`ToolResult` rather than raise.
+    cli_override_store: object | None = None  # selffork_orchestrator.router.CliOverrideStore
+    cli_runtime_store: object | None = None  # selffork_orchestrator.router.CliRuntimeStore
 
 
 @dataclass(frozen=True, slots=True)

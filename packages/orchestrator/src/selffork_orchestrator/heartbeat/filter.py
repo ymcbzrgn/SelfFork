@@ -68,14 +68,16 @@ DEFAULT_CLI_IDS: Final[tuple[str, ...]] = (
     "claude-code",
     "codex",
     "gemini-cli",
-    "minimax-cli",
     "opencode",
 )
-"""SelfFork ``cli_id``s the quota gate inspects by default.
+"""SelfFork coding-CLI ``cli_id``s the quota gate + router inspect by default.
 
-Mirrors :data:`selffork_orchestrator.usage.model.ProviderName` literal +
-``opencode`` (also installable). Override per-instance to support custom
-CLI deployments.
+``minimax-cli`` is deliberately EXCLUDED (S6, 2026-05-24): ``mmx`` is
+MiniMax's generation CLI, not a coding agent — MiniMax coding routes via
+opencode -> MiniMax-M2.7 (see
+``project_minimax_cli_dropped_2026_05_24.md``). The minimax-cli adapter +
+quota snapper are retained for manual / tracking use only. Override
+per-instance to support custom CLI deployments.
 """
 
 

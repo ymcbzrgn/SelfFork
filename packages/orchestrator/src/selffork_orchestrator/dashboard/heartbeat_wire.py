@@ -26,12 +26,22 @@ from pathlib import Path
 import anyio
 
 from selffork_orchestrator.heartbeat.executor import (
+    CliSelectionOutcome,
+    CliSelector,
     KanbanCardCreator,
     TaskStarter,
 )
+from selffork_orchestrator.heartbeat.filter import WorldState
 from selffork_orchestrator.projects.store import ProjectStore
+from selffork_orchestrator.router import (
+    CLIRouter,
+    CliSelection,
+    QuotaExhaustedAcrossFleetError,
+    write_affinity_snapshot,
+)
 
 __all__ = [
+    "make_cli_selector",
     "make_kanban_card_creator",
     "make_task_starter",
 ]
@@ -42,10 +52,32 @@ _log = logging.getLogger(__name__)
 _SLUG_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
+def _persist_affinity_snapshot(
+    workspace: str | None,
+    selection: CliSelection,
+) -> None:
+    """Persist the affinity landscape so Self Jr's ``cli_affinity`` tool can
+    read it cross-process (the round-loop subprocess can't open the affinity
+    DuckDB; the dashboard is the sole writer). Best-effort — a snapshot
+    failure never breaks routing. Skips override/empty selections (no
+    affinity scores to surface).
+    """
+    if workspace is None or not selection.scores:
+        return
+    try:
+        write_affinity_snapshot(workspace, selection.to_metadata())
+    except OSError as exc:
+        _log.warning(
+            "affinity_snapshot_write_failed",
+            extra={"workspace": workspace, "error": str(exc)},
+        )
+
+
 def make_task_starter(
     *,
     selffork_script: Path,
     projects_root: Path,
+    cli_router: CLIRouter | None = None,
 ) -> TaskStarter:
     """Build a coroutine that spawns ``selffork run`` for a Heartbeat task.
 
@@ -80,7 +112,31 @@ def make_task_starter(
                 extra={"path": str(prd_path), "error": str(exc)},
             )
             return None
-        cmd: list[str] = [str(selffork_script), "run", str(prd_path)]
+        cmd: list[str] = [
+            str(selffork_script),
+            "run",
+            str(prd_path),
+            "--project",
+            project,
+        ]
+        # S6 (ADR-006 §4.6): route the task to a CLI + model + effort so
+        # Self Jr's affinity-learned selection is actually applied to the
+        # spawned session. No router ⇒ the CLI's own config defaults.
+        if cli_router is not None:
+            try:
+                selection = await cli_router.select_cli(
+                    workspace=project, task_type=None
+                )
+            except QuotaExhaustedAcrossFleetError as exc:
+                _log.warning(
+                    "heartbeat_task_start_quota_exhausted",
+                    extra={"project": project, "error": str(exc)},
+                )
+                return None
+            _persist_affinity_snapshot(project, selection)
+            cmd += ["--cli", selection.cli, "--model", selection.model]
+            if selection.effort is not None:
+                cmd += ["--effort", selection.effort]
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -131,3 +187,40 @@ def make_kanban_card_creator(
         return await anyio.to_thread.run_sync(_add)
 
     return _kanban_card_creator
+
+
+def make_cli_selector(router: CLIRouter) -> CliSelector:
+    """Build the ``CLI_SELECT`` callable from the S6 router (ADR-006 §4.6).
+
+    The Heartbeat executor invokes this each ``CLI_SELECT`` tick. It reads
+    the last-active workspace from the world state and asks the router to
+    pick a CLI (operator override → quota filter → affinity argmax).
+    Fleet-wide quota exhaustion is translated into ``cli=None`` so the
+    executor surfaces a clean ``skipped`` rather than the daemon raising.
+
+    ``task_type`` is ``None`` for now — the Heartbeat has no task
+    classifier, so the router's dual-pool backoff scores at the
+    workspace/CLI level (the affinity schema carries the dimension for
+    when a producer sets it).
+    """
+
+    async def _select(state: WorldState) -> CliSelectionOutcome:
+        try:
+            selection = await router.select_cli(
+                workspace=state.last_active_workspace,
+                task_type=None,
+            )
+        except QuotaExhaustedAcrossFleetError as exc:
+            return CliSelectionOutcome(
+                cli=None,
+                reasoning=str(exc),
+                metadata={"quota_exhausted": True},
+            )
+        _persist_affinity_snapshot(state.last_active_workspace, selection)
+        return CliSelectionOutcome(
+            cli=selection.cli,
+            reasoning=selection.reasoning,
+            metadata=selection.to_metadata(),
+        )
+
+    return _select

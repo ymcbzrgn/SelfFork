@@ -21,6 +21,7 @@ from selffork_orchestrator.tools.kanban import build_kanban_tools
 from selffork_orchestrator.tools.mind import build_mind_tools
 from selffork_orchestrator.tools.parser import parse_tool_calls
 from selffork_orchestrator.tools.quota import build_quota_tools
+from selffork_orchestrator.tools.router import build_router_tools
 from selffork_orchestrator.tools.session import build_session_tools
 
 
@@ -39,6 +40,7 @@ def build_default_registry() -> ToolRegistry:
             *build_session_tools(),
             *build_autopilot_tools(),
             *build_body_tools(),
+            *build_router_tools(),
         ],
     )
 
@@ -56,6 +58,7 @@ __all__ = [
     "build_kanban_tools",
     "build_mind_tools",
     "build_quota_tools",
+    "build_router_tools",
     "build_session_tools",
     "parse_tool_calls",
     "raise_unauthorized",

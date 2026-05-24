@@ -174,6 +174,8 @@ def build_default_heartbeat(
     telegram_bridge: object | None = None,
     task_starter: object | None = None,
     kanban_card_creator: object | None = None,
+    cli_selector: object | None = None,
+    quota_reader: object | None = None,
 ) -> HeartbeatScheduler:
     """Construct the daemon from env (dashboard lifespan helper).
 
@@ -199,6 +201,14 @@ def build_default_heartbeat(
             :data:`selffork_orchestrator.heartbeat.executor.KanbanCardCreator`
             that appends a card for ``KANBAN_SUGGEST`` decisions
             (F-AG #3 wire — S4).
+        cli_selector: Optional coroutine matching
+            :data:`selffork_orchestrator.heartbeat.executor.CliSelector`
+            that picks a CLI for ``CLI_SELECT`` decisions via the S6
+            router (ADR-006 §4.6). ``None`` ⇒ handler returns ``skipped``.
+        quota_reader: Optional async ``(cli_id) → QuotaSnapshot | None``
+            wired to the :class:`WorldStateBuilder` quota gate (S6 — the
+            dashboard passes ``CodexBarFallbackReader.read``). ``None``
+            keeps the Faz B "no signal ⇒ assume healthy" behaviour.
 
     The parameters are typed ``object`` here to avoid pulling the
     heavy executor/telegram imports into :mod:`heartbeat.config`'s
@@ -248,6 +258,7 @@ def build_default_heartbeat(
         telegram_bridge=telegram_bridge,  # type: ignore[arg-type]
         task_starter=task_starter,  # type: ignore[arg-type]
         kanban_card_creator=kanban_card_creator,  # type: ignore[arg-type]
+        cli_selector=cli_selector,  # type: ignore[arg-type]
     )
 
     # Settings UI wins when a YAML file exists; env is bootstrap only
@@ -289,6 +300,7 @@ def build_default_heartbeat(
         within_active_hours_probe=_active_hours_probe,
         creative_mode_provider=creative_mode_provider,
         supervised_mode_provider=supervised_mode_provider,
+        quota_reader=quota_reader,  # type: ignore[arg-type]
     )
 
     return HeartbeatScheduler(

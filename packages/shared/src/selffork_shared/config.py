@@ -98,6 +98,11 @@ class CLIAgentConfig(_StrictModel):
     agent: Literal[
         "opencode", "claude-code", "codex", "gemini-cli", "minimax-cli",
     ] = "opencode"
+    # S6 (ADR-006 §4.6): per-invocation model + reasoning-effort selection,
+    # applied by the CLIAgent via its capability descriptor. Self-Jr-mutable
+    # (never hardcoded); ``None`` ⇒ the CLI's own default.
+    model: str | None = None
+    effort: str | None = None
     binary_path: str | None = None
     extra_args: list[str] = Field(default_factory=list)
 

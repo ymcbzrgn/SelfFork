@@ -163,6 +163,7 @@ class CodexAgent(CLIAgent):
         ]
         if not is_first_round:
             args.append("--resume-last")
+        args.extend(self._model_args())
         args.extend(self._config.extra_args)
         args.append(message)
         return args

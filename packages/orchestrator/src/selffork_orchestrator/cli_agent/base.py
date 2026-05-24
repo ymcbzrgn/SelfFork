@@ -31,6 +31,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 
+from selffork_orchestrator.cli_agent.capabilities import capability_for
 from selffork_orchestrator.runtime.base import ChatMessage
 from selffork_shared.config import CLIAgentConfig
 
@@ -40,11 +41,43 @@ __all__ = ["CLIAgent"]
 class CLIAgent(ABC):
     """Adapter for one CLI coding agent."""
 
+    #: Set by each implementation's ``__init__`` (the adapter's config).
+    _config: CLIAgentConfig
+
     @abstractmethod
     def __init__(self, config: CLIAgentConfig) -> None:
         """Initialise from config. Implementations must validate that
         ``config.agent`` matches this implementation, and raise
         :class:`ValueError` otherwise.
+        """
+
+    def _model_args(self) -> list[str]:
+        """CLI args injecting the selected model + effort (S6, ADR-006 §4.6).
+
+        Empty when nothing is selected or the CLI is unknown. Per-CLI flag
+        conventions live in
+        :mod:`selffork_orchestrator.cli_agent.capabilities`. ``gemini-cli``
+        thinking (a settings-file knob) is applied by that agent, not here.
+        """
+        cap = capability_for(self._config.agent)
+        if cap is None:
+            return []
+        return cap.model_args(
+            model=self._config.model, effort=self._config.effort
+        )
+
+    def prepare_workspace(self, workspace: str) -> None:  # noqa: B027
+        """Hook: prepare the host workspace before the round loop begins.
+
+        Intentionally a concrete no-op default (not ``@abstractmethod``):
+        only ``gemini-cli`` needs it, and forcing the other four agents to
+        implement an empty override would be noise.
+
+        Default no-op. ``gemini-cli`` overrides this to write its
+        settings-file thinking config (S6, ADR-006 §4.6); the other agents
+        apply model/effort purely via :meth:`build_command` flags and need
+        nothing here. ``workspace`` is the **host** path — the CLI's cwd on
+        disk (:attr:`Sandbox.host_workspace_path`).
         """
 
     @abstractmethod

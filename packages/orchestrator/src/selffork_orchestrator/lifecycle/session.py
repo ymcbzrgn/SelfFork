@@ -154,6 +154,8 @@ class Session:
         launchd_scheduler: object | None = None,
         resume_store: object | None = None,
         telegram_bridge: object | None = None,
+        cli_override_store: object | None = None,
+        cli_runtime_store: object | None = None,
         theater_producer: TheaterProducer | None = None,
         destructive_whitelist: DestructiveWhitelist | None = None,
         pending_store: PendingConfirmationStore | None = None,
@@ -185,6 +187,9 @@ class Session:
         self._launchd_scheduler = launchd_scheduler
         self._resume_store = resume_store
         self._telegram_bridge = telegram_bridge
+        # S6 (ADR-006 §4.6) — Self-Jr-mutable CLI-router control stores.
+        self._cli_override_store = cli_override_store
+        self._cli_runtime_store = cli_runtime_store
         # Theater producer — best-effort Live Run surface (ADR-007 §4 S2).
         # Null Object default so the round loop never branches on None.
         self._theater: TheaterProducer = (
@@ -197,6 +202,9 @@ class Session:
         self._pending_store = pending_store
         self._state: SessionState = SessionState.IDLE
         self._failure_reason: str | None = None
+        # Rounds the agent loop completed — read after :meth:`run` for the
+        # ADR-006 §4.6 turn-to-complete affinity metric (S6).
+        self._rounds_completed: int = 0
 
     @property
     def state(self) -> SessionState:
@@ -209,6 +217,11 @@ class Session:
     @property
     def failure_reason(self) -> str | None:
         return self._failure_reason
+
+    @property
+    def rounds_completed(self) -> int:
+        """Agent-loop rounds completed (S6 affinity turn-to-complete)."""
+        return self._rounds_completed
 
     async def run(self) -> SessionState:
         """Drive the lifecycle and return the pre-teardown terminal state.
@@ -302,6 +315,10 @@ class Session:
         await self._theater.loop_started()
         binary = self._cli_agent.resolve_binary()
         env = self._cli_agent.build_env(base_env=os.environ)
+        # S6 (ADR-006 §4.6): let the agent prep the host workspace before the
+        # round loop (gemini-cli writes its settings-file thinking config;
+        # other agents no-op). Host path = the CLI's cwd on disk.
+        self._cli_agent.prepare_workspace(self._sandbox.host_workspace_path)
 
         history: list[ChatMessage] = self._cli_agent.compose_initial_messages(
             prd=self._prd_text,
@@ -325,6 +342,10 @@ class Session:
         max_rounds = self._lifecycle_config.max_rounds
 
         while max_rounds is None or rounds_completed < max_rounds:
+            # Snapshot progress so the post-run affinity write (ADR-006
+            # §4.6 turn-to-complete metric, S6) reflects completed rounds
+            # on every exit path (DONE sentinel, error, max-rounds).
+            self._rounds_completed = rounds_completed
             # Greedy decoding for the small SelfFork Jr model. Stochastic
             # sampling on a 2B Q4 model produces wildly variable replies
             # — including pathological ones (immediate sentinel, empty
@@ -550,6 +571,8 @@ class Session:
             proactive_reader=self._proactive_reader,
             launchd_scheduler=self._launchd_scheduler,
             resume_store=self._resume_store,
+            cli_override_store=self._cli_override_store,
+            cli_runtime_store=self._cli_runtime_store,
         )
         results: list[ToolResult] = []
         for call in calls:

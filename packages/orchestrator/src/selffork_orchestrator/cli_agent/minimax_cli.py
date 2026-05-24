@@ -100,9 +100,10 @@ class MinimaxCliAgent(CLIAgent):
                 return str(candidate)
         raise AgentBinaryNotFoundError(
             "mmx binary not found. Install via "
-            "'npm install -g @minimaxai/cli' "
-            "(then 'mmx auth login' for Minimax OAuth), or set "
-            "cli_agent.binary_path in selffork.yaml.",
+            "'npm install -g mmx-cli' "
+            "(then 'mmx auth login'), or set cli_agent.binary_path in "
+            "selffork.yaml. NOTE: mmx is MiniMax's generation CLI; for "
+            "MiniMax CODING use opencode with MiniMax-M2.7 instead.",
         )
 
     def compose_initial_messages(
@@ -127,16 +128,15 @@ class MinimaxCliAgent(CLIAgent):
         ]
 
     def build_command(self, *, message: str, is_first_round: bool) -> list[str]:
-        # Best-effort default: ``mmx chat -p "msg"`` for round 1, ``mmx chat
-        # -c -p "msg"`` for continuation. Refine once Yamaç tests against the
-        # real binary; the Anthropic-compatible endpoint suggests Claude-style
-        # flag conventions.
-        args: list[str] = ["chat"]
-        if not is_first_round:
-            args.append("-c")
-        args.append("-p")
+        # mmx's real surface is single-shot ``mmx text chat --model M
+        # --message "msg"`` (no ``-c``/``--resume`` continuation -- one more
+        # reason mmx can't sustain a coding round-loop, hence minimax-cli is
+        # not a router candidate). ``is_first_round`` is ignored. Per MiniMax
+        # docs 2026-05-24; mmx is not installed locally, so unverified.
+        args: list[str] = ["text", "chat"]
+        args.extend(self._model_args())
         args.extend(self._config.extra_args)
-        args.append(message)
+        args.extend(["--message", message])
         return args
 
     def build_env(self, base_env: Mapping[str, str]) -> dict[str, str]:

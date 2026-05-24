@@ -38,9 +38,12 @@ headless.md + session-management.md). See
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
+import tempfile
 from collections.abc import Mapping
+from contextlib import suppress
 from pathlib import Path
 
 from selffork_orchestrator.cli_agent.base import CLIAgent
@@ -99,6 +102,86 @@ _SELFFORK_JR_SYSTEM_PROMPT = (
     "orchestrator, not gemini. Never include it before the work is "
     "verified done."
 )
+
+
+# Effort -> gemini thinking config (S6, ADR-006 §4.6). gemini-cli 0.39.1 has
+# NO per-invoke thinking flag; thinking is a settings-file knob gated behind
+# ``experimental.dynamicModelConfiguration`` (verified vs the installed
+# bundle 2026-05-24). gemini-2.5 takes a numeric ``thinkingBudget``; Gemini-3
+# takes a ``thinkingLevel`` enum (only ``HIGH`` is locally-verified).
+# ``dynamic``/unset => no write (gemini's own default; opt-in per operator).
+_THINKING_BUDGETS: dict[str, int] = {
+    "off": 0,
+    "low": 2048,
+    "medium": 8192,
+    "high": 24576,
+}
+_THINKING_LEVELS: dict[str, str] = {"high": "HIGH"}
+
+
+def _matches_model(entry: object, model: str) -> bool:
+    """True if a ``customOverrides`` entry targets ``model`` via ``match.model``."""
+    if not isinstance(entry, dict):
+        return False
+    match = entry.get("match")
+    return isinstance(match, dict) and match.get("model") == model
+
+
+def _write_gemini_thinking_settings(
+    workspace: Path,
+    *,
+    model: str,
+    thinking: dict[str, object],
+) -> None:
+    """Read-merge-write ``<workspace>/.gemini/settings.json`` with a
+    model-targeted thinking override. Preserves every other key; refuses to
+    clobber an existing unreadable file.
+    """
+    path = workspace / ".gemini" / "settings.json"
+    settings: dict[str, object] = {}
+    if path.is_file():
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return  # never clobber an existing unreadable settings file
+        if isinstance(loaded, dict):
+            settings = loaded
+    # 1) experimental.dynamicModelConfiguration gate — REQUIRED (modelConfigs
+    #    is inert without it; verified vs the installed bundle 2026-05-24).
+    raw_exp = settings.get("experimental")
+    experimental: dict[str, object] = raw_exp if isinstance(raw_exp, dict) else {}
+    experimental["dynamicModelConfiguration"] = True
+    settings["experimental"] = experimental
+    # 2) modelConfigs.customOverrides — additive list; replace this model's
+    #    entry idempotently (concat'd onto built-ins by gemini at resolve).
+    raw_mc = settings.get("modelConfigs")
+    model_configs: dict[str, object] = raw_mc if isinstance(raw_mc, dict) else {}
+    raw_overrides = model_configs.get("customOverrides")
+    overrides: list[object] = (
+        list(raw_overrides) if isinstance(raw_overrides, list) else []
+    )
+    overrides = [o for o in overrides if not _matches_model(o, model)]
+    overrides.append(
+        {
+            "match": {"model": model},
+            "modelConfig": {
+                "generateContentConfig": {"thinkingConfig": dict(thinking)},
+            },
+        }
+    )
+    model_configs["customOverrides"] = overrides
+    settings["modelConfigs"] = model_configs
+    # 3) atomic write (temp + replace; a reader never sees a torn file).
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fp:
+            json.dump(settings, fp, indent=2)
+        os.replace(tmp_name, path)
+    except Exception:
+        with suppress(OSError):
+            os.unlink(tmp_name)
+        raise
 
 
 class GeminiCliAgent(CLIAgent):
@@ -172,11 +255,42 @@ class GeminiCliAgent(CLIAgent):
         if not is_first_round:
             args.extend(["--resume", "latest"])
         args.extend(["--approval-mode", "yolo"])
+        # Model goes before ``-p`` (which immediately precedes the prompt).
+        args.extend(self._model_args())
         args.append("-p")
         args.extend(self._config.extra_args)
         # Trailing positional: the user message we want gemini to act on.
         args.append(message)
         return args
+
+    def prepare_workspace(self, workspace: str) -> None:
+        """Write gemini's settings-file thinking config (opt-in, S6).
+
+        Only when an effort is explicitly selected (!= ``dynamic``) AND a
+        model is pinned — so default runs stay untouched and we never flip
+        gemini's experimental model-config gate unless asked (operator
+        decision 2026-05-24). Written to the WORKSPACE-local
+        ``.gemini/settings.json`` (deep-merges over the user's ``~/.gemini``;
+        never touches it) via read-merge-write.
+        """
+        effort = self._config.effort
+        model = self._config.model
+        if not model or effort is None or effort == "dynamic":
+            return
+        thinking: dict[str, object] | None = None
+        if model.startswith("gemini-3"):
+            level = _THINKING_LEVELS.get(effort)
+            if level is not None:
+                thinking = {"thinkingLevel": level}
+        else:  # gemini-2.5 family -> numeric thinkingBudget
+            budget = _THINKING_BUDGETS.get(effort)
+            if budget is not None:
+                thinking = {"thinkingBudget": budget}
+        if thinking is None:
+            return  # level not supported/verified for this model family
+        _write_gemini_thinking_settings(
+            Path(workspace), model=model, thinking=thinking
+        )
 
     def build_env(self, base_env: Mapping[str, str]) -> dict[str, str]:
         env = dict(base_env)
