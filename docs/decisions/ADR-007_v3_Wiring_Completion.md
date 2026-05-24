@@ -324,7 +324,23 @@ OAuth → cookies persist → status 🟢. Telegram Connect → bot bağlı.
 
 **Bağımlılık:** Body M5 driver (mevcut, ADR-005). S3 (Telegram webhook).
 
-### S6 — CLI Router
+### S6 — CLI Router ✅ done (2026-05-24)
+
+> Memory: [[s6-complete-2026-05-24]] · Smoke: M6_Smoke_Checklist § S6
+> Operatör S6'yı genişletti: sadece "hangi CLI" değil — Self Jr + operatör
+> her CLI'nin **model + effort + thinking + enabled-models + quota**'sını
+> native yönetir. Eklenenler: affinity'ye **model boyutu** (`select_cli`
+> artık `(cli, model)` döner); 8 Self Jr router tool (4 write + 4 read);
+> capability registry (kurulu binary'lerden doğrulandı); gemini thinking
+> **opt-in** (workspace-local `.gemini/settings.json`,
+> `experimental.dynamicModelConfiguration` gate); gemini quota
+> **reactive-only** (retrieveUserQuota = ToS ihlali + hesap ban, ASLA —
+> [[gemini-quota-direct-api-tos-violation]]); minimax-cli router'dan DÜŞTÜ
+> (opencode→M2.7). 3 operatör yüzeyi: Theater "Switch CLI" dialog · Talk
+> `/cli` · Telegram `/cli`. **Deferred:** canlı `cli.switch` theater EVENT
+> (override next-selection olduğu için mid-round emit noktası yok; LARGE
+> cross-pillar — sonraki sprint scope onayı). 2127 backend test +
+> ruff/mypy/tsc temiz; audit-god 0 CRITICAL.
 
 **Hedef:** Self Jr'ın "hangi CLI'yi kullanayım" kararı — ADR-006 §4.6'nın
 kilitli kararı. **Rotasyon DEĞİL:** task-aware + quota-aware + RAG +

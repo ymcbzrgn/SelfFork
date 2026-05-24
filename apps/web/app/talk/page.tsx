@@ -18,15 +18,19 @@ import {
   type ChatMessageView,
 } from "@/components/talk/ChatMessage";
 import {
+  ApiError,
   claimTelegramDrafts,
+  getRouterOverride,
   getTalkConversation,
   listProjects,
   listTalkConversations,
   listTelegramDrafts,
   openTalkStream,
   sendTalkMessage,
+  setRouterOverride,
   type ConversationResponse,
   type ProjectResponse,
+  type RouterOverride,
   type TalkMessageResponse,
   type TelegramDraftResponse,
 } from "@/lib/api";
@@ -105,6 +109,16 @@ export default function TalkPage() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [speakerStatus, setSpeakerStatus] = useState<string | null>(null);
+  // Feedback for /cli (and future slash commands) — separate from the
+  // model's speaker_status because it carries dynamic, per-command text.
+  const [cliNotice, setCliNotice] = useState<{
+    text: string;
+    error: boolean;
+  } | null>(null);
+  const [cliBusy, setCliBusy] = useState(false);
+  const [activeOverride, setActiveOverride] = useState<RouterOverride | null>(
+    null,
+  );
   const [openContextMenu, setOpenContextMenu] = useState(false);
   const [openHistory, setOpenHistory] = useState(false);
   const feedEndRef = useRef<HTMLDivElement | null>(null);
@@ -192,15 +206,98 @@ export default function TalkPage() {
     return projects.find((x) => x.slug === contextSlug)?.name ?? contextSlug;
   }, [contextSlug, projects]);
 
+  // Surface any active sticky CLI override for the current context, so a
+  // routing change (here, or from the Theater / Telegram) stays visible
+  // rather than being a one-shot toast.
+  useEffect(() => {
+    if (!contextSlug) {
+      setActiveOverride(null);
+      return;
+    }
+    let cancelled = false;
+    getRouterOverride(contextSlug)
+      .then((ov) => {
+        if (!cancelled) setActiveOverride(ov);
+      })
+      .catch(() => {
+        if (!cancelled) setActiveOverride(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [contextSlug]);
+
+  // /cli <cli> [model] — a local control command (the text twin of the
+  // Theater's Switch CLI panel). Sets a sticky router override for the
+  // active workspace; it never reaches the model. Backend validates the
+  // cli/model and returns 400 with a human-readable detail on a bad one.
+  const handleCliCommand = useCallback(
+    async (text: string) => {
+      const parts = text.split(/\s+/).filter(Boolean);
+      const cli = parts[1];
+      const model = parts[2];
+      if (!cli) {
+        setCliNotice({ text: "Usage: /cli <cli> [model]", error: true });
+        return;
+      }
+      if (parts.length > 3) {
+        setCliNotice({
+          text: "Too many arguments — usage: /cli <cli> [model]",
+          error: true,
+        });
+        return;
+      }
+      if (!contextSlug) {
+        setCliNotice({
+          text: "Pick a workspace from Context first — /cli routes one workspace, not All projects.",
+          error: true,
+        });
+        return;
+      }
+      setCliBusy(true);
+      setCliNotice(null);
+      try {
+        const ov = await setRouterOverride({
+          workspace: contextSlug,
+          cli,
+          model: model ?? null,
+          sticky: true,
+        });
+        setActiveOverride(ov);
+        setCliNotice({
+          text: `Routing ${contextLabel} to ${ov.cli}${
+            ov.model ? ` · ${ov.model}` : ""
+          } (sticky). Applies to the next selection, not the current run.`,
+          error: false,
+        });
+        setDraft("");
+      } catch (e) {
+        setCliNotice({
+          text: e instanceof ApiError ? e.message : (e as Error).message,
+          error: true,
+        });
+      } finally {
+        setCliBusy(false);
+      }
+    },
+    [contextSlug, contextLabel],
+  );
+
   const onSend = useCallback(async () => {
     const text = draft.trim();
-    if (!text || sending) return;
+    if (!text || sending || cliBusy) return;
+    // Slash control commands are intercepted before the model send path.
+    if (text === "/cli" || text.startsWith("/cli ")) {
+      await handleCliCommand(text);
+      return;
+    }
     // The conversation this send belongs to — if the operator switches
     // conversations while the request is in flight, the result is stale
     // and must be discarded (the thread-load effect guards itself too).
     const sentFor = conversationId;
     setSending(true);
     setSpeakerStatus(null);
+    setCliNotice(null);
     setDraft("");
     try {
       const res = await sendTalkMessage({
@@ -223,12 +320,13 @@ export default function TalkPage() {
     } finally {
       setSending(false);
     }
-  }, [draft, sending, conversationId, contextSlug]);
+  }, [draft, sending, cliBusy, conversationId, contextSlug, handleCliCommand]);
 
   const onNewChat = () => {
     setConversationId(null);
     setMessages([]);
     setSpeakerStatus(null);
+    setCliNotice(null);
     setDraft("");
     setOpenHistory(false);
   };
@@ -297,6 +395,12 @@ export default function TalkPage() {
                     </div>
                   )}
                 </div>
+                {activeOverride && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary font-medium">
+                    → {activeOverride.cli}
+                    {activeOverride.model ? ` · ${activeOverride.model}` : ""}
+                  </span>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -450,6 +554,18 @@ export default function TalkPage() {
         </div>
 
         <div className="sticky bottom-0 bg-background border-t border-outline-variant/30 px-gutter-desktop py-4">
+          {cliNotice && (
+            <div
+              role="status"
+              className={`max-w-3xl mx-auto mb-2 rounded-lg px-3 py-2 text-caption ${
+                cliNotice.error
+                  ? "bg-error-container/40 text-on-error-container"
+                  : "bg-primary/5 border border-primary/20 text-on-surface"
+              }`}
+            >
+              {cliNotice.text}
+            </div>
+          )}
           <div className="max-w-3xl mx-auto bg-surface rounded-xl shadow-md border border-outline-variant/30 overflow-hidden">
             <textarea
               value={draft}
@@ -496,7 +612,7 @@ export default function TalkPage() {
               <button
                 type="button"
                 onClick={() => void onSend()}
-                disabled={!draft.trim() || sending}
+                disabled={!draft.trim() || sending || cliBusy}
                 aria-label="Send message"
                 className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center disabled:opacity-40 hover:bg-primary-container transition-colors"
               >

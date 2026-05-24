@@ -401,6 +401,8 @@ def select_cli(workspace, task, candidates) -> CLI:
 
 **ADR-003 patch:** §router-strategy bölümü güncellenir; "rotasyon" kelimesi metinden çıkarılır; üç-girdili score function dokümante edilir.
 
+**S6 implementasyon notu (2026-05-24, [[s6-complete-2026-05-24]]):** affinity'ye **model boyutu** eklendi — `select_cli` artık `(cli, model)` döner; gate sırası operatör override → per-model quota gate (gemini per-model; ToS-safe reactive, direct-API `retrieveUserQuota` BAN) → affinity argmax. Self Jr bunu 8 router tool ile (4 write + 4 read), operatör 3 yüzeyle (Theater "Switch CLI" dialog · Talk `/cli` · Telegram `/cli`) yönetir. minimax-cli router adayı DEĞİL (opencode→M2.7). Cost/rotasyon hâlâ YOK.
+
 ### 4.7 Telegram Bridge — İki Yönlü
 
 PTB altyapısı (`b57a765` commit) korunur. Bridge'in iki kanal'ı:
@@ -894,7 +896,7 @@ ADR-006'da kilitlenmemiş, sonraki ADR/commit'lerde çözülecek noktalar:
 
 ### 7.3 Mind (Pillar 3)
 
-- **CLI router RAG:** Project-CLI affinity store (§4.6) Mind'a eklenir. Yeni schema: `(workspace_slug, task_type, cli) → (success_rate, avg_turns, last_used)`.
+- **CLI router RAG:** Project-CLI affinity store (§4.6) Mind'a eklenir. Yeni schema: `(workspace_slug, task_type, cli) → (success_rate, avg_turns, last_used)`. **S6 (2026-05-24):** schema'ya **model** boyutu eklendi → `(workspace_slug, task_type, cli, model) → score`; `select_cli` `(cli, model)` döner. Bkz [[s6-complete-2026-05-24]].
 - **Jr proje notları:** Mind'ın "decisions / historian" surface'inin yeni front-end. RAG store backing.
 - **Telegram message store:** Sr ↔ Jr mesajları Mind'a ingest edilir (sessions koleksiyonu altında, source=telegram).
 - **Context compaction:** Speaker 256K tek başına; compaction Mind'ın işi (PRD §3'teki "deterministic lossless context management").

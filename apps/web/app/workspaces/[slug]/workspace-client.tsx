@@ -15,6 +15,7 @@ import {
   LiveRunTheater,
   type LiveRunTheaterState,
 } from "@/components/workspace/live-run-theater";
+import { CliSwitchDialog } from "@/components/workspace/cli-switch-dialog";
 import {
   ProjectNotes,
   type ProjectNote,
@@ -220,6 +221,7 @@ function WorkspaceContent({ slug }: { slug: string }) {
   };
   const [theaterState, setTheaterState] =
     useState<LiveRunTheaterState | null>(null);
+  const [switchOpen, setSwitchOpen] = useState(false);
 
   // Live Run Theater wire: HTTP snapshot for initial paint, then WS
   // for live deltas. Producer events (cli.output.append / screenshot.new
@@ -409,7 +411,10 @@ function WorkspaceContent({ slug }: { slug: string }) {
           </TabsContent>
 
           <TabsContent value="live" className="mt-vertical-gap focus-visible:outline-none">
-            <LiveRunTheater state={theaterState} />
+            <LiveRunTheater
+              state={theaterState}
+              onSwitchCli={() => setSwitchOpen(true)}
+            />
           </TabsContent>
 
           <TabsContent value="notes" className="mt-vertical-gap focus-visible:outline-none">
@@ -460,6 +465,12 @@ function WorkspaceContent({ slug }: { slug: string }) {
             </section>
           </TabsContent>
         </Tabs>
+
+        <CliSwitchDialog
+          slug={slug}
+          open={switchOpen}
+          onOpenChange={setSwitchOpen}
+        />
       </div>
     </AppShell>
   );

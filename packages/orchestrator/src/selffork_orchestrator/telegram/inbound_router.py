@@ -13,7 +13,7 @@ import dataclasses
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 import anyio
@@ -21,6 +21,10 @@ import anyio
 from selffork_body.sandbox.pending_confirmations import (
     PendingConfirmation,
     PendingConfirmationStore,
+)
+from selffork_orchestrator.cli_agent.capabilities import (
+    CAPABILITIES,
+    capability_for,
 )
 from selffork_orchestrator.talk.models import Conversation
 from selffork_orchestrator.talk.store import TalkStore
@@ -30,6 +34,9 @@ from selffork_orchestrator.telegram.destructive_notify import (
     parse_callback_data,
 )
 from selffork_orchestrator.telegram.drafts import TelegramDraftStore
+
+if TYPE_CHECKING:
+    from selffork_orchestrator.router.override import CliOverrideStore
 
 __all__ = [
     "DEFAULT_EXTEND_HOURS",
@@ -146,6 +153,7 @@ class InboundRouter:
         pause_signal: PauseSignal,
         extend_hours: int = DEFAULT_EXTEND_HOURS,
         conversation_factory: _ConversationFactory | None = None,
+        cli_override_store: CliOverrideStore | None = None,
     ) -> None:
         self._allowlist = allowlist
         self._pending = pending_store
@@ -156,6 +164,7 @@ class InboundRouter:
         self._conversation_factory = (
             conversation_factory or self._default_conversation_factory
         )
+        self._cli_override = cli_override_store
 
     # ── auth ──────────────────────────────────────────────────────────
 
@@ -292,27 +301,7 @@ class InboundRouter:
                 reply=reply, command=norm, handled=True
             )
         if norm == "cli":
-            if not args:
-                return CommandOutcome(
-                    reply="Usage: /cli <claude|codex|gemini|minimax|glm>",
-                    command=norm,
-                    handled=False,
-                )
-            # CLI router lands in S6; record the request as a draft so
-            # it survives until the router endpoint exists.
-            self._drafts.add(
-                chat_id=chat_id,
-                sender="operator",
-                text=f"/cli {args[0]}",
-            )
-            return CommandOutcome(
-                reply=(
-                    f"📝 CLI override request queued for {args[0]!r}; "
-                    "S6 will wire the router."
-                ),
-                command=norm,
-                handled=True,
-            )
+            return await self._handle_cli_override(args)
         if norm in {"approve", "cancel"}:
             if not args:
                 return CommandOutcome(
@@ -365,6 +354,95 @@ class InboundRouter:
             reply=f"unknown command: /{norm} — try /help",
             command=norm,
             handled=False,
+        )
+
+    async def _handle_cli_override(self, args: list[str]) -> CommandOutcome:
+        """Set a sticky CLI(+model) override for a workspace (ADR-006 §4.6).
+
+        Grammar: ``/cli <cli> [model] [workspace]``. The workspace
+        defaults to the last-active Talk workspace; a model is detected
+        by membership in the CLI's capability set, so the trailing args
+        disambiguate themselves. Sticky, because the dashboard router
+        reads it from YAML in a separate process on the next selection.
+        """
+        store = self._cli_override
+        if store is None:
+            return CommandOutcome(
+                reply="📝 CLI override store offline — can't route right now.",
+                command="cli",
+                handled=False,
+            )
+        if not args:
+            return CommandOutcome(
+                reply="Usage: /cli <cli> [model] [workspace]",
+                command="cli",
+                handled=False,
+            )
+        cli = args[0]
+        cap = capability_for(cli)
+        if cap is None:
+            return CommandOutcome(
+                reply=f"unknown cli {cli!r}; known: {sorted(CAPABILITIES)}",
+                command="cli",
+                handled=False,
+            )
+        rest = args[1:]
+        if len(rest) > 2:
+            return CommandOutcome(
+                reply="Usage: /cli <cli> [model] [workspace]",
+                command="cli",
+                handled=False,
+            )
+        model: str | None = None
+        explicit_workspace: str | None = None
+        if len(rest) == 1:
+            # One trailing arg: a known model, else a workspace slug.
+            if cap.has_model(rest[0]):
+                model = rest[0]
+            else:
+                explicit_workspace = rest[0]
+        elif len(rest) == 2:
+            # `<model> <workspace>`: the model must be valid — parity with
+            # the set_cli_override tool, which rejects an unknown model
+            # instead of silently dropping it.
+            if not cap.has_model(rest[0]):
+                return CommandOutcome(
+                    reply=(
+                        f"cli {cli!r} has no model {rest[0]!r}; "
+                        f"models: {list(cap.models)}"
+                    ),
+                    command="cli",
+                    handled=False,
+                )
+            model = rest[0]
+            explicit_workspace = rest[1]
+        workspace = explicit_workspace
+        if workspace is None and self._talk is not None:
+            workspace = await self._talk.get_last_active_workspace()
+        if workspace is None:
+            return CommandOutcome(
+                reply=(
+                    "No active workspace — say /workspace <slug> first, "
+                    "or /cli <cli> [model] <workspace>."
+                ),
+                command="cli",
+                handled=False,
+            )
+        override = store.set(
+            workspace=workspace, cli=cli, model=model, sticky=True
+        )
+        label = (
+            override.cli
+            if override.model is None
+            else f"{override.cli} ({override.model})"
+        )
+        return CommandOutcome(
+            reply=(
+                f"📌 {workspace}: {label} (sticky). "
+                "Applies to the next selection."
+            ),
+            command="cli",
+            handled=True,
         )
 
     async def _set_active_workspace(self, slug: str) -> str:
@@ -467,7 +545,7 @@ class InboundRouter:
 _HELP_TEXT = (
     "SelfFork Telegram commands:\n"
     "/workspace <slug> — set active workspace\n"
-    "/cli <name> — override CLI for next session (S6)\n"
+    "/cli <cli> [model] [workspace] — route a workspace to a CLI\n"
     "/pause — pause Self Jr after current round\n"
     "/resume — clear pause\n"
     "/approve <id> — approve a pending destructive action\n"

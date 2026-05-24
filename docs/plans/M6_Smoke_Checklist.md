@@ -1171,3 +1171,71 @@ API çağrısı. CLI auth kendi kendine çıkarsa Telegram alert
 - Provider sign-in storage_state per-project — M5-E close-out
   görevi ileri sprint'e ertelendi (CLI-native ile çelişki yok ama
   Self Jr "anti-bot trip" fallback'i bir gün gerekirse).
+
+---
+
+## S6 — CLI + Model Router (Wave 2 · ADR-007 §4 S6)
+
+**Hedef:** Self Jr + operatör her CLI'nin cli/model/effort/thinking/
+enabled-models'ini native yönetir (ADR-006 §4.6). 3 operatör yüzeyi:
+Theater "Switch CLI" dialog, Talk `/cli`, Telegram `/cli`. Backend
+çekirdek f50e515'te; bu smoke Faz E (frontend + Telegram) + Faz F.
+
+### Ön-koşullar
+- Dashboard + web ayakta (§0), en az bir proje var.
+- `/api/router/*` endpoint'leri canlı (dashboard).
+
+### Senaryo a — Backend testleri
+- [ ] `pytest packages/orchestrator/tests/telegram_bridge/test_inbound_router.py -q` → green.
+- [ ] Tüm suite: `pytest packages/mind/tests packages/orchestrator/tests packages/body/tests -q` → 2127 passed.
+
+### Senaryo b — Theater "Switch CLI" dialog
+- [ ] Workspace aç → "Live Run" tab → "Switch CLI ▾" tıkla → dialog açılır.
+- [ ] "Current routing": override yoksa "Auto"; affinity candidates listesi
+      (cli · model · score · match_level · obs) görünür, top aday "would pick".
+- [ ] CLI + Model seç → "Set override (sticky)" → "Forced: <cli> · <model>
+      [sticky]" görünür. "Clear" → tekrar "Auto".
+- [ ] Effort dropdown + Enabled models toggle'ları kaydedilir (son model
+      kapatılamaz). Menülerin hepsi `/capabilities`+`/config`'ten — hardcoded yok.
+
+### Senaryo c — Talk `/cli`
+- [ ] Context selector'dan workspace seç → `/cli codex` yaz, Enter → "Routing
+      <ws> to codex (sticky)..." notice + context yanında "→ codex" chip.
+- [ ] `/cli bogus` → kırmızı "unknown cli ... known: [...]" notice (override yok).
+- [ ] Context "All projects" iken `/cli codex` → "Pick a workspace first" notice.
+- [ ] `/cli` mesajı modele GİTMEZ (sadece routing; Self Jr cevabı yok).
+
+### Senaryo d — Telegram `/cli` (bot configured ise)
+- [ ] `/cli codex projectx` → "📌 projectx: codex (sticky). Applies to the next
+      selection." reply.
+- [ ] `/cli codex <gerçek-model> projectx` → model dahil override.
+- [ ] `/cli codex bad-model projectx` → "cli 'codex' has no model 'bad-model'".
+- [ ] `/cli bogus` → "unknown cli". `/cli codex` (workspace arg yok + last-active
+      yoksa) → "No active workspace".
+
+### Senaryo e — Cross-surface tutarlılık (tek source-of-truth)
+- [ ] Talk `/cli claude-code` ile override koy → aynı workspace'in Theater
+      "Switch CLI" dialog'unu aç → "Forced: claude-code" görünür (aynı YAML store).
+
+### Senaryo f — full sweep
+- [ ] `ruff check packages/ apps/web` clean · `mypy ...src` 252 Success ·
+      `cd apps/web && npx tsc --noEmit` clean.
+
+### Senaryo g — audit-god rigorous review
+- [ ] 3 paralel audit-god (frontend / backend / contract) → 0 CRITICAL;
+      shared-instance + 8-wrapper↔endpoint contract VERIFIED; HIGH/MAJOR bulgular
+      regression test'ine bağlı fix'lendi (Telegram model reject · effort coerce ·
+      enabled-models canonical clear · +2 backend test).
+
+### Senaryo h — Commit-ready
+- [ ] Memory: `project_s6_complete_2026_05_24.md` yazıldı; `MEMORY.md` güncel
+      (s6-inprogress SUPERSEDED).
+- [ ] ADR-006 §4.6/§7.3 + ADR-007 §4 S6 "✅ done" damgası.
+- [ ] Commit message draft operatöre sunuldu; onay sonrası tek commit (MANDATE 1).
+
+### S6 sonrası deferred
+- **P5 — canlı `cli.switch` theater EVENT** (LARGE cross-pillar): override
+  next-selection olduğu için mid-round emit noktası yok; theater event modeli +
+  producer + render gerektirir. S7 veya ayrı sprint; build'den önce scope onayı.
+- Per-model gemini quota DATA producer (gate hazır, reader yok; ToS-safe reactive
+  only — direct-API ASLA).

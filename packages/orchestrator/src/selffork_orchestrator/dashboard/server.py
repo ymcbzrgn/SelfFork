@@ -618,6 +618,7 @@ def build_app(config: DashboardConfig) -> FastAPI:
         bot_token=app_telegram_cfg.bot_token,
         mode=app_telegram_cfg.mode,
         webhook_url=app_telegram_cfg.webhook_url or None,
+        cli_override_store=cli_override_store,
     )
 
     # M6 Telegram bridge status + Reflex training surface (ADR-006).
@@ -751,6 +752,7 @@ def _wire_telegram_inbound(
     bot_token: str = "",
     mode: str = "polling",
     webhook_url: str | None = None,
+    cli_override_store: Any = None,
 ) -> None:
     """Construct ``InboundRouter`` + PTB ``Application`` and stash on ``app.state``.
 
@@ -793,6 +795,7 @@ def _wire_telegram_inbound(
         talk_store=talk_store,
         drafts_store=drafts_store,
         pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
     )
     app.state.telegram_inbound_router = inbound_router
 

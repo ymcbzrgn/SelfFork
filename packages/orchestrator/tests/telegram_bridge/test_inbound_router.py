@@ -19,6 +19,12 @@ from selffork_body.sandbox.destructive_whitelist import (
 from selffork_body.sandbox.pending_confirmations import (
     PendingConfirmationStore,
 )
+from selffork_orchestrator.cli_agent.capabilities import capability_for
+from selffork_orchestrator.dashboard.settings.store import YamlSettingsStore
+from selffork_orchestrator.router.override import (
+    CliOverrideStore,
+    StickyOverrides,
+)
 from selffork_orchestrator.talk.store import TalkStore
 from selffork_orchestrator.telegram.allowlist import AllowList
 from selffork_orchestrator.telegram.drafts import TelegramDraftStore
@@ -72,12 +78,24 @@ def category() -> DestructiveCategory:
 
 
 @pytest.fixture
+def cli_override_store(tmp_path: Path) -> CliOverrideStore:
+    return CliOverrideStore(
+        sticky_store=YamlSettingsStore(
+            path=tmp_path / "cli_override.yaml",
+            schema=StickyOverrides,
+            default_factory=StickyOverrides,
+        )
+    )
+
+
+@pytest.fixture
 def router(
     allowlist: AllowList,
     pending_store: PendingConfirmationStore,
     talk_store: TalkStore,
     drafts_store: TelegramDraftStore,
     pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
 ) -> InboundRouter:
     return InboundRouter(
         allowlist=allowlist,
@@ -85,6 +103,7 @@ def router(
         talk_store=talk_store,
         drafts_store=drafts_store,
         pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
     )
 
 
@@ -239,15 +258,116 @@ async def test_command_workspace_sets_active(
 
 
 @pytest.mark.asyncio
-async def test_command_cli_queues_draft(
-    router: InboundRouter, drafts_store: TelegramDraftStore
+async def test_command_cli_sets_sticky_override(
+    router: InboundRouter, cli_override_store: CliOverrideStore
 ) -> None:
     outcome = await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="cli", args=["claude"]
+        chat_id=ALLOWED_CHAT, command="cli", args=["codex", "projectx"]
     )
     assert outcome.handled
-    drafts = drafts_store.list_unclaimed()
-    assert any("/cli claude" in d.text for d in drafts)
+    override = cli_override_store.peek("projectx")
+    assert override is not None
+    assert override.cli == "codex"
+    assert override.model is None
+    assert override.sticky is True
+
+
+@pytest.mark.asyncio
+async def test_command_cli_with_model(
+    router: InboundRouter, cli_override_store: CliOverrideStore
+) -> None:
+    cap = capability_for("codex")
+    assert cap is not None
+    model = cap.models[0]
+    outcome = await router.handle_command(
+        chat_id=ALLOWED_CHAT, command="cli", args=["codex", model, "projectx"]
+    )
+    assert outcome.handled
+    override = cli_override_store.peek("projectx")
+    assert override is not None
+    assert override.cli == "codex"
+    assert override.model == model
+
+
+@pytest.mark.asyncio
+async def test_command_cli_uses_last_active_workspace(
+    router: InboundRouter,
+    talk_store: TalkStore,
+    cli_override_store: CliOverrideStore,
+) -> None:
+    await router.handle_command(
+        chat_id=ALLOWED_CHAT, command="workspace", args=["alpha"]
+    )
+    outcome = await router.handle_command(
+        chat_id=ALLOWED_CHAT, command="cli", args=["codex"]
+    )
+    assert outcome.handled
+    override = cli_override_store.peek("alpha")
+    assert override is not None
+    assert override.cli == "codex"
+    assert override.model is None
+
+
+@pytest.mark.asyncio
+async def test_command_cli_unknown_cli_rejected(
+    router: InboundRouter, cli_override_store: CliOverrideStore
+) -> None:
+    outcome = await router.handle_command(
+        chat_id=ALLOWED_CHAT, command="cli", args=["bogus", "projectx"]
+    )
+    assert not outcome.handled
+    assert "unknown cli" in outcome.reply
+    assert "known" in outcome.reply
+    assert cli_override_store.peek("projectx") is None
+
+
+@pytest.mark.asyncio
+async def test_command_cli_without_workspace_rejected(
+    router: InboundRouter,
+) -> None:
+    outcome = await router.handle_command(
+        chat_id=ALLOWED_CHAT, command="cli", args=["codex"]
+    )
+    assert not outcome.handled
+    assert "workspace" in outcome.reply.lower()
+
+
+@pytest.mark.asyncio
+async def test_command_cli_override_persists_across_store_instances(
+    router: InboundRouter, tmp_path: Path
+) -> None:
+    # The dashboard router reads overrides from YAML in a SEPARATE process;
+    # a sticky write must be visible to a fresh store over the same file
+    # (a single-turn, in-memory override would not survive this boundary).
+    outcome = await router.handle_command(
+        chat_id=ALLOWED_CHAT, command="cli", args=["codex", "projectx"]
+    )
+    assert outcome.handled
+    reread = CliOverrideStore(
+        sticky_store=YamlSettingsStore(
+            path=tmp_path / "cli_override.yaml",
+            schema=StickyOverrides,
+            default_factory=StickyOverrides,
+        )
+    )
+    override = reread.get_active("projectx")
+    assert override is not None
+    assert override.cli == "codex"
+    assert override.sticky is True
+
+
+@pytest.mark.asyncio
+async def test_command_cli_two_arg_rejects_unknown_model(
+    router: InboundRouter, cli_override_store: CliOverrideStore
+) -> None:
+    outcome = await router.handle_command(
+        chat_id=ALLOWED_CHAT,
+        command="cli",
+        args=["codex", "not-a-real-model", "projectx"],
+    )
+    assert not outcome.handled
+    assert "has no model" in outcome.reply
+    assert cli_override_store.peek("projectx") is None
 
 
 @pytest.mark.asyncio
