@@ -70,6 +70,17 @@ export interface ProjectResponse {
   created_at: string;
   updated_at: string;
   card_counts: Record<string, number>;
+  /**
+   * S7 — soft archive. ``null`` while active; ISO timestamp once
+   * archived. Default ``listProjects()`` filters these out; pass
+   * ``include_archived: true`` to surface them.
+   */
+  archived_at: string | null;
+  /**
+   * S7 — workspace-scope Self Jr pause. When ``true`` Heartbeat's
+   * WorldStateBuilder drops this workspace from its tick.
+   */
+  autopilot_paused: boolean;
 }
 
 export interface KanbanCardResponse {
@@ -195,8 +206,11 @@ export function resumeNow(sessionId: string): Promise<RunRequestResponse> {
 
 // ── Projects ─────────────────────────────────────────────────────────────────
 
-export function listProjects(): Promise<ProjectResponse[]> {
-  return request<ProjectResponse[]>("/api/projects");
+export function listProjects(
+  options?: { include_archived?: boolean },
+): Promise<ProjectResponse[]> {
+  const qs = options?.include_archived ? "?include_archived=true" : "";
+  return request<ProjectResponse[]>(`/api/projects${qs}`);
 }
 
 export function createProject(payload: {
@@ -212,6 +226,59 @@ export function createProject(payload: {
 
 export function getProject(slug: string): Promise<ProjectResponse> {
   return request<ProjectResponse>(`/api/projects/${slug}`);
+}
+
+// ── S7 — Project edit / archive / autopilot pause (ADR-007 §4 S7) ───────
+
+export interface ProjectUpdatePayload {
+  name?: string;
+  description?: string;
+  /**
+   * Send ``""`` to clear ``root_path`` explicitly; omit the field to
+   * leave the existing value unchanged. Matches the backend
+   * ``ProjectUpdatePayload`` schema.
+   */
+  root_path?: string;
+}
+
+export function updateProject(
+  slug: string,
+  payload: ProjectUpdatePayload,
+): Promise<ProjectResponse> {
+  return request<ProjectResponse>(`/api/projects/${slug}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function archiveProject(slug: string): Promise<ProjectResponse> {
+  return request<ProjectResponse>(`/api/projects/${slug}/archive`, {
+    method: "POST",
+  });
+}
+
+export function unarchiveProject(slug: string): Promise<ProjectResponse> {
+  return request<ProjectResponse>(`/api/projects/${slug}/unarchive`, {
+    method: "POST",
+  });
+}
+
+export function pauseWorkspaceAutopilot(
+  slug: string,
+): Promise<ProjectResponse> {
+  return request<ProjectResponse>(
+    `/api/projects/${slug}/autopilot/pause`,
+    { method: "POST" },
+  );
+}
+
+export function resumeWorkspaceAutopilot(
+  slug: string,
+): Promise<ProjectResponse> {
+  return request<ProjectResponse>(
+    `/api/projects/${slug}/autopilot/resume`,
+    { method: "POST" },
+  );
 }
 
 export function getKanban(slug: string): Promise<KanbanResponse> {
@@ -441,6 +508,57 @@ export function listMindNotes(
   );
 }
 
+export interface MindNoteCreatePayload {
+  content: string;
+  tier?: string;
+  kind?: string;
+  intent?: string;
+  importance?: number;
+  pinned?: boolean;
+  session_id?: string;
+}
+
+export function createMindNote(
+  slug: string,
+  payload: MindNoteCreatePayload,
+): Promise<NoteResponse> {
+  return request<NoteResponse>(`/api/projects/${slug}/mind/notes`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface MindNoteUpdatePayload {
+  content?: string;
+  intent?: string;
+  importance?: number;
+  pinned?: boolean;
+}
+
+export function updateMindNote(
+  slug: string,
+  noteId: string,
+  payload: MindNoteUpdatePayload,
+): Promise<NoteResponse> {
+  return request<NoteResponse>(
+    `/api/projects/${slug}/mind/notes/${encodeURIComponent(noteId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function deleteMindNote(
+  slug: string,
+  noteId: string,
+): Promise<void> {
+  return request<void>(
+    `/api/projects/${slug}/mind/notes/${encodeURIComponent(noteId)}`,
+    { method: "DELETE" },
+  );
+}
+
 export function recallMind(
   slug: string,
   payload: {
@@ -539,6 +657,8 @@ export interface ActiveLoopResponse {
   started_at: string;
   duration_seconds: number;
   last_thought: string | null;
+  /** S7 — session_id of the currently-running CLI session (transcript drawer source). */
+  session_id: string;
 }
 
 export function getTheaterSnapshot(slug: string): Promise<TheaterSnapshotResponse> {

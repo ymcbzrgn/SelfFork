@@ -305,6 +305,204 @@ class TestMindNotesSupersede:
         assert r.status_code == 404
 
 
+# ── /notes (PATCH — S7 atomic supersede + create) ───────────────────────────
+
+
+class TestMindNotesUpdate:
+    def test_patch_content_supersedes_and_replaces(
+        self,
+        tmp_path: Path,
+        fake_home: Path,
+    ) -> None:
+        original = Note(
+            tier="episodic",
+            kind="decision",
+            content="initial body",
+            intent="api shape",
+            project_slug="calc",
+        )
+        _seed_notes("calc", [original])
+
+        client = _client(tmp_path)
+        r = client.patch(
+            f"/api/projects/calc/mind/notes/{original.id}",
+            json={"content": "updated body"},
+        )
+        assert r.status_code == 200
+        new_note = r.json()
+        assert new_note["content"] == "updated body"
+        # Tier / kind / intent carry forward from the superseded note.
+        assert new_note["tier"] == "episodic"
+        assert new_note["kind"] == "decision"
+        assert new_note["intent"] == "api shape"
+        # A fresh row was written — the new id differs from the old.
+        assert new_note["id"] != str(original.id)
+
+        # Listing shows the new note only (the original was superseded).
+        listing = client.get("/api/projects/calc/mind/notes").json()
+        assert len(listing) == 1
+        assert listing[0]["id"] == new_note["id"]
+
+    def test_patch_intent_preserves_content(
+        self,
+        tmp_path: Path,
+        fake_home: Path,
+    ) -> None:
+        original = Note(
+            tier="episodic",
+            kind="observation",
+            content="don't lose me",
+            intent="old title",
+            project_slug="calc",
+        )
+        _seed_notes("calc", [original])
+
+        client = _client(tmp_path)
+        r = client.patch(
+            f"/api/projects/calc/mind/notes/{original.id}",
+            json={"intent": "new title"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["content"] == "don't lose me"
+        assert body["intent"] == "new title"
+        # Audit-god S7 Finding #1 regression — intent-only PATCH must
+        # produce a NEW row id; without the explicit ``id=uuid4()`` in
+        # the router the Note model derives UUID5 from
+        # ``(tier, content_hash, session_id)`` which is identical for
+        # intent-only patches, collapses supersede + create into a
+        # single in-place mutation, and destroys the bi-temporal
+        # invariant.
+        assert body["id"] != str(original.id)
+        # Listing returns one currently-valid row (the new one). The
+        # superseded original is dropped by the retrieve scope filter.
+        listing = client.get("/api/projects/calc/mind/notes").json()
+        assert len(listing) == 1
+        assert listing[0]["id"] == body["id"]
+        assert listing[0]["intent"] == "new title"
+
+    def test_patch_importance_distinct_id(
+        self,
+        tmp_path: Path,
+        fake_home: Path,
+    ) -> None:
+        """Audit-god S7 Finding #1 regression — importance-only PATCH
+        also has to mint a fresh id. Same UUID5 collision class as
+        the intent-only path."""
+        original = Note(
+            tier="episodic",
+            kind="decision",
+            content="pin-worthy",
+            intent="t",
+            importance=1.0,
+            project_slug="calc",
+        )
+        _seed_notes("calc", [original])
+
+        client = _client(tmp_path)
+        r = client.patch(
+            f"/api/projects/calc/mind/notes/{original.id}",
+            json={"importance": 5.0},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["content"] == "pin-worthy"
+        assert body["importance"] == 5.0
+        assert body["id"] != str(original.id)
+
+    def test_patch_pinned_distinct_id(
+        self,
+        tmp_path: Path,
+        fake_home: Path,
+    ) -> None:
+        """Audit-god S7 Finding #1 regression — pinned-only PATCH
+        also has to mint a fresh id."""
+        original = Note(
+            tier="episodic",
+            kind="decision",
+            content="pin-target",
+            intent="t",
+            project_slug="calc",
+        )
+        _seed_notes("calc", [original])
+
+        client = _client(tmp_path)
+        r = client.patch(
+            f"/api/projects/calc/mind/notes/{original.id}",
+            json={"pinned": True},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["pinned"] is True
+        assert body["id"] != str(original.id)
+
+    def test_patch_empty_body_400(
+        self,
+        tmp_path: Path,
+        fake_home: Path,
+    ) -> None:
+        original = Note(
+            tier="episodic",
+            kind="observation",
+            content="hello",
+            project_slug="calc",
+        )
+        _seed_notes("calc", [original])
+
+        client = _client(tmp_path)
+        r = client.patch(
+            f"/api/projects/calc/mind/notes/{original.id}",
+            json={},
+        )
+        assert r.status_code == 400
+        assert "empty" in r.json()["detail"].lower()
+
+    def test_patch_empty_content_400(
+        self,
+        tmp_path: Path,
+        fake_home: Path,
+    ) -> None:
+        original = Note(
+            tier="episodic",
+            kind="observation",
+            content="hello",
+            project_slug="calc",
+        )
+        _seed_notes("calc", [original])
+
+        client = _client(tmp_path)
+        r = client.patch(
+            f"/api/projects/calc/mind/notes/{original.id}",
+            json={"content": "   "},
+        )
+        assert r.status_code == 400
+        assert "content" in r.json()["detail"].lower()
+
+    def test_patch_unknown_id_404(
+        self,
+        tmp_path: Path,
+        fake_home: Path,
+    ) -> None:
+        client = _client(tmp_path)
+        r = client.patch(
+            "/api/projects/calc/mind/notes/00000000-0000-0000-0000-000000000000",
+            json={"content": "ghost"},
+        )
+        assert r.status_code == 404
+
+    def test_patch_invalid_uuid_400(
+        self,
+        tmp_path: Path,
+        fake_home: Path,
+    ) -> None:
+        client = _client(tmp_path)
+        r = client.patch(
+            "/api/projects/calc/mind/notes/not-a-uuid",
+            json={"content": "x"},
+        )
+        assert r.status_code == 400
+
+
 # ── /recall ──────────────────────────────────────────────────────────────────
 
 

@@ -6,6 +6,10 @@ CLAUDE.md
 .obsidian/
 examples/
 examples_crucial/
+# Operator's starred-repo dev corpus (MANDATE 9 — Korpus Refleks).
+# Populated by `infra/scripts/clone_starred.py --user <github-username>`.
+# Per-forker, not committed.
+examples_starred/
 
 # Playwright session artifacts (per-run logs + scratch screenshots).
 # Curated UI screenshots live under docs/screenshots/ instead.

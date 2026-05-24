@@ -168,6 +168,14 @@ Faz D wires a real counter; Faz B stubs to ``lambda: 0``.
 
 
 _TalkLastWorkspaceProbe = Callable[[], Awaitable[str | None]]
+# S7 — workspace-scope eligibility gate (ADR-007 §4 S7). Given the
+# slug the talk probe returned, the gate decides whether Heartbeat
+# may target that workspace this tick (``True`` = eligible). The
+# default wiring in :func:`build_default_heartbeat` consults
+# :class:`ProjectStore` so ``archived_at`` and ``autopilot_paused``
+# drop the workspace out of the WorldState; tests can pass an
+# arbitrary callable.
+_WorkspaceEligibleProbe = Callable[[str], Awaitable[bool]]
 """Async function returning the last active workspace slug from TalkStore."""
 
 
@@ -187,6 +195,7 @@ class WorldStateBuilder:
         quota_reader: _QuotaReader | None = None,
         concurrency_probe: _ConcurrencyProbe | None = None,
         talk_last_workspace_probe: _TalkLastWorkspaceProbe | None = None,
+        workspace_eligible_probe: _WorkspaceEligibleProbe | None = None,
         creative_mode_provider: Callable[[], bool] | None = None,
         supervised_mode_provider: Callable[[], bool] | None = None,
         within_active_hours_probe: Callable[[], bool] | None = None,
@@ -198,6 +207,7 @@ class WorldStateBuilder:
         self._quota_reader = quota_reader
         self._concurrency = concurrency_probe
         self._talk_last_workspace = talk_last_workspace_probe
+        self._workspace_eligible = workspace_eligible_probe
         self._creative_mode = creative_mode_provider
         self._supervised_mode = supervised_mode_provider
         self._within_active_hours = within_active_hours_probe
@@ -238,6 +248,19 @@ class WorldStateBuilder:
             try:
                 last_workspace = await self._talk_last_workspace()
             except Exception:
+                last_workspace = None
+        # S7 — workspace eligibility gate. ``autopilot_paused`` or
+        # ``archived_at`` drops the workspace from the WorldState so
+        # downstream actions (``TASK_START``, ``CLI_SELECT``) never
+        # target it. Fail-OPEN on gate exceptions (matches the
+        # active-hours probe convention) so a transient ProjectStore
+        # read error doesn't accidentally silence Self Jr.
+        if last_workspace is not None and self._workspace_eligible is not None:
+            try:
+                eligible = await self._workspace_eligible(last_workspace)
+            except Exception:
+                eligible = True
+            if not eligible:
                 last_workspace = None
 
         return WorldState(

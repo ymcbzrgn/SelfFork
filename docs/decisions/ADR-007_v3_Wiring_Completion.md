@@ -371,7 +371,30 @@ gösterir. Operatör Talk'tan `/cli gemini` → router itaat eder.
 **Bağımlılık:** S2 (theater `cli.switch` event'i gösterir). RAG affinity
 için Mind pillar — yoksa S6 quota+override ile başlar, RAG skoru sonra.
 
-### S7 — Workspace Actions
+### S7 — Workspace Actions ✅ done (2026-05-25)
+
+> Memory: [[s7-complete-2026-05-25]] · Smoke: `M6_Smoke_Checklist.md § S7` ·
+> Tests: +28 (16 projects API + 6 mind PATCH + 4 WSB gate + 2 UUID id-distinct)
+>
+> 4 surface tam wire'lı (Kanban add+drag+filter, Header Switch+Edit+Pause+Archive,
+> Theater Pause+Transcript+RawThinking, Notes 2-pane + markdown editor + 800ms
+> debounce + supersede id-swap). 8 yeni backend endpoint (PUT/archive/unarchive/
+> autopilot pause+resume/PATCH notes/include_archived filter/session_id on
+> ActiveLoop) + WSB `workspace_eligible_probe` gate (`archived_at` +
+> `autopilot_paused` → workspace skip). Audit-god 3 paralel — 2 CRITICAL + 6
+> MAJOR + 7 MINOR hepsi fix'lendi:
+> - **CRITICAL Notes UUID5 collision** (intent-only PATCH supersede'i collapsed)
+>   → `id=uuid4()` + revert-on-failure + 3 regression test.
+> - **CRITICAL Header tmux dead-kill** (`selffork run` tmux yaratmaz) →
+>   `_interrupt_active_sessions` silindi; pause flag-only documented;
+>   RunningSessionRegistry follow-up.
+> - **MAJOR Header lowercase keys**, **Notes unmount cleanup**, **Notes test
+>   coverage**, **Kanban dead onCardClick**, **Kanban SortableContext →
+>   useDraggable** (animate-then-snap-back UX yalanı kaldırıldı).
+> - **7 MINOR polish** (backticks → `<code>`, apostrophe, dropdown refetch,
+>   Input maxLength, append-not-prepend, dragEnd source).
+>
+> 2155 backend green; ruff + mypy (252 src) + tsc clean.
 
 **Hedef:** Workspace ekranındaki tüm dead button + Notes backend'i.
 

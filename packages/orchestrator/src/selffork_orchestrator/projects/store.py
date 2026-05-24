@@ -147,8 +147,19 @@ class ProjectStore:
         name: str | None = None,
         description: str | None = None,
         root_path: str | None | _Sentinel = _SENTINEL,
+        archived_at: datetime | None | _Sentinel = _SENTINEL,
+        autopilot_paused: bool | _Sentinel = _SENTINEL,
     ) -> Project:
-        """Patch a project's mutable metadata. Touches updated_at."""
+        """Patch a project's mutable metadata. Touches updated_at.
+
+        ``root_path``, ``archived_at`` and ``autopilot_paused`` all use a
+        sentinel so callers can disambiguate "leave alone" (``_SENTINEL``)
+        from "clear" (``None`` / ``False``). The HTTP layer wraps these
+        in dedicated endpoints (``PUT`` for meta, ``archive`` /
+        ``unarchive`` for ``archived_at``, ``autopilot/pause`` /
+        ``autopilot/resume`` for the flag) so each action surfaces
+        explicitly in the audit log.
+        """
         validate_slug(slug)
         project = self.load(slug)
         if project is None:
@@ -158,6 +169,16 @@ class ProjectStore:
                 **({"name": name} if name is not None else {}),
                 **({"description": description} if description is not None else {}),
                 **({"root_path": root_path} if not isinstance(root_path, _Sentinel) else {}),
+                **(
+                    {"archived_at": archived_at}
+                    if not isinstance(archived_at, _Sentinel)
+                    else {}
+                ),
+                **(
+                    {"autopilot_paused": autopilot_paused}
+                    if not isinstance(autopilot_paused, _Sentinel)
+                    else {}
+                ),
                 "updated_at": datetime.now(UTC),
             },
         )

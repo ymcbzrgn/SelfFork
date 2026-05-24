@@ -23,7 +23,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
@@ -38,6 +38,7 @@ from selffork_orchestrator.dashboard.mind_deps import (
 )
 from selffork_orchestrator.dashboard.schemas import (
     MindNoteCreatePayload,
+    MindNoteUpdatePayload,
     MindRecallRequestPayload,
     MindRecallResponse,
     MindStatsResponse,
@@ -222,6 +223,96 @@ def build_mind_router(*, mind_config: MindConfig) -> APIRouter:
                     detail=f"note {note_id!r} not found in project {slug!r}",
                 )
             await store.supersede(uid)
+
+    @router.patch("/notes/{note_id}", response_model=NoteResponse)
+    async def update_note(
+        slug: str,
+        note_id: str,
+        payload: MindNoteUpdatePayload,
+    ) -> NoteResponse:
+        """S7 — atomic supersede + create.
+
+        Operator-facing in-place edit on top of the Mind T2 bi-temporal
+        supersede pattern: marks the existing note ``valid_until=now``
+        and writes a fresh row with the patched fields. Tier, kind,
+        ``session_id`` and ``tag_keys`` are carried forward from the
+        superseded note so the operator only patches content / intent /
+        importance / pinned. Returns the new note row.
+        """
+        try:
+            uid = UUID(note_id)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"invalid note id {note_id!r}: {exc}",
+            ) from exc
+        # Reject a fully-empty patch — defensive against accidental
+        # debounce calls firing with stale empty state.
+        if all(
+            getattr(payload, name) is None
+            for name in ("content", "intent", "importance", "pinned")
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="patch is empty — at least one field must be provided",
+            )
+        async with _scoped_store(mind_config, slug) as store:
+            old = await store.get_note(uid)
+            if old is None or old.project_slug not in (None, slug):
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"note {note_id!r} not found in project {slug!r}",
+                )
+            new_content = (
+                payload.content if payload.content is not None else old.content
+            )
+            if not new_content.strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail="content cannot be empty",
+                )
+            # Force a fresh UUID for the new row. Without this, the
+            # Note model derives id from
+            # ``identity_fields=("tier","content_hash","session_id")``
+            # (Note.identity_fields in memory/model.py); an
+            # intent / importance / pinned-only PATCH leaves all three
+            # identity bits unchanged, so the auto-derived UUID5
+            # collides with the superseded row and ``upsert_note``
+            # would overwrite the just-set ``valid_until`` back to
+            # ``None`` (audit-god S7 Finding #1, 2026-05-24).
+            new_note = Note(
+                id=uuid4(),
+                tier=old.tier,
+                kind=old.kind,
+                content=new_content,
+                intent=payload.intent if payload.intent is not None else old.intent,
+                importance=payload.importance
+                if payload.importance is not None
+                else old.importance,
+                pinned=payload.pinned if payload.pinned is not None else old.pinned,
+                project_slug=slug,
+                session_id=old.session_id,
+                tag_keys=old.tag_keys,
+            )
+            # Supersede + create as a pair. If the upsert raises after
+            # supersede succeeded, attempt a best-effort revert of the
+            # supersede so the operator's previous version is not lost.
+            # Full single-statement transactional atomicity would
+            # require store-level support — out of S7 scope; the revert
+            # path covers the realistic failure modes (validation error
+            # on Note pydantic, transient DB read failure).
+            await store.supersede(uid)
+            try:
+                stored = await store.upsert_note(new_note)
+            except Exception:
+                # Re-resurrect the previous row by writing the same
+                # note shape back with ``valid_until=None``. The id
+                # matches (UUID5 from identity) so this is an in-place
+                # update — no orphan rows.
+                with contextlib.suppress(Exception):
+                    await store.upsert_note(old)
+                raise
+            return _note_to_response(stored)
 
     # ── Recall ─────────────────────────────────────────────────────────
 

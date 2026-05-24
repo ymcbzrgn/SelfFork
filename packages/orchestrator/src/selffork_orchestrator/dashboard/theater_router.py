@@ -100,7 +100,8 @@ class ActiveLoopResponse(BaseModel):
     """Currently-active Self Jr loop, or absent if idle.
 
     Returned by ``GET /api/loop/active`` — the Dashboard's LiveLoopStatus
-    hero card.
+    hero card and (S7) the workspace transcript drawer's session
+    discovery probe.
     """
 
     workspace_slug: str
@@ -110,6 +111,10 @@ class ActiveLoopResponse(BaseModel):
     started_at: str
     duration_seconds: int
     last_thought: str | None = None
+    # S7 — exposed so the workspace's transcript drawer can fetch
+    # ``GET /api/sessions/{session_id}/events`` for the currently-
+    # running session.
+    session_id: str
 
 
 # ── Lazily-opened store handle ─────────────────────────────────────────
@@ -269,6 +274,7 @@ def build_loop_router(*, db_path: Path) -> APIRouter:
             started_at=loop.started_at.isoformat(),
             duration_seconds=_duration_seconds(loop),
             last_thought=loop.last_thought,
+            session_id=loop.session_id,
         )
 
     return router

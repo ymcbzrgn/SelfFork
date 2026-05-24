@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from selffork_orchestrator.heartbeat.scheduler import HeartbeatScheduler
 
 __all__ = [
@@ -176,6 +178,7 @@ def build_default_heartbeat(
     kanban_card_creator: object | None = None,
     cli_selector: object | None = None,
     quota_reader: object | None = None,
+    projects_root: Path | None = None,
 ) -> HeartbeatScheduler:
     """Construct the daemon from env (dashboard lifespan helper).
 
@@ -294,6 +297,29 @@ def build_default_heartbeat(
             _runtime_config_for_probe.timezone,
         )
 
+    # S7 — workspace eligibility gate (ADR-007 §4 S7). When
+    # ``projects_root`` is wired by the dashboard, the gate consults
+    # :class:`ProjectStore` so ``archived_at`` and ``autopilot_paused``
+    # drop the workspace out of the WorldState. ``None`` keeps the
+    # pre-S7 behaviour (no gate, last_active_workspace flows through).
+    workspace_eligible_probe = None
+    if projects_root is not None:
+        import anyio  # noqa: I001
+        from selffork_orchestrator.projects.store import ProjectStore
+
+        _projects_root_for_probe = projects_root
+
+        async def _workspace_eligible(slug: str) -> bool:
+            store = ProjectStore(root=_projects_root_for_probe)
+            project = await anyio.to_thread.run_sync(store.load, slug)
+            if project is None:
+                return False
+            if project.archived_at is not None:
+                return False
+            return not project.autopilot_paused
+
+        workspace_eligible_probe = _workspace_eligible
+
     world_state_builder = WorldStateBuilder(
         config=runtime_config,
         pause_signal=pause,
@@ -301,6 +327,7 @@ def build_default_heartbeat(
         creative_mode_provider=creative_mode_provider,
         supervised_mode_provider=supervised_mode_provider,
         quota_reader=quota_reader,  # type: ignore[arg-type]
+        workspace_eligible_probe=workspace_eligible_probe,
     )
 
     return HeartbeatScheduler(

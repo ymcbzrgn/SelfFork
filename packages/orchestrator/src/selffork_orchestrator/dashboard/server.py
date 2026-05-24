@@ -51,6 +51,7 @@ from selffork_orchestrator.dashboard.schemas import (
     PlanSnapshot,
     ProjectCreatePayload,
     ProjectResponse,
+    ProjectUpdatePayload,
     ProvenanceEntryResponse,
     RecentSession,
     RunRequestPayload,
@@ -70,6 +71,7 @@ from selffork_orchestrator.projects.model import (
     KanbanBoard,
     KanbanCard,
     KanbanColumn,
+    Project,
 )
 from selffork_orchestrator.projects.store import _SENTINEL, ProjectStore
 from selffork_orchestrator.resume.store import ScheduledResumeStore
@@ -302,6 +304,7 @@ def build_app(config: DashboardConfig) -> FastAPI:
         kanban_card_creator=_kanban_card_creator,
         cli_selector=make_cli_selector(cli_router),
         quota_reader=_per_cli_quota,
+        projects_root=config.projects_root,
     )
     _log.info(
         "heartbeat_callables_wired",
@@ -1174,25 +1177,18 @@ def _register_api_routes(app: FastAPI, config: DashboardConfig) -> None:
     # ── Projects ─────────────────────────────────────────────────────────
 
     @app.get("/api/projects", response_model=list[ProjectResponse])
-    async def list_projects() -> list[ProjectResponse]:
+    async def list_projects(
+        include_archived: bool = False,
+    ) -> list[ProjectResponse]:
         store = ProjectStore(root=config.projects_root)
 
         def _load() -> list[ProjectResponse]:
             out: list[ProjectResponse] = []
             for project in store.list_all():
-                board = store.load_board(project.slug)
-                groups = board.cards_by_column()
-                counts: dict[str, int] = {str(col): len(cards) for col, cards in groups.items()}
+                if not include_archived and project.archived_at is not None:
+                    continue
                 out.append(
-                    ProjectResponse(
-                        slug=project.slug,
-                        name=project.name,
-                        description=project.description,
-                        root_path=project.root_path,
-                        created_at=project.created_at,
-                        updated_at=project.updated_at,
-                        card_counts=counts,
-                    ),
+                    _project_to_response(project, _counts_for(store, project.slug)),
                 )
             return out
 
@@ -1215,14 +1211,9 @@ def _register_api_routes(app: FastAPI, config: DashboardConfig) -> None:
                 )
             except ConfigError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
-            return ProjectResponse(
-                slug=project.slug,
-                name=project.name,
-                description=project.description,
-                root_path=project.root_path,
-                created_at=project.created_at,
-                updated_at=project.updated_at,
-                card_counts={str(col): 0 for col in DEFAULT_COLUMNS},
+            return _project_to_response(
+                project,
+                {str(col): 0 for col in DEFAULT_COLUMNS},
             )
 
         return await anyio.to_thread.run_sync(_create)
@@ -1244,20 +1235,143 @@ def _register_api_routes(app: FastAPI, config: DashboardConfig) -> None:
                     status_code=404,
                     detail=f"project {slug!r} not found",
                 )
-            board = store.load_board(slug)
-            groups = board.cards_by_column()
-            counts: dict[str, int] = {str(col): len(cards) for col, cards in groups.items()}
-            return ProjectResponse(
-                slug=project.slug,
-                name=project.name,
-                description=project.description,
-                root_path=project.root_path,
-                created_at=project.created_at,
-                updated_at=project.updated_at,
-                card_counts=counts,
-            )
+            return _project_to_response(project, _counts_for(store, slug))
 
         return await anyio.to_thread.run_sync(_load)
+
+    # ── Projects: edit / archive / autopilot pause (S7 — ADR-007 §4) ────
+
+    @app.put(
+        "/api/projects/{slug}",
+        response_model=ProjectResponse,
+    )
+    async def update_project(
+        slug: str,
+        payload: ProjectUpdatePayload,
+    ) -> ProjectResponse:
+        store = ProjectStore(root=config.projects_root)
+
+        def _update() -> ProjectResponse:
+            # ``root_path`` arrives as ``None`` for "omitted, leave
+            # alone"; per ``ProjectUpdatePayload`` docstring, callers
+            # send ``""`` to explicitly clear. Two branches keep mypy
+            # happy without needing to leak ``_Sentinel`` into the
+            # endpoint surface.
+            try:
+                if payload.root_path is None:
+                    project = store.update_meta(
+                        slug,
+                        name=payload.name,
+                        description=payload.description,
+                    )
+                else:
+                    project = store.update_meta(
+                        slug,
+                        name=payload.name,
+                        description=payload.description,
+                        root_path=payload.root_path or None,
+                    )
+            except ConfigError as exc:
+                if "not found" in str(exc):
+                    raise HTTPException(status_code=404, detail=str(exc)) from exc
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            return _project_to_response(project, _counts_for(store, slug))
+
+        return await anyio.to_thread.run_sync(_update)
+
+    @app.post(
+        "/api/projects/{slug}/archive",
+        response_model=ProjectResponse,
+    )
+    async def archive_project(slug: str) -> ProjectResponse:
+        """Soft-archive — set ``archived_at`` to now. Reversible via
+        :func:`unarchive_project`. Idempotent (repeat refreshes the
+        timestamp)."""
+        store = ProjectStore(root=config.projects_root)
+
+        def _archive() -> ProjectResponse:
+            try:
+                project = store.update_meta(
+                    slug,
+                    archived_at=datetime.now(UTC),
+                )
+            except ConfigError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+            return _project_to_response(project, _counts_for(store, slug))
+
+        return await anyio.to_thread.run_sync(_archive)
+
+    @app.post(
+        "/api/projects/{slug}/unarchive",
+        response_model=ProjectResponse,
+    )
+    async def unarchive_project(slug: str) -> ProjectResponse:
+        """Clear ``archived_at`` — project re-enters the sidebar listing
+        and becomes Heartbeat-eligible again."""
+        store = ProjectStore(root=config.projects_root)
+
+        def _unarchive() -> ProjectResponse:
+            try:
+                project = store.update_meta(slug, archived_at=None)
+            except ConfigError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+            return _project_to_response(project, _counts_for(store, slug))
+
+        return await anyio.to_thread.run_sync(_unarchive)
+
+    @app.post(
+        "/api/projects/{slug}/autopilot/pause",
+        response_model=ProjectResponse,
+    )
+    async def pause_workspace_autopilot(slug: str) -> ProjectResponse:
+        """Workspace-scope Self Jr pause.
+
+        Sets ``autopilot_paused=True``. Heartbeat's
+        :class:`WorldStateBuilder` consults the flag on subsequent ticks
+        (``config.py`` wires the eligibility probe from
+        :class:`ProjectStore`) — an in-flight session completes its
+        current round, then no new round starts for this workspace
+        until :func:`resume_workspace_autopilot` is called. Idempotent.
+
+        Note: hard interrupt of an already-running session is deferred.
+        ``selffork run`` (the dashboard's spawn path) runs the CLI as
+        an awaited asyncio subprocess, not under tmux, and the
+        dashboard currently has no pid registry keyed by
+        ``workspace_slug``. Audit-god S7 Finding #1 (2026-05-24) caught
+        a tmux-kill implementation that targeted a session name no
+        producer creates; that code was removed pending a proper
+        ``RunningSessionRegistry`` (follow-up sprint). The flag-driven
+        pause is the durable primitive; immediate interrupt arrives
+        with the registry.
+        """
+        store = ProjectStore(root=config.projects_root)
+
+        def _pause() -> ProjectResponse:
+            try:
+                project = store.update_meta(slug, autopilot_paused=True)
+            except ConfigError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+            return _project_to_response(project, _counts_for(store, slug))
+
+        return await anyio.to_thread.run_sync(_pause)
+
+    @app.post(
+        "/api/projects/{slug}/autopilot/resume",
+        response_model=ProjectResponse,
+    )
+    async def resume_workspace_autopilot(slug: str) -> ProjectResponse:
+        """Clear ``autopilot_paused``. Heartbeat is eligible to pick this
+        workspace on its next tick."""
+        store = ProjectStore(root=config.projects_root)
+
+        def _resume() -> ProjectResponse:
+            try:
+                project = store.update_meta(slug, autopilot_paused=False)
+            except ConfigError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+            return _project_to_response(project, _counts_for(store, slug))
+
+        return await anyio.to_thread.run_sync(_resume)
 
     @app.get(
         "/api/projects/{slug}/kanban",
@@ -1681,6 +1795,32 @@ def _list_workspace(root: Path) -> list[WorkspaceEntry]:
 
 
 # ── Project / kanban helpers ─────────────────────────────────────────────────
+
+
+def _counts_for(store: ProjectStore, slug: str) -> dict[str, int]:
+    """Kanban card counts per column for one project."""
+    board = store.load_board(slug)
+    groups = board.cards_by_column()
+    return {str(col): len(cards) for col, cards in groups.items()}
+
+
+def _project_to_response(
+    project: Project,
+    counts: dict[str, int],
+) -> ProjectResponse:
+    """Lift a stored :class:`Project` into its wire shape (S7 — adds
+    ``archived_at`` + ``autopilot_paused`` to the canonical row)."""
+    return ProjectResponse(
+        slug=project.slug,
+        name=project.name,
+        description=project.description,
+        root_path=project.root_path,
+        created_at=project.created_at,
+        updated_at=project.updated_at,
+        card_counts=counts,
+        archived_at=project.archived_at,
+        autopilot_paused=project.autopilot_paused,
+    )
 
 
 def _card_to_response(card: KanbanCard) -> KanbanCardResponse:

@@ -22,7 +22,7 @@ import { cockpitKeys } from "@/lib/query";
 export function useProjectsQuery() {
   return useQuery<ProjectResponse[]>({
     queryKey: cockpitKeys.projects(),
-    queryFn: listProjects,
+    queryFn: () => listProjects(),
   });
 }
 

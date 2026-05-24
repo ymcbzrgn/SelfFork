@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 
 import { AppShell } from "@/components/layout/app-shell";
@@ -16,19 +16,43 @@ import {
   type LiveRunTheaterState,
 } from "@/components/workspace/live-run-theater";
 import { CliSwitchDialog } from "@/components/workspace/cli-switch-dialog";
+import { ProjectNotes } from "@/components/workspace/project-notes";
+import { AddKanbanCardDialog } from "@/components/workspace/add-kanban-card-dialog";
+import { EditProjectDialog } from "@/components/workspace/edit-project-dialog";
+import { SessionTranscriptDrawer } from "@/components/workspace/session-transcript-drawer";
 import {
-  ProjectNotes,
-  type ProjectNote,
-} from "@/components/workspace/project-notes";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
+  ApiError,
   approvePendingConfirmation,
+  archiveProject,
   cancelPendingConfirmation,
+  createMindNote,
+  deleteMindNote,
   extendPendingConfirmation,
+  getActiveLoop,
   getProject,
   getKanban,
   getTheaterSnapshot,
+  listMindNotes,
   listPendingConfirmations,
+  moveKanbanCard,
+  openKanbanStream,
   openTheaterStream,
+  pauseWorkspaceAutopilot,
+  resumeWorkspaceAutopilot,
+  unarchiveProject,
+  updateMindNote,
+  type KanbanCardResponse,
+  type NoteResponse,
   type PendingConfirmationResponse,
   type ProjectResponse,
   type KanbanResponse,
@@ -47,9 +71,13 @@ function isTab(value: string | null): value is WorkspaceTab {
 }
 
 function deriveStatus(card_counts: Record<string, number>): ProjectStatus {
-  const inProgress = card_counts["In Progress"] ?? 0;
-  const review = card_counts["Review"] ?? 0;
-  const backlog = card_counts["Backlog"] ?? 0;
+  // Backend ships lowercase column ids (model.py:38-43,
+  // ``DEFAULT_COLUMNS``). Audit-god S7 Finding #2 (2026-05-24) caught
+  // this surface reading the human-facing labels and silently
+  // defaulting every workspace to "sleeping".
+  const inProgress = card_counts["in_progress"] ?? 0;
+  const review = card_counts["review"] ?? 0;
+  const backlog = card_counts["backlog"] ?? 0;
   if (inProgress > 0) return "shipping";
   if (review > 0) return "pending";
   if (backlog > 0) return "sleeping";
@@ -159,8 +187,139 @@ function WorkspaceContent({ slug }: { slug: string }) {
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   };
 
-  // Notes backend still pending (M6.4).
-  const [notes] = useState<ProjectNote[]>([]);
+  // Notes — Mind T2 Episodic per-project (S7, ADR-007 §4 S7).
+  // Fetched on mount; mutations (add/title/content/delete) optimistically
+  // update local state then persist via mind_router endpoints. The
+  // backend supersede pattern means each save creates a new id; the
+  // optimistic write therefore replaces both id and updated_at.
+  const [notes, setNotes] = useState<NoteResponse[]>([]);
+  const [notesLoading, setNotesLoading] = useState(true);
+  const [savingNote, setSavingNote] = useState(false);
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setNotesLoading(true);
+    listMindNotes(slug, "episodic", 200)
+      .then((rows) => {
+        if (cancelled) return;
+        setNotes(rows);
+        setNotesLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setNotes([]);
+        setNotesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
+
+  const handleAddNote = async () => {
+    try {
+      setSavingNote(true);
+      const created = await createMindNote(slug, {
+        content: "# Untitled\n\nWrite your decision or learning here.",
+        intent: "Untitled",
+        tier: "episodic",
+        kind: "decision",
+      });
+      setNotes((prev) => [created, ...prev]);
+      setSelectedNoteId(created.id);
+    } catch (e) {
+      console.error("createMindNote failed", e);
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  // Debounced PATCH — coalesce keystroke bursts into one supersede.
+  // ``debounceTimers`` keyed by id so editing the title while content
+  // debounces still fires the right patch.
+  const noteDebounceTimers = useRef<Map<string, number>>(new Map());
+  const noteLatestPatch = useRef<
+    Map<string, { intent?: string; content?: string }>
+  >(new Map());
+
+  const scheduleNotePatch = (id: string) => {
+    const existing = noteDebounceTimers.current.get(id);
+    if (existing !== undefined) window.clearTimeout(existing);
+    const handle = window.setTimeout(() => {
+      void flushNotePatch(id);
+    }, 800);
+    noteDebounceTimers.current.set(id, handle);
+  };
+
+  const flushNotePatch = async (id: string) => {
+    const patch = noteLatestPatch.current.get(id);
+    if (patch === undefined) return;
+    noteLatestPatch.current.delete(id);
+    noteDebounceTimers.current.delete(id);
+    setSavingNote(true);
+    try {
+      const updated = await updateMindNote(slug, id, patch);
+      // Supersede replaces id; remap selection + replace in list.
+      setNotes((prev) => prev.map((n) => (n.id === id ? updated : n)));
+      setSelectedNoteId((cur) => (cur === id ? updated.id : cur));
+    } catch (e) {
+      console.error("updateMindNote failed", e);
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  const handleNoteTitleChange = (id: string, intent: string) => {
+    // Optimistic UI: reflect the typed value immediately.
+    setNotes((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, intent } : n)),
+    );
+    const current = noteLatestPatch.current.get(id) ?? {};
+    noteLatestPatch.current.set(id, { ...current, intent });
+    scheduleNotePatch(id);
+  };
+
+  const handleNoteContentChange = (id: string, content: string) => {
+    setNotes((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, content } : n)),
+    );
+    const current = noteLatestPatch.current.get(id) ?? {};
+    noteLatestPatch.current.set(id, { ...current, content });
+    scheduleNotePatch(id);
+  };
+
+  const handleNoteDelete = async (id: string) => {
+    // Flush any pending edits so we don't supersede after delete.
+    const pendingTimer = noteDebounceTimers.current.get(id);
+    if (pendingTimer !== undefined) {
+      window.clearTimeout(pendingTimer);
+      noteDebounceTimers.current.delete(id);
+    }
+    noteLatestPatch.current.delete(id);
+    try {
+      await deleteMindNote(slug, id);
+      setNotes((prev) => prev.filter((n) => n.id !== id));
+      setSelectedNoteId((cur) => (cur === id ? null : cur));
+    } catch (e) {
+      console.error("deleteMindNote failed", e);
+    }
+  };
+
+  // Audit-god S7 Finding #3 (2026-05-24) — clear pending debounce
+  // timers + latest-patch entries on unmount so route changes don't
+  // leak a setState on an unmounted component or fire a stale PATCH
+  // race after the operator navigates away.
+  useEffect(() => {
+    const timers = noteDebounceTimers.current;
+    const patches = noteLatestPatch.current;
+    return () => {
+      for (const timer of timers.values()) {
+        window.clearTimeout(timer);
+      }
+      timers.clear();
+      patches.clear();
+    };
+  }, []);
 
   // Destructive-action pending confirmations — workspace-scoped, with
   // 30-second poll so the countdown stays fresh.
@@ -222,6 +381,179 @@ function WorkspaceContent({ slug }: { slug: string }) {
   const [theaterState, setTheaterState] =
     useState<LiveRunTheaterState | null>(null);
   const [switchOpen, setSwitchOpen] = useState(false);
+  const [addKanbanOpen, setAddKanbanOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
+  const [pausingAutopilot, setPausingAutopilot] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [headerError, setHeaderError] = useState<string | null>(null);
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const [transcriptSessionId, setTranscriptSessionId] = useState<
+    string | null
+  >(null);
+
+  const handleOpenTranscript = async () => {
+    setTranscriptOpen(true);
+    // Lazy-fetch the active loop's session_id only when the operator
+    // actually asks for the transcript. If the active loop belongs to
+    // a different workspace, surface "no active session" inside the
+    // drawer rather than the wrong session's events.
+    try {
+      const loop = await getActiveLoop();
+      if (loop && loop.workspace_slug === slug) {
+        setTranscriptSessionId(loop.session_id);
+      } else {
+        setTranscriptSessionId(null);
+      }
+    } catch {
+      setTranscriptSessionId(null);
+    }
+  };
+
+  const handlePauseToggle = async () => {
+    if (project === null || pausingAutopilot) return;
+    setPausingAutopilot(true);
+    setHeaderError(null);
+    try {
+      const updated = project.autopilot_paused
+        ? await resumeWorkspaceAutopilot(slug)
+        : await pauseWorkspaceAutopilot(slug);
+      setProject(updated);
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : String(e);
+      setHeaderError(`Pause toggle failed: ${msg}`);
+    } finally {
+      setPausingAutopilot(false);
+    }
+  };
+
+  const handleArchiveConfirm = async () => {
+    if (project === null || archiving) return;
+    setArchiving(true);
+    setHeaderError(null);
+    try {
+      const wasArchived = project.archived_at !== null;
+      const updated = wasArchived
+        ? await unarchiveProject(slug)
+        : await archiveProject(slug);
+      setProject(updated);
+      setArchiveConfirmOpen(false);
+      // On archive, send the operator back to the projects list — the
+      // sidebar's default listing will no longer show this slug.
+      if (!wasArchived) {
+        router.push("/");
+      }
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : String(e);
+      setHeaderError(`Archive toggle failed: ${msg}`);
+    } finally {
+      setArchiving(false);
+    }
+  };
+
+  const handleSwitchWorkspace = (target: string) => {
+    if (target === slug) return;
+    router.push(`/workspaces/${target}`);
+  };
+
+  const handleProjectSaved = (updated: ProjectResponse) => {
+    setProject(updated);
+  };
+
+  // Kanban WS — backend emits on every mutation (server.py:1529). We
+  // debounce 150ms so a burst of card.* events coalesces into one
+  // refetch. The optimistic update inside `handleCardMove` keeps the
+  // UI responsive; the WS refetch is the authoritative reconcile.
+  useEffect(() => {
+    let cancelled = false;
+    let ws: WebSocket | null = null;
+    let refreshTimer: number | null = null;
+
+    const triggerRefresh = () => {
+      if (cancelled) return;
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => {
+        getKanban(slug)
+          .then((k) => {
+            if (!cancelled) setKanban(k);
+          })
+          .catch(() => {
+            /* keep last-known state on refetch failure */
+          });
+      }, 150);
+    };
+
+    try {
+      ws = openKanbanStream(slug);
+      ws.onmessage = triggerRefresh;
+      ws.onerror = () => {
+        /* keep snapshot-only mode silently */
+      };
+    } catch {
+      /* WS unavailable — initial fetch in mount effect is enough */
+    }
+
+    return () => {
+      cancelled = true;
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+      if (ws && ws.readyState !== WebSocket.CLOSED) ws.close();
+    };
+  }, [slug]);
+
+  // Drag-drop → optimistic local mutation + persist; rollback by
+  // refetch on failure. The successful path's WS event will also
+  // re-affirm the new state.
+  const handleCardMove = (cardId: string, toColumn: string) => {
+    setKanban((prev) => {
+      if (!prev) return prev;
+      let moved: KanbanCardResponse | undefined;
+      const next: Record<string, KanbanCardResponse[]> = {};
+      for (const [col, list] of Object.entries(prev.cards_by_column)) {
+        const idx = list.findIndex((c) => c.id === cardId);
+        if (idx >= 0) {
+          moved = list[idx];
+          next[col] = [...list.slice(0, idx), ...list.slice(idx + 1)];
+        } else {
+          next[col] = list;
+        }
+      }
+      if (!moved) return prev;
+      const updated: KanbanCardResponse = { ...moved, column: toColumn };
+      next[toColumn] = [...(next[toColumn] ?? []), updated];
+      return { ...prev, cards_by_column: next };
+    });
+    moveKanbanCard(slug, cardId, toColumn).catch(() => {
+      // Rollback via fresh fetch — backend is source of truth.
+      getKanban(slug)
+        .then((k) => setKanban(k))
+        .catch(() => {
+          /* leave state intact */
+        });
+    });
+  };
+
+  const handleCardAdded = (card: KanbanCardResponse) => {
+    setKanban((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev.cards_by_column };
+      // Append to match backend insertion order (audit-god S7 Finding
+      // #3, 2026-05-24). The WS-debounced refetch returns the
+      // authoritative snapshot ~150ms later; prepending here causes
+      // a visible jump when the refetch reconciles.
+      next[card.column] = [...(next[card.column] ?? []), card];
+      return { ...prev, cards_by_column: next };
+    });
+  };
 
   // Live Run Theater wire: HTTP snapshot for initial paint, then WS
   // for live deltas. Producer events (cli.output.append / screenshot.new
@@ -335,7 +667,8 @@ function WorkspaceContent({ slug }: { slug: string }) {
   }
 
   const status = project ? deriveStatus(project.card_counts) : "sleeping";
-  const doneCount = project?.card_counts?.["Done"] ?? 0;
+  // Lowercase backend key — see ``deriveStatus`` comment.
+  const doneCount = project?.card_counts?.["done"] ?? 0;
   const totalFromProject =
     project ? Object.values(project.card_counts).reduce((a, b) => a + b, 0) : 0;
   const meta = project
@@ -346,10 +679,28 @@ function WorkspaceContent({ slug }: { slug: string }) {
     <AppShell title={project?.name ?? slug}>
       <div className="max-w-7xl mx-auto px-gutter-desktop py-vertical-gap flex flex-col gap-vertical-gap">
         <WorkspaceHeader
+          slug={slug}
           name={project?.name ?? slug}
           status={status}
           meta={loading ? "loading…" : meta}
+          autopilotPaused={project?.autopilot_paused ?? false}
+          archived={project?.archived_at !== null && project?.archived_at !== undefined}
+          onPauseToggle={() => void handlePauseToggle()}
+          pausing={pausingAutopilot}
+          onEdit={() => setEditOpen(true)}
+          onArchiveToggle={() => setArchiveConfirmOpen(true)}
+          archiving={archiving}
+          onSwitchWorkspace={handleSwitchWorkspace}
         />
+
+        {headerError && (
+          <p
+            role="alert"
+            className="text-caption text-error-foreground bg-error-container/30 border border-error/30 rounded-md px-3 py-2"
+          >
+            {headerError}
+          </p>
+        )}
 
         <PendingConfirmationBanner
           pending={pending}
@@ -407,6 +758,8 @@ function WorkspaceContent({ slug }: { slug: string }) {
               kanban={kanban}
               loading={loading}
               totalTasks={totalTasks}
+              onAddCard={() => setAddKanbanOpen(true)}
+              onCardMove={handleCardMove}
             />
           </TabsContent>
 
@@ -414,11 +767,23 @@ function WorkspaceContent({ slug }: { slug: string }) {
             <LiveRunTheater
               state={theaterState}
               onSwitchCli={() => setSwitchOpen(true)}
+              onPause={() => void handlePauseToggle()}
+              onOpenTranscript={() => void handleOpenTranscript()}
             />
           </TabsContent>
 
           <TabsContent value="notes" className="mt-vertical-gap focus-visible:outline-none">
-            <ProjectNotes notes={notes} />
+            <ProjectNotes
+              notes={notes}
+              loading={notesLoading}
+              saving={savingNote}
+              selectedId={selectedNoteId}
+              onSelect={setSelectedNoteId}
+              onAdd={() => void handleAddNote()}
+              onTitleChange={handleNoteTitleChange}
+              onContentChange={handleNoteContentChange}
+              onDelete={(id) => void handleNoteDelete(id)}
+            />
           </TabsContent>
 
           <TabsContent value="about" className="mt-vertical-gap focus-visible:outline-none">
@@ -471,6 +836,67 @@ function WorkspaceContent({ slug }: { slug: string }) {
           open={switchOpen}
           onOpenChange={setSwitchOpen}
         />
+
+        <AddKanbanCardDialog
+          slug={slug}
+          open={addKanbanOpen}
+          onOpenChange={setAddKanbanOpen}
+          columns={kanban?.columns ?? ["Backlog", "In Progress", "Review", "Done"]}
+          onAdded={handleCardAdded}
+        />
+
+        <EditProjectDialog
+          project={project}
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          onSaved={handleProjectSaved}
+        />
+
+        <SessionTranscriptDrawer
+          sessionId={transcriptSessionId}
+          open={transcriptOpen}
+          onOpenChange={setTranscriptOpen}
+          workspaceName={project?.name ?? slug}
+        />
+
+        <AlertDialog
+          open={archiveConfirmOpen}
+          onOpenChange={(next) => {
+            if (archiving) return;
+            setArchiveConfirmOpen(next);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {project?.archived_at !== null && project?.archived_at !== undefined
+                  ? "Unarchive this workspace?"
+                  : "Archive this workspace?"}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {project?.archived_at !== null && project?.archived_at !== undefined
+                  ? "Restores the workspace to the active sidebar listing and makes it Heartbeat-eligible again."
+                  : "Hides the workspace from the sidebar (Self Jr won't pick it up). Reversible via the Unarchive button — your files and audit history stay on disk."}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={archiving}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  void handleArchiveConfirm();
+                }}
+                disabled={archiving}
+              >
+                {archiving
+                  ? "Working…"
+                  : project?.archived_at !== null && project?.archived_at !== undefined
+                    ? "Unarchive"
+                    : "Archive"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </AppShell>
   );

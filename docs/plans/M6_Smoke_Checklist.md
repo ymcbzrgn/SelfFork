@@ -1239,3 +1239,175 @@ Theater "Switch CLI" dialog, Talk `/cli`, Telegram `/cli`. Backend
   producer + render gerektirir. S7 veya ayrı sprint; build'den önce scope onayı.
 - Per-model gemini quota DATA producer (gate hazır, reader yok; ToS-safe reactive
   only — direct-API ASLA).
+
+
+## S7 — Workspace Actions (Wave 2 · ADR-007 §4 S7)
+
+### Ön-Koşullar
+- [ ] `selffork ui` çalışıyor; dashboard `/workspaces/<slug>` açılıyor.
+- [ ] `~/.selffork/projects/<slug>/` mevcut; `project.json` + `kanban.json` okunabilir.
+- [ ] @dnd-kit + @uiw/react-md-editor + @radix-ui/react-dropdown-menu +
+      @radix-ui/react-alert-dialog deps install'lı (`apps/web/package.json`).
+
+### Senaryo a — Kanban add task
+- [ ] Workspace aç → "Kanban" tab → "+ Add task" → modal açılır (shadcn Dialog).
+- [ ] Title boşken Add disabled; title yazınca enable. Description textarea +
+      column Select (`/api/projects/<slug>/kanban` döndüğü columns'tan).
+- [ ] Cmd/Ctrl+Enter submit → POST `/api/projects/<slug>/kanban/cards` → modal
+      kapanır, kart hedef column'un SONUNDA görünür (audit Finding #3 fix).
+- [ ] Submitting sırasında modal kapatılamaz; hata mesajı text-error renderlanır.
+
+### Senaryo b — Kanban drag-drop (column-to-column)
+- [ ] Bir kartı al, başka bir column'a sürükle, bırak → kart anında yeni
+      column'da görünür (optimistic) → PATCH `.../cards/<id>/move` → WS
+      `kanban/stream` event → 150ms debounced refetch → state korunur.
+- [ ] Aynı column içinde sürükle-bırak → animasyon YOK (useDraggable, audit
+      Finding #2 fix; reorder backend yok → operator yanılmıyor).
+- [ ] API hata verirse `getKanban` refetch ile rollback. Optimistic state'i
+      ezmez.
+
+### Senaryo c — Kanban filter (search + Self Jr chip)
+- [ ] Search input → "x of y task(s)" sayacı eşleşene daralır. Boş arama →
+      tüm kartlar.
+- [ ] "Self Jr only" chip aria-pressed → `last_touched_by_session_id` yokları
+      gizler. Toggle açık → primary-token border-l + bg.
+
+### Senaryo d — Workspace header Switch dropdown
+- [ ] "Switch ▾" tıkla → DropdownMenu açılır → tüm projeler (archived hariç)
+      listelenir. Current workspace bold + "current" notu, click disabled.
+- [ ] Başka workspace tıkla → `router.push('/workspaces/<slug>')` → yeni
+      workspace yüklenir.
+- [ ] Dropdown her açılışta refetch (audit Finding #5 fix) — archive sonrası
+      stale liste görünmez.
+
+### Senaryo e — Workspace header Edit modal
+- [ ] "Edit" → EditProjectDialog açılır → name + description + root_path
+      input'ları current proje değerleri.
+- [ ] Sadece name değiştir → Save → PUT `/api/projects/<slug>` → header'daki
+      ad anında güncellenir. Slug değişmez.
+- [ ] Root path "" → backend `None` set eder (clear). Geri-yükleme: yeniden
+      Edit → field boş görünür.
+
+### Senaryo f — Workspace header Pause / Resume
+- [ ] "Pause Self Jr" → POST `/api/projects/<slug>/autopilot/pause` →
+      `autopilot_paused=true`. Header pill "Paused" + buton "Resume Self Jr"
+      (Play ikon). Edit + Pause disabled-when-archived ✓.
+- [ ] Heartbeat tick sırasında bu workspace `last_active_workspace` olarak
+      seçilmez (WSB workspace_eligible_probe gate). Verify via heartbeat
+      audit log: `project_slug` None.
+- [ ] "Resume Self Jr" → POST `.../autopilot/resume` → flag kalkar; pill
+      kaybolur; Heartbeat tekrar pick eligible.
+
+### Senaryo g — Workspace header Archive / Unarchive
+- [ ] "Archive" → AlertDialog confirm → "Archive" → POST
+      `/api/projects/<slug>/archive` → `archived_at` set → operator `/` 'a
+      yönlendirilir. Sidebar listing (`GET /api/projects`) bu workspace'i
+      göstermez (default `include_archived=false`).
+- [ ] `GET /api/projects?include_archived=true` → projeyi listede gösterir.
+      UI sidebar filter henüz yok (S8 scope; backend hazır).
+- [ ] Archived workspace direkt URL ile aç → header "Archived" pill +
+      "Unarchive" buton görünür → tıkla → POST `.../unarchive` → flag kalkar.
+
+### Senaryo h — Theater Pause shared primitive
+- [ ] Theater (live session aktifken) "Pause" tıkla → header Pause ile aynı
+      backend POST'u çağırır (single primitive — operator AskUserQuestion
+      2026-05-24 onayı). Active session round bitince Heartbeat tekrar
+      pick etmez.
+- [ ] Mevcut session immediate kill yok (audit Finding #1 — RunningSessionRegistry
+      follow-up sprint deferred). Pause flag durable primitive; documented
+      limit.
+
+### Senaryo i — Theater Open transcript drawer
+- [ ] Theater "Open transcript" → SessionTranscriptDrawer (shadcn Sheet) sağdan
+      slide. Active loop session_id `/api/loop/active`'ten alınır.
+- [ ] Workspace match ediyorsa events listesi `GET /api/sessions/<id>/events`
+      ile yüklenir. category/level/event + payload details collapse.
+- [ ] Active loop başka workspace'ten veya yoksa "No active session" empty state.
+
+### Senaryo j — Theater raw-thinking toggle
+- [ ] JrThoughtBubble içinde "show raw ▾" → toggle ON → düşünceler raw text
+      ile mono-font + whitespace-pre-wrap (sadece `t.raw` doluysa).
+- [ ] "hide raw ▴" → toggle OFF → summary text.
+- [ ] Hiçbir thought'un raw'u yoksa buton disabled + title="No raw thinking
+      captured yet".
+
+### Senaryo k — Notes 2-pane + add + edit + delete
+- [ ] "Notes" tab → sol panel note titles + sağ panel MDEditor. Empty state
+      "No notes yet."
+- [ ] "+" → POST `/api/projects/<slug>/mind/notes` (tier=episodic,
+      kind=decision, content="# Untitled...", intent="Untitled") → yeni note
+      seçili + editör aktif.
+- [ ] Title input maxLength=200 (audit Finding #6 fix). Content editor
+      preview="edit" + height=440.
+- [ ] Delete (trash) → AlertDialog confirm → "Delete" → DELETE supersede →
+      note listeden silinir.
+
+### Senaryo l — Notes auto-save (800ms debounce, supersede id-swap)
+- [ ] Content değiştir → "Saving…" 800ms sonra → PATCH
+      `/api/projects/<slug>/mind/notes/<id>` → response yeni id ile (UUID
+      collision fix, audit Finding #1) → list & selection yeni id'ye remap.
+- [ ] Title-only edit (content değişmez) → PATCH → backend `id=uuid4()` set →
+      response.id != original.id (regression test
+      `test_patch_intent_preserves_content`).
+- [ ] Unmount (workspace switch) → pending debounce timer'lar temizlenir
+      (audit Finding #3 fix) — stale PATCH yok.
+
+### Senaryo m — Heartbeat WSB gate
+- [ ] Workspace pause + heartbeat tick → eligible workspace YOK
+      (`world_state.last_active_workspace` None'a düşer); workspace-scope
+      eylemler skipped.
+- [ ] Workspace unpause → tick → eligible olur → `last_active_workspace`
+      tekrar bu slug.
+- [ ] Eligibility probe exception (ProjectStore okuma hatası) → fail-OPEN →
+      workspace kalır (regression test `test_builder_workspace_gate_fails_open`).
+
+### Senaryo n — Cross-surface tutarlılık
+- [ ] Header'dan Pause → reload (F5) → state korunur (autopilot_paused
+      backend'den okunur). Theater Pause aynı flag'i toggleler.
+
+### Senaryo o — Full sweep
+- [ ] `pytest packages/{mind,orchestrator,body}/tests -q` → 2155+ passed.
+- [ ] `ruff check packages/ apps/web` clean.
+- [ ] `mypy packages/orchestrator/src packages/body/src packages/mind/src
+      packages/shared/src` → Success on 252 files.
+- [ ] `cd apps/web && npx tsc --noEmit` clean.
+
+### Senaryo p — Audit-god rigorous review (S7 Faz F)
+- [ ] 3 paralel audit-god (Kanban / Header+Theater / Notes) çalıştırıldı. Bu
+      sweep'te 2 CRITICAL + 6 MAJOR + 7 MINOR bulundu, hepsi fix'lendi:
+  - CRITICAL Notes UUID5 collision → router `id=uuid4()` + revert-on-failure +
+    3 regression test (`test_patch_intent_preserves_content`,
+    `test_patch_importance_distinct_id`, `test_patch_pinned_distinct_id`).
+  - CRITICAL Header tmux dead-kill → `_interrupt_active_sessions` silindi;
+    pause flag-only documented (SessionRegistry follow-up sprint).
+  - MAJOR Header lowercase keys → `deriveStatus` + `doneCount` lowercase ids.
+  - MAJOR Notes unmount cleanup → useEffect timer drain.
+  - MAJOR Kanban dead onCardClick → affordance removed.
+  - MAJOR Kanban SortableContext → useDraggable.
+  - MINOR EditProjectDialog backticks → `<code>` wrap.
+  - MINOR live-run-theater apostrophe → `&apos;`.
+  - MINOR Switch dropdown refetch on every open.
+  - MINOR Notes Input maxLength=200.
+  - MINOR Kanban handleCardAdded append (not prepend).
+  - MINOR Kanban dragEnd source from `event.active.data.current.column`.
+
+### Senaryo q — Commit-ready
+- [ ] Memory: `project_s7_complete_2026_05_25.md` yazıldı; `MEMORY.md`
+      güncel (s7-complete-2026-05-25 pointer eklendi).
+- [ ] ADR-007 §4 S7 "✅ done" damgası + Audit-god 2 CRITICAL + 6 MAJOR +
+      7 MINOR fix notu.
+- [ ] Commit message draft operatöre sunuldu; onay sonrası tek commit
+      (MANDATE 1 — operatör commit).
+
+### S7 sonrası deferred
+- **Active-session immediate interrupt** (RunningSessionRegistry pid tracking
+  per workspace_slug): `selffork run` asyncio subprocess'ini SIGTERM ile
+  durduran kayıt + endpoint. S-Auto Wave 2 veya ayrı küçük sprint.
+- **Intra-column reorder** (`KanbanCard.order` mutation endpoint +
+  `useSortable` + arrayMove). Operator henüz istemediyse skip.
+- **Card edit/detail dialog** (Kanban card click affordance — şu an drag-only).
+- **Sidebar archived filter UI** (backend hazır, UI toggle S8 scope).
+- **Notes transactional supersede + create** (atomic store method) —
+  current revert-on-failure pratik ama gerçek atomicity yok.
+- **CSS bundle audit** for @uiw/react-md-editor (dynamic import yapılsa da
+  top-level CSS imports bundle'a sızabilir; Next.js trace ile ölçüm gerekli).

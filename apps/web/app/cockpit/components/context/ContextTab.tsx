@@ -50,7 +50,7 @@ const TIER_ORDER: MindTier[] = [
 export function ContextTab() {
   const projectsQuery = useQuery<ProjectResponse[]>({
     queryKey: cockpitKeys.projects(),
-    queryFn: listProjects,
+    queryFn: () => listProjects(),
   });
   const activeProjectSlug = useCockpitStore(
     (s) => s.contextActiveProjectSlug,

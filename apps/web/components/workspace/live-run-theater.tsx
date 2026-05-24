@@ -1,4 +1,7 @@
-import { ChevronDown, Pause, Terminal } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import { ChevronDown, ChevronUp, Pause, Terminal } from "lucide-react";
 
 export interface CLIOutputChunk {
   id: string;
@@ -139,12 +142,24 @@ function JrThoughtBubble({
   thoughts: JrThought[];
   nextPrompt?: string;
 }) {
+  // S7 — show-raw-thinking toggle. Off (default): render Self Jr's
+  // summarised thought. On: render ``raw`` (full chain-of-thought) when
+  // present, else fall through to summary so the toggle never blanks
+  // the pane mid-session.
+  const [showRaw, setShowRaw] = useState(false);
+  const anyRawAvailable = thoughts.some((t) => Boolean(t.raw));
+
   return (
     <div className="w-full md:w-[30%] flex flex-col border-l border-outline-variant/40 bg-surface-container-low/30">
       <div className="px-4 py-2 border-b border-outline-variant/40 flex items-center justify-between">
         <span className="text-[10px] font-mono text-on-surface-variant uppercase tracking-wider">
-          Self Jr's thoughts
+          Self Jr&apos;s thoughts
         </span>
+        {showRaw && (
+          <span className="text-[10px] font-mono text-primary uppercase tracking-wider">
+            raw
+          </span>
+        )}
       </div>
       <div className="flex-1 p-4 overflow-y-auto space-y-3">
         {thoughts.length === 0 ? (
@@ -152,12 +167,22 @@ function JrThoughtBubble({
             Self Jr is observing — no thoughts surfaced yet.
           </p>
         ) : (
-          thoughts.map((t) => (
-            <p key={t.id} className="text-caption italic text-on-surface-variant leading-relaxed">
-              <span className="text-primary mr-1">▸</span>
-              {t.summary}
-            </p>
-          ))
+          thoughts.map((t) => {
+            const content = showRaw && t.raw ? t.raw : t.summary;
+            return (
+              <p
+                key={t.id}
+                className={
+                  showRaw && t.raw
+                    ? "text-caption text-on-surface leading-relaxed font-mono whitespace-pre-wrap"
+                    : "text-caption italic text-on-surface-variant leading-relaxed"
+                }
+              >
+                <span className="text-primary mr-1">▸</span>
+                {content}
+              </p>
+            );
+          })
         )}
         {nextPrompt && (
           <div className="border-t border-outline-variant/40 pt-3 mt-3">
@@ -171,9 +196,29 @@ function JrThoughtBubble({
       <div className="border-t border-outline-variant/40 p-2 flex justify-end">
         <button
           type="button"
-          className="text-[10px] text-on-surface-variant hover:text-on-surface font-medium px-2 py-1 rounded transition-colors"
+          onClick={() => setShowRaw((v) => !v)}
+          aria-pressed={showRaw}
+          disabled={!anyRawAvailable && !showRaw}
+          className="text-[10px] text-on-surface-variant hover:text-on-surface font-medium px-2 py-1 rounded transition-colors flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+          title={
+            !anyRawAvailable
+              ? "No raw thinking captured yet for these thoughts."
+              : showRaw
+                ? "Switch back to summarised thoughts."
+                : "Show raw chain-of-thought when available."
+          }
         >
-          show raw ▾
+          {showRaw ? (
+            <>
+              hide raw
+              <ChevronUp className="h-3 w-3" strokeWidth={1.75} />
+            </>
+          ) : (
+            <>
+              show raw
+              <ChevronDown className="h-3 w-3" strokeWidth={1.75} />
+            </>
+          )}
         </button>
       </div>
     </div>
@@ -208,8 +253,9 @@ export function LiveRunTheater({
           <Terminal className="h-12 w-12 text-on-surface-variant/40" strokeWidth={1.5} />
           <h4 className="text-heading font-semibold text-on-surface">No live session</h4>
           <p className="text-caption text-on-surface-variant max-w-md">
-            Self Jr isn't running a CLI for this workspace yet. Start a new task
-            in the kanban above, or send a prompt from Talk.
+            Self Jr isn&apos;t running a CLI for this workspace yet.
+            Start a new task in the kanban above, or send a prompt
+            from Talk.
           </p>
         </div>
       </section>

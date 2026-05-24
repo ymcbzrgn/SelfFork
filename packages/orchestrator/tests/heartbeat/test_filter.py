@@ -369,3 +369,90 @@ async def test_builder_talk_workspace_probe_exception(tmp_path: Path) -> None:
     )
     state = await builder.build()
     assert state.last_active_workspace is None
+
+
+# ── S7 — workspace_eligible_probe gate (ADR-007 §4 S7) ───────────────────
+
+
+@pytest.mark.asyncio
+async def test_builder_workspace_gate_passes_eligible(tmp_path: Path) -> None:
+    """Eligible workspace flows through unchanged."""
+
+    async def talk_probe() -> str | None:
+        return "alpha"
+
+    async def eligible(_slug: str) -> bool:
+        return True
+
+    pause = PauseSignal(flag_path=tmp_path / "pause.flag")
+    builder = WorldStateBuilder(
+        config=HeartbeatConfig(enabled=True),
+        pause_signal=pause,
+        talk_last_workspace_probe=talk_probe,
+        workspace_eligible_probe=eligible,
+    )
+    state = await builder.build()
+    assert state.last_active_workspace == "alpha"
+
+
+@pytest.mark.asyncio
+async def test_builder_workspace_gate_drops_ineligible(tmp_path: Path) -> None:
+    """Ineligible workspace (paused or archived) is nulled out."""
+
+    async def talk_probe() -> str | None:
+        return "beta"
+
+    async def ineligible(_slug: str) -> bool:
+        return False
+
+    pause = PauseSignal(flag_path=tmp_path / "pause.flag")
+    builder = WorldStateBuilder(
+        config=HeartbeatConfig(enabled=True),
+        pause_signal=pause,
+        talk_last_workspace_probe=talk_probe,
+        workspace_eligible_probe=ineligible,
+    )
+    state = await builder.build()
+    assert state.last_active_workspace is None
+
+
+@pytest.mark.asyncio
+async def test_builder_workspace_gate_fails_open(tmp_path: Path) -> None:
+    """A failing eligibility probe keeps the workspace (fail-OPEN
+    matches the active-hours probe convention)."""
+
+    async def talk_probe() -> str | None:
+        return "gamma"
+
+    async def boom(_slug: str) -> bool:
+        msg = "project store offline"
+        raise RuntimeError(msg)
+
+    pause = PauseSignal(flag_path=tmp_path / "pause.flag")
+    builder = WorldStateBuilder(
+        config=HeartbeatConfig(enabled=True),
+        pause_signal=pause,
+        talk_last_workspace_probe=talk_probe,
+        workspace_eligible_probe=boom,
+    )
+    state = await builder.build()
+    assert state.last_active_workspace == "gamma"
+
+
+@pytest.mark.asyncio
+async def test_builder_workspace_gate_no_op_when_no_talk_probe(
+    tmp_path: Path,
+) -> None:
+    """When the talk probe is absent there is nothing to gate."""
+
+    async def ineligible(_slug: str) -> bool:
+        return False
+
+    pause = PauseSignal(flag_path=tmp_path / "pause.flag")
+    builder = WorldStateBuilder(
+        config=HeartbeatConfig(enabled=True),
+        pause_signal=pause,
+        workspace_eligible_probe=ineligible,
+    )
+    state = await builder.build()
+    assert state.last_active_workspace is None

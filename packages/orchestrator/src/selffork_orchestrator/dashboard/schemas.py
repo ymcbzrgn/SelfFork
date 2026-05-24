@@ -29,6 +29,7 @@ __all__ = [
     "KanbanCardResponse",
     "KanbanResponse",
     "MindNoteCreatePayload",
+    "MindNoteUpdatePayload",
     "MindRecallRequestPayload",
     "MindRecallResponse",
     "MindStatsResponse",
@@ -38,6 +39,7 @@ __all__ = [
     "PlanSnapshot",
     "ProjectCreatePayload",
     "ProjectResponse",
+    "ProjectUpdatePayload",
     "ProvenanceEntryResponse",
     "RecentSession",
     "RunRequestPayload",
@@ -145,6 +147,11 @@ class ProjectResponse(_StrictResponse):
     created_at: datetime
     updated_at: datetime
     card_counts: dict[str, int]
+    # S7 — soft archive + workspace autopilot pause. ``archived_at`` =
+    # ``None`` when the project is active; ``autopilot_paused`` = ``True``
+    # while Heartbeat is told to skip this workspace.
+    archived_at: datetime | None
+    autopilot_paused: bool
 
 
 class ProjectCreatePayload(BaseModel):
@@ -152,6 +159,21 @@ class ProjectCreatePayload(BaseModel):
 
     name: str
     description: str = ""
+    root_path: str | None = None
+
+
+class ProjectUpdatePayload(BaseModel):
+    """Body of ``PUT /api/projects/<slug>``. Omitted fields stay unchanged.
+
+    Note: ``archived_at`` and ``autopilot_paused`` are NOT exposed here —
+    they have dedicated POST endpoints (``archive`` / ``unarchive`` and
+    ``autopilot/pause`` / ``autopilot/resume``) so each action lands in
+    the audit log as a distinct event. ``root_path`` accepts ``""`` to
+    clear (omitting leaves the value alone).
+    """
+
+    name: str | None = None
+    description: str | None = None
     root_path: str | None = None
 
 
@@ -289,6 +311,23 @@ class MindNoteCreatePayload(BaseModel):
     pinned: bool = False
     tag_pairs: list[tuple[str, str]] = []
     session_id: str | None = None
+
+
+class MindNoteUpdatePayload(BaseModel):
+    """Body of ``PATCH /api/projects/<slug>/mind/notes/<id>`` (S7).
+
+    Implements operator-facing in-place edit on top of the Mind T2
+    bi-temporal supersede pattern: the endpoint marks the existing
+    note ``valid_until=now`` and writes a fresh row with the patched
+    fields. All fields optional — omitted fields preserve the
+    superseded note's value so the operator can patch ``content``
+    alone without re-sending the full record.
+    """
+
+    content: str | None = None
+    intent: str | None = None
+    importance: float | None = None
+    pinned: bool | None = None
 
 
 class MindRecallRequestPayload(BaseModel):

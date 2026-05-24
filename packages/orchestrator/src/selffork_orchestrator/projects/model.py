@@ -127,6 +127,17 @@ class Project(_Strict):
     root_path: str | None = None
     created_at: datetime
     updated_at: datetime
+    # Soft archive (S7 — ADR-007 §4 S7). ``None`` = active. When set the
+    # sidebar hides the project, ``GET /api/projects`` filters it by
+    # default, and Heartbeat's WorldStateBuilder skips it when choosing
+    # a workspace. Reversible via ``POST /api/projects/<slug>/unarchive``.
+    archived_at: datetime | None = None
+    # Workspace-scope autopilot pause (S7 — operator-confirmed
+    # AskUserQuestion 2026-05-24: workspace flag + active session
+    # interrupt). When True, Heartbeat skips this workspace until the
+    # operator hits Resume. Distinct from the global Telegram
+    # ``PauseSignal`` (destructive-action pause).
+    autopilot_paused: bool = False
 
     @classmethod
     def new(
