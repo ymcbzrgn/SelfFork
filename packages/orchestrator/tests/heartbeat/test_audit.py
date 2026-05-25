@@ -198,9 +198,32 @@ def test_build_audit_entry_with_decision_and_result() -> None:
     assert entry.decision_action == "task_başlat"
     assert entry.decision_reasoning == "Login refactor"
     assert entry.decision_fallback is False
+    assert entry.decision_stalled is False
     assert entry.result_outcome == "executed"
     assert entry.result_metadata == {"pid": 42}
     assert entry.idempotency_key == "7:task_başlat:alpha"
+
+
+def test_build_audit_entry_decision_stalled() -> None:
+    """ADR-011 §3.4 — a stalled deliberation surfaces decision_stalled=True."""
+    decision = ActionDecision(
+        action=LegalAction.WAIT,
+        reasoning="deliberation stalled (no tokens); defaulting to wait",
+        fallback=True,
+        stalled=True,
+    )
+    entry = build_audit_entry(
+        tick=9,
+        trigger="reconciliation.timer",
+        world_state=_state(),
+        legal_actions=frozenset({"bekle"}),
+        decision=decision,
+        result=None,
+        air_alert=None,
+    )
+    assert entry.decision_action == "bekle"
+    assert entry.decision_fallback is True
+    assert entry.decision_stalled is True
 
 
 def test_build_audit_entry_with_air_alert() -> None:

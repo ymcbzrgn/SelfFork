@@ -23,6 +23,7 @@ __all__ = [
     "PlanLoadError",
     "PlanSaveError",
     "RuntimeError",
+    "RuntimeMisconfiguredError",
     "RuntimeStartError",
     "RuntimeUnhealthyError",
     "SandboxError",
@@ -31,6 +32,7 @@ __all__ = [
     "SandboxTeardownError",
     "SelfForkError",
     "SelfForkTimeoutError",
+    "SpeakerStalledError",
     "TmuxError",
     "TmuxPaneError",
     "TmuxSessionError",
@@ -70,6 +72,30 @@ class RuntimeStartError(RuntimeError):
 
 class RuntimeUnhealthyError(RuntimeError):
     """Runtime stopped responding mid-session."""
+
+
+class RuntimeMisconfiguredError(RuntimeError):
+    """Runtime appears to be the wrong server for the configured model.
+
+    ADR-011 §3.5: surfaces e.g. the ``mlx_lm.server`` (text-only) on a
+    Gemma 4 VLM hang class — the runtime loads weights but never emits
+    tokens. A bounded warmup probe + canonical-spawn check raises this
+    instead of letting the system hang indefinitely. Distinct from
+    :class:`RuntimeUnhealthyError` (mid-session failure) and
+    :class:`RuntimeStartError` (process never spawned / health failed).
+    """
+
+
+class SpeakerStalledError(RuntimeError):
+    """Speaker stream went idle past ``stall_seconds`` without a token.
+
+    ADR-011 §3.3: the idle-token watchdog. A streaming generation may
+    legitimately take minutes-to-hours on CPU and is **not** a failure
+    so long as tokens keep arriving. This error fires only when no token
+    has arrived for the configured ``stall_seconds`` — i.e. the model is
+    wedged, not merely slow. Callers surface "stalled" distinctly from
+    "unhealthy" so a slow-but-live generation is never falsely cancelled.
+    """
 
 
 # ── Sandbox ───────────────────────────────────────────────────────────────────

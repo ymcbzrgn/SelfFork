@@ -12,16 +12,27 @@ a Telegram nudge via :class:`ProviderAuthMonitor`.
 from __future__ import annotations
 
 import secrets
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 
+import anyio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from selffork_orchestrator.dashboard.provider_auth_monitor import (
     ProviderAuthMonitor,
 )
+from selffork_orchestrator.dashboard.provider_creds import (
+    ProviderAuthStatus,
+    detect_all,
+)
+
+# Resolves on-disk auth status for every provider (CLI-native sign-in,
+# [[cli-provider-routing]]); injectable so tests don't touch the real
+# home dir / keychain.
+type CredsDetector = Callable[[], dict[str, ProviderAuthStatus]]
 
 __all__ = [
     "ProviderName",
@@ -143,17 +154,53 @@ def _serialise(record: ProviderRecord) -> ProviderView:
     )
 
 
+def _serialise_with_disk(
+    record: ProviderRecord, disk: ProviderAuthStatus | None
+) -> ProviderView:
+    """Serialise a record with the on-disk auth status overlaid.
+
+    On-disk creds win for ``status`` (the operator re-signs-in via the
+    CLI, so disk is the freshest truth — even after an auth-expired
+    alert). The registry still carries ``last_error`` (the most recent
+    auth-expired reason) for visibility, and ``last_sign_in`` /
+    ``storage_state_path`` if a dashboard flow ever set them.
+    """
+    if disk is None:
+        return _serialise(record)
+    expires_at = disk.expires_at or record.expires_at
+    return ProviderView(
+        name=record.name,
+        status=disk.status,
+        expires_at=expires_at.isoformat() if expires_at else None,
+        last_sign_in=record.last_sign_in.isoformat()
+        if record.last_sign_in
+        else None,
+        last_error=record.last_error,
+        storage_state_path=record.storage_state_path,
+    )
+
+
 def build_provider_router(
     *,
     registry: ProviderRegistry,
     auth_monitor: ProviderAuthMonitor | None = None,
+    creds_detector: CredsDetector | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/providers", tags=["providers"])
     monitor = auth_monitor or ProviderAuthMonitor()
+    detector: CredsDetector = creds_detector or detect_all
 
     @router.get("", response_model=list[ProviderView])
     async def list_providers() -> list[ProviderView]:
-        return [_serialise(r) for r in registry.list_records()]
+        # On-disk creds are the source of truth for "signed in?" — the
+        # operator authenticates CLI-natively, so the in-memory registry's
+        # dashboard-sign-in record stays empty. Detection does a keychain
+        # subprocess + file reads, so run it off the event loop.
+        disk = await anyio.to_thread.run_sync(detector)
+        return [
+            _serialise_with_disk(r, disk.get(r.name))
+            for r in registry.list_records()
+        ]
 
     @router.post("/{name}/sign_in_start", response_model=SignInStartResponse)
     async def sign_in_start(name: str) -> SignInStartResponse:

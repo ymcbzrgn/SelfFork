@@ -74,6 +74,17 @@ Invalid value falls back to UTC silently — the daemon must never be
 silenced by a typo.
 """
 
+DEFAULT_DELIBERATION_BUDGET_SECONDS: Final[float] = 300.0
+"""ADR-011 §3.4 per-tick deliberation wall-clock budget.
+
+A wedged model already surfaces via the Speaker's idle-token watchdog
+(``SpeakerStalledError``); this budget additionally caps a *slow but
+producing* model so a single tick can't block the autonomy loop for the
+whole (potentially minutes-to-hours on CPU) generation. Exceeding it
+yields an honest stalled ``WAIT`` (``decision_stalled=True``). Override
+with ``SELFFORK_HEARTBEAT_DELIBERATION_BUDGET_SECONDS``.
+"""
+
 
 def _resolve_enabled() -> bool:
     raw = os.environ.get("SELFFORK_HEARTBEAT_ENABLED", "").strip().lower()
@@ -248,6 +259,10 @@ def build_default_heartbeat(
         deliberation = DeliberationLayer(
             speaker=SpeakerClient(
                 base_url=speaker_endpoint, model=speaker_model
+            ),
+            tick_budget_seconds=_resolve_float(
+                "SELFFORK_HEARTBEAT_DELIBERATION_BUDGET_SECONDS",
+                DEFAULT_DELIBERATION_BUDGET_SECONDS,
             ),
         )
 

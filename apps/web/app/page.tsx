@@ -4,10 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { QuotaGaugeCard, type QuotaCard } from "@/components/dashboard/quota-gauge-card";
 import { LiveLoopStatus, type LiveLoop } from "@/components/dashboard/live-loop-status";
-import {
-  ActivityFeedItem,
-  type ActivityRow,
-} from "@/components/dashboard/activity-feed-item";
+import { ActivityFeedItem } from "@/components/dashboard/activity-feed-item";
 import {
   ProjectCard,
   NewProjectCard,
@@ -15,14 +12,33 @@ import {
 } from "@/components/dashboard/project-card";
 import {
   getActiveLoop,
+  getActivity,
   listProjects,
+  listProviders,
   listProviderUsage,
   type ActiveLoopResponse,
+  type ActivityRow,
   type ProjectResponse,
   type ProviderUsage,
+  type ProviderView,
 } from "@/lib/api";
 
 const ALL_PROVIDERS = ["claude", "codex", "gemini", "minimax", "glm"] as const;
+
+// Each dashboard quota card → the on-disk auth surface (ProviderView.name)
+// that proves the operator is signed in. claude/codex/gemini map 1:1;
+// minimax + glm are routed through opencode ([[cli-provider-routing]]), so
+// both reflect the opencode CLI's auth.
+const CARD_TO_AUTH: Record<
+  (typeof ALL_PROVIDERS)[number],
+  ProviderView["name"]
+> = {
+  claude: "claude_pro",
+  codex: "codex",
+  gemini: "gemini",
+  minimax: "opencode",
+  glm: "opencode",
+};
 
 function aliasToCanonical(cli: string): (typeof ALL_PROVIDERS)[number] | null {
   if (cli === "claude-code" || cli === "claude") return "claude";
@@ -92,7 +108,9 @@ function formatDuration(seconds: number): string {
 export default function DashboardPage() {
   const [projects, setProjects] = useState<ProjectResponse[]>([]);
   const [usage, setUsage] = useState<ProviderUsage[]>([]);
+  const [providers, setProviders] = useState<ProviderView[]>([]);
   const [activeLoop, setActiveLoop] = useState<ActiveLoopResponse | null>(null);
+  const [activity, setActivity] = useState<ActivityRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -104,11 +122,13 @@ export default function DashboardPage() {
         return [] as ProjectResponse[];
       }),
       listProviderUsage().catch(() => [] as ProviderUsage[]),
+      listProviders().catch(() => [] as ProviderView[]),
       getActiveLoop().catch(() => null),
-    ]).then(([p, u, al]) => {
+    ]).then(([p, u, pv, al]) => {
       if (cancelled) return;
       setProjects(p);
       setUsage(u);
+      setProviders(pv);
       setActiveLoop(al);
       setLoading(false);
     });
@@ -136,23 +156,55 @@ export default function DashboardPage() {
     };
   }, []);
 
+  // Recent activity feed — poll every 10s (operator pick; matches the
+  // topbar bell tempo). The feed aggregates sessions + tool calls +
+  // structured Q/A + heartbeat ticks + project mutations + Telegram across
+  // all four CLIs; an idle system returns [] (no-mock).
+  useEffect(() => {
+    let cancelled = false;
+    const tick = () => {
+      getActivity({ limit: 30 })
+        .then((res) => {
+          if (!cancelled) setActivity(res.rows);
+        })
+        .catch(() => {
+          /* transient error — keep the last known feed */
+        });
+    };
+    tick();
+    const id = window.setInterval(tick, 10000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
   const quotaCards = useMemo<QuotaCard[]>(() => {
     const byProvider = new Map<string, ProviderUsage>();
     for (const u of usage) {
       const canonical = aliasToCanonical(u.cli_agent);
       if (canonical) byProvider.set(canonical, u);
     }
+    // "Signed in?" is the on-disk CLI auth status (the operator logs in
+    // CLI-natively), NOT whether the provider has audit usage yet — a
+    // freshly-authed CLI with no activity must still read as signed in.
+    const authByName = new Map(providers.map((pv) => [pv.name, pv.status]));
     return ALL_PROVIDERS.map((provider) => {
+      const authStatus = authByName.get(CARD_TO_AUTH[provider]);
+      const signedIn =
+        authStatus === "connected" || authStatus === "expired";
+      if (!signedIn) return { provider, signedIn: false };
+      // Quota gauge is still usage-derived; a signed-in provider with no
+      // activity yet shows connected without a gauge (honest empty).
       const u = byProvider.get(provider);
-      if (!u) return { provider, signedIn: false };
       return {
         provider,
         signedIn: true,
-        quota: deriveQuotaPercent(u),
-        resetIn: deriveResetLabel(u.next_reset_at),
+        quota: u ? deriveQuotaPercent(u) : undefined,
+        resetIn: u ? deriveResetLabel(u.next_reset_at) : undefined,
       };
     });
-  }, [usage]);
+  }, [usage, providers]);
 
   const liveLoop: LiveLoop | null = activeLoop
     ? {
@@ -165,8 +217,6 @@ export default function DashboardPage() {
           activeLoop.last_thought ?? "Self Jr is working on a task…",
       }
     : null;
-  // Activity backend not wired yet; show empty state.
-  const activity: ActivityRow[] = [];
 
   const subtitle = loading
     ? "Loading…"

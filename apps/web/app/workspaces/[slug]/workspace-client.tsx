@@ -470,6 +470,29 @@ function WorkspaceContent({ slug }: { slug: string }) {
     setProject(updated);
   };
 
+  // S8 — the topbar title dropdown dispatches these events for the active
+  // workspace; route them to the same handlers the header buttons use. The
+  // pause handler closes over `project`, so we read it through a ref kept
+  // current each render (the [] effect must not capture a stale closure).
+  const pauseRef = useRef(handlePauseToggle);
+  pauseRef.current = handlePauseToggle;
+  useEffect(() => {
+    const openSwitch = () => setSwitchOpen(true);
+    const openEdit = () => setEditOpen(true);
+    const togglePause = () => void pauseRef.current();
+    const openArchive = () => setArchiveConfirmOpen(true);
+    window.addEventListener("selffork:workspace:switch", openSwitch);
+    window.addEventListener("selffork:workspace:edit", openEdit);
+    window.addEventListener("selffork:workspace:pause", togglePause);
+    window.addEventListener("selffork:workspace:archive", openArchive);
+    return () => {
+      window.removeEventListener("selffork:workspace:switch", openSwitch);
+      window.removeEventListener("selffork:workspace:edit", openEdit);
+      window.removeEventListener("selffork:workspace:pause", togglePause);
+      window.removeEventListener("selffork:workspace:archive", openArchive);
+    };
+  }, []);
+
   // Kanban WS — backend emits on every mutation (server.py:1529). We
   // debounce 150ms so a burst of card.* events coalesces into one
   // refetch. The optimistic update inside `handleCardMove` keeps the

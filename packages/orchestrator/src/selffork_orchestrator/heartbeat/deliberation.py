@@ -22,6 +22,7 @@ remains a spawn-owning client; Heartbeat is connect-only.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -33,7 +34,7 @@ from typing import Final
 from selffork_orchestrator.heartbeat.actions import LegalAction
 from selffork_orchestrator.heartbeat.filter import WorldState
 from selffork_orchestrator.talk.speaker import Speaker
-from selffork_shared.errors import RuntimeUnhealthyError
+from selffork_shared.errors import RuntimeUnhealthyError, SpeakerStalledError
 
 __all__ = [
     "DELIBERATION_SYSTEM_PROMPT",
@@ -107,12 +108,20 @@ class ActionDecision:
             ``WAIT`` because the model was unhealthy or its response
             failed to parse. The audit log distinguishes "model chose
             wait" from "model unreachable → forced wait".
+        stalled: ``True`` when the fallback was specifically caused by a
+            slow/wedged model — the idle-token watchdog fired
+            (:class:`SpeakerStalledError`) or the per-tick budget was
+            exceeded (ADR-011 §3.4). Always implies ``fallback=True``;
+            the extra flag lets the audit log + S-Train distinguish "model
+            too slow on this tick" from "model unreachable / unparseable",
+            and proves the autonomy loop never wedged on a slow tick.
     """
 
     action: LegalAction
     reasoning: str
     selected_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     fallback: bool = False
+    stalled: bool = False
 
 
 class DeliberationLayer:
@@ -130,10 +139,17 @@ class DeliberationLayer:
         speaker: Speaker,
         system_prompt: str = DELIBERATION_SYSTEM_PROMPT,
         fallback_action: LegalAction = LegalAction.WAIT,
+        tick_budget_seconds: float | None = None,
     ) -> None:
         self._speaker = speaker
         self._system_prompt = system_prompt
         self._fallback_action = fallback_action
+        # ADR-011 §3.4 per-tick wall-clock budget. ``None`` relies solely
+        # on the Speaker's idle-token watchdog (a wedged model still
+        # surfaces, just at the watchdog cadence); a positive value adds a
+        # hard ceiling so a slow-but-producing model can't block the
+        # autonomy loop for the full generation on a single tick.
+        self._tick_budget_seconds = tick_budget_seconds
 
     async def select(
         self,
@@ -165,7 +181,47 @@ class DeliberationLayer:
             {"role": "user", "content": user_prompt},
         ]
         try:
-            reply = await self._speaker.reply(messages)
+            if self._tick_budget_seconds is not None:
+                reply = await asyncio.wait_for(
+                    self._speaker.reply(messages),
+                    timeout=self._tick_budget_seconds,
+                )
+            else:
+                reply = await self._speaker.reply(messages)
+        except SpeakerStalledError as exc:
+            # Idle-token watchdog fired — the model produced no tokens for
+            # the configured stall window (wedged / wrong runtime). Keep
+            # the loop alive with an honest stalled WAIT.
+            _log.warning(
+                "heartbeat_deliberation_stalled",
+                extra={"error": str(exc)},
+            )
+            return ActionDecision(
+                action=self._fallback_action,
+                reasoning="deliberation stalled (no tokens); defaulting to wait",
+                fallback=True,
+                stalled=True,
+            )
+        except TimeoutError as exc:
+            # Per-tick wall-clock budget exceeded — the model was
+            # producing but too slowly for an autonomy tick. Honest
+            # stalled WAIT so the loop stays responsive.
+            _log.warning(
+                "heartbeat_deliberation_budget_exceeded",
+                extra={
+                    "budget_seconds": self._tick_budget_seconds,
+                    "error": str(exc),
+                },
+            )
+            return ActionDecision(
+                action=self._fallback_action,
+                reasoning=(
+                    f"deliberation exceeded {self._tick_budget_seconds}s "
+                    "tick budget; defaulting to wait"
+                ),
+                fallback=True,
+                stalled=True,
+            )
         except RuntimeUnhealthyError as exc:
             _log.warning(
                 "heartbeat_deliberation_speaker_unhealthy",

@@ -8,6 +8,7 @@
  * its own gutter via `px-gutter-desktop` so Stitch-faithful spacing
  * stays consistent.
  */
+import { CommandPalette } from "@/components/command-palette";
 import { Sidebar } from "./sidebar";
 import { TopBar } from "./topbar";
 
@@ -25,6 +26,10 @@ export function AppShell({
         <TopBar title={title} />
         <div className="flex-1">{children}</div>
       </main>
+      {/* Global ⌘K command palette — mounted once so the topbar search,
+          the title-dropdown "Open command palette" item, and the ⌘K
+          shortcut all reach a live listener (S8 audit-god fix). */}
+      <CommandPalette />
     </div>
   );
 }

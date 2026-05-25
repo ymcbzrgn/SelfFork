@@ -13,13 +13,14 @@
 import { Command } from "cmdk";
 import {
   Folder,
+  FolderKanban,
   FolderPlus,
   KeyboardIcon,
   LayoutDashboard,
-  ListTree,
-  PauseCircle,
-  PlayCircle,
+  Link2,
+  MessageCircle,
   Search,
+  Settings,
   type LucideIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -101,28 +102,32 @@ export function CommandPalette() {
 
           <PaletteGroup heading="Navigate">
             <PaletteItem icon={LayoutDashboard} label="Dashboard" onSelect={() => go("/")} />
-            <PaletteItem icon={PauseCircle} label="Paused sessions" onSelect={() => go("/?tab=paused")} />
-            <PaletteItem icon={ListTree} label="Recent sessions" onSelect={() => go("/?tab=recent")} />
-            <PaletteItem icon={Folder} label="All projects" onSelect={() => go("/projects/")} />
+            <PaletteItem icon={FolderKanban} label="Workspaces" onSelect={() => go("/workspaces")} />
+            <PaletteItem icon={MessageCircle} label="Talk" onSelect={() => go("/talk")} />
+            <PaletteItem icon={Link2} label="Connections" onSelect={() => go("/connections")} />
+            <PaletteItem icon={Settings} label="Settings" onSelect={() => go("/settings")} />
           </PaletteGroup>
 
           {projects.length > 0 && (
-            <PaletteGroup heading="Projects">
+            <PaletteGroup heading="Workspaces">
               {projects.map((p) => (
                 <PaletteItem
                   key={p.slug}
                   icon={Folder}
                   label={p.name}
                   hint={p.slug}
-                  onSelect={() => go(`/project/?slug=${p.slug}`)}
+                  onSelect={() => go(`/workspaces/${p.slug}`)}
                 />
               ))}
             </PaletteGroup>
           )}
 
           <PaletteGroup heading="Actions">
-            <PaletteItem icon={FolderPlus} label="New project" onSelect={() => go("/projects/new/")} />
-            <PaletteItem icon={PlayCircle} label="New run" onSelect={() => go("/run/")} />
+            <PaletteItem
+              icon={FolderPlus}
+              label="New project"
+              onSelect={() => go("/talk?intent=new-workspace")}
+            />
             <PaletteItem
               icon={KeyboardIcon}
               label="Keyboard shortcuts"

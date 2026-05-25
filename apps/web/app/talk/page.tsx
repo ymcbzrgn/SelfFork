@@ -8,8 +8,8 @@ import {
   History,
   Loader2,
   MessageCircle,
-  Paperclip,
   Plus,
+  Square,
 } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
@@ -19,21 +19,27 @@ import {
 } from "@/components/talk/ChatMessage";
 import {
   ApiError,
+  cancelTalkGeneration,
   claimTelegramDrafts,
   getRouterOverride,
   getTalkConversation,
   listProjects,
   listTalkConversations,
   listTelegramDrafts,
-  openTalkStream,
   sendTalkMessage,
   setRouterOverride,
   type ConversationResponse,
   type ProjectResponse,
   type RouterOverride,
+  type TalkCancelledPayload,
+  type TalkErrorPayload,
+  type TalkMessagePayload,
   type TalkMessageResponse,
+  type TalkTokenPayload,
   type TelegramDraftResponse,
 } from "@/lib/api";
+import { TalkStreamSubscription } from "@/components/talk/talk-stream-subscription";
+import type { WsEnvelope } from "@/lib/ws/types";
 
 const SLASH_CHIPS = ["/cli", "/workspace", "/pause", "/note", "/finetune"];
 
@@ -50,14 +56,27 @@ const EXAMPLE_PROMPTS = [
   "Pause everything for an hour",
 ];
 
-interface TalkMessagePayload {
-  conversation_id: string;
-  message_id: string;
-  seq: number;
-  role: "operator" | "self_jr";
-  content: string;
-  created_at: string;
+// ADR-011 §3.4 — the in-flight streaming reply the operator can watch
+// grow + cancel. `text` accumulates talk.token frames; `startedAt` is a
+// monotonic-ish ms stamp for the elapsed-time affordance; `lastSeq` is the
+// highest WS envelope seq folded in, so a reconnect replay can't double
+// count tokens already accumulated.
+interface PendingGeneration {
+  generationId: string;
+  text: string;
+  tokenCount: number;
+  startedAt: number;
+  lastSeq: number;
 }
+
+const STREAM_NOTICE: Record<string, string> = {
+  unhealthy:
+    "Self Jr's model endpoint is unreachable — your message was saved.",
+  stalled:
+    "Self Jr stopped producing tokens (the model may be wedged or mis-configured). Your message was saved.",
+  empty_reply: "Self Jr returned an empty reply. Your message was saved.",
+  internal: "Something went wrong while streaming Self Jr's reply.",
+};
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
@@ -109,6 +128,14 @@ export default function TalkPage() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [speakerStatus, setSpeakerStatus] = useState<string | null>(null);
+  // ADR-011 §3 — the in-flight streaming reply (growing bubble + Stop).
+  const [pending, setPending] = useState<PendingGeneration | null>(null);
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  // Live mirror so the WS handler matches frames to the active generation
+  // without a stale closure over `pending`.
+  const pendingRef = useRef<PendingGeneration | null>(null);
   // Feedback for /cli (and future slash commands) — separate from the
   // model's speaker_status because it carries dynamic, per-command text.
   const [cliNotice, setCliNotice] = useState<{
@@ -126,12 +153,44 @@ export default function TalkPage() {
   // conversation switch and discard its now-stale result.
   const conversationIdRef = useRef<string | null>(null);
 
+  // Keep the ref in lock-step with the pending generation.
+  useEffect(() => {
+    pendingRef.current = pending;
+  }, [pending]);
+
+  // Tick the elapsed-time affordance once a second while a generation is
+  // live. Keyed on the generation id + start so it doesn't reset on every
+  // token (which mutates `pending`).
+  const pendingGenId = pending?.generationId ?? null;
+  const pendingStart = pending?.startedAt ?? null;
+  useEffect(() => {
+    if (pendingStart === null) {
+      setElapsedSeconds(0);
+      return;
+    }
+    const tick = () =>
+      setElapsedSeconds(Math.floor((Date.now() - pendingStart) / 1000));
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [pendingGenId, pendingStart]);
+
   // Mount — load projects + conversations; pick which conversation shows.
   useEffect(() => {
+    const wantWorkspace =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("workspace")
+        : null;
     listProjects()
       .then((p) => {
         setProjects(p);
-        if (p[0]) setContextSlug(p[0].slug);
+        // Honor ?workspace=<slug> from the Workspaces grid; fall back to
+        // the first project when it's absent or unknown.
+        const target =
+          wantWorkspace && p.some((x) => x.slug === wantWorkspace)
+            ? wantWorkspace
+            : (p[0]?.slug ?? null);
+        setContextSlug(target);
       })
       .catch(() => {});
 
@@ -163,43 +222,116 @@ export default function TalkPage() {
       })
       .catch(() => {});
 
-    const ws = openTalkStream(conversationId);
-    ws.onmessage = (ev) => {
-      try {
-        const env = JSON.parse(ev.data as string) as {
-          event_type?: string;
-          payload?: TalkMessagePayload;
-        };
-        if (env.event_type !== "talk.message" || !env.payload) return;
-        const p = env.payload;
-        setMessages((prev) =>
-          prev.some((m) => m.id === p.message_id)
-            ? prev
-            : [
-                ...prev,
-                {
-                  id: p.message_id,
-                  role: p.role,
-                  text: p.content,
-                  ts: formatTime(p.created_at),
-                },
-              ],
-        );
-      } catch {
-        // ignore malformed frames
-      }
-    };
-
+    // The live stream is driven by <TalkStreamSubscription/> (mounted in
+    // the render tree when a conversation is selected) via the shared
+    // reconnecting WS hook — see handleEnvelope below.
     return () => {
       cancelled = true;
-      if (ws.readyState !== WebSocket.CLOSED) ws.close();
     };
   }, [conversationId]);
 
-  // Keep the newest message in view.
+  // Apply one live Talk WS envelope to local state (ADR-011). Stable
+  // identity (only refs + state setters, no closure deps) so the
+  // streaming subscription hook never re-subscribes on a re-render.
+  const handleEnvelope = useCallback((env: WsEnvelope) => {
+    const addMessage = (p: TalkMessagePayload) =>
+      setMessages((prev) =>
+        prev.some((m) => m.id === p.message_id)
+          ? prev
+          : [
+              ...prev,
+              {
+                id: p.message_id,
+                role: p.role,
+                text: p.content,
+                ts: formatTime(p.created_at),
+              },
+            ],
+      );
+    switch (env.event_type) {
+      case "talk.message": {
+        const p = env.payload as unknown as TalkMessagePayload;
+        addMessage(p);
+        // Final assistant message of the active generation clears the
+        // streaming bubble (the canonical content is now in `messages`).
+        if (
+          p.role === "self_jr" &&
+          p.generation_id &&
+          pendingRef.current?.generationId === p.generation_id
+        ) {
+          setPending(null);
+        }
+        return;
+      }
+      case "talk.token": {
+        const p = env.payload as unknown as TalkTokenPayload;
+        // Accumulate into the active generation; tolerate a token that
+        // arrives before onSend set `pending` (start one). De-dup on the
+        // envelope seq so a reconnect replay never double-counts.
+        setPending((cur) => {
+          if (cur && cur.generationId !== p.generation_id) return cur;
+          const base =
+            cur ??
+            ({
+              generationId: p.generation_id,
+              text: "",
+              tokenCount: 0,
+              startedAt: Date.now(),
+              lastSeq: 0,
+            } satisfies PendingGeneration);
+          if (env.seq <= base.lastSeq) return base;
+          return {
+            ...base,
+            text: base.text + p.text,
+            tokenCount: base.tokenCount + 1,
+            lastSeq: env.seq,
+          };
+        });
+        return;
+      }
+      case "talk.error": {
+        const p = env.payload as unknown as TalkErrorPayload;
+        if (
+          !pendingRef.current ||
+          pendingRef.current.generationId === p.generation_id
+        ) {
+          setPending(null);
+          setStreamError(STREAM_NOTICE[p.kind] ?? p.detail);
+        }
+        return;
+      }
+      case "talk.cancelled": {
+        const p = env.payload as unknown as TalkCancelledPayload;
+        if (p.message) {
+          addMessage(p.message);
+        } else if (p.partial_text) {
+          // Server-side persist failed but the partial reply is still in
+          // the payload — surface it as a cancelled bubble rather than
+          // silently dropping the operator's truncated text.
+          addMessage({
+            conversation_id: p.conversation_id,
+            message_id: `cancelled-${p.generation_id}`,
+            seq: -1,
+            role: "self_jr",
+            content: p.partial_text,
+            created_at: new Date().toISOString(),
+          });
+        }
+        if (pendingRef.current?.generationId === p.generation_id) {
+          setPending(null);
+        }
+        return;
+      }
+      default:
+        return;
+    }
+  }, []);
+
+  // Keep the newest message in view — follow the streaming reply as
+  // tokens land (`pending` mutates per token).
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, sending]);
+  }, [messages, sending, pending]);
 
   const contextLabel = useMemo(() => {
     if (!contextSlug) return "All projects";
@@ -307,6 +439,24 @@ export default function TalkPage() {
       });
       if (conversationIdRef.current !== sentFor) return;
       setSpeakerStatus(res.speaker_status);
+      setStreamError(null);
+      // ADR-011: the reply streams over the WS. Mark the generation
+      // pending so the Stop button + progress affordance show at once;
+      // guard against a token frame that already created `pending`.
+      if (res.speaker_status === "streaming" && res.generation_id) {
+        const gid = res.generation_id;
+        setPending((cur) =>
+          cur && cur.generationId === gid
+            ? cur
+            : {
+                generationId: gid,
+                text: "",
+                tokenCount: 0,
+                startedAt: Date.now(),
+                lastSeq: 0,
+              },
+        );
+      }
       if (res.conversation_id !== sentFor) {
         // A new conversation was created — switch to it (the effect
         // loads its thread + opens the stream) and refresh History.
@@ -322,11 +472,30 @@ export default function TalkPage() {
     }
   }, [draft, sending, cliBusy, conversationId, contextSlug, handleCliCommand]);
 
+  // Stop an in-flight streaming reply (ADR-011 §3.4). The talk.cancelled
+  // / talk.error envelope reconciles the UI, so this only fires the
+  // request + guards against a double-click.
+  const onStop = useCallback(async () => {
+    const cur = pendingRef.current;
+    if (!cur || !conversationId || cancelBusy) return;
+    setCancelBusy(true);
+    try {
+      await cancelTalkGeneration(conversationId, cur.generationId);
+    } catch {
+      // Ignore — a stale generation just resolves as not-cancelled and
+      // the stream's own terminal envelope clears the bubble.
+    } finally {
+      setCancelBusy(false);
+    }
+  }, [conversationId, cancelBusy]);
+
   const onNewChat = () => {
     setConversationId(null);
     setMessages([]);
     setSpeakerStatus(null);
     setCliNotice(null);
+    setPending(null);
+    setStreamError(null);
     setDraft("");
     setOpenHistory(false);
   };
@@ -334,14 +503,23 @@ export default function TalkPage() {
   const selectConversation = (id: string) => {
     setConversationId(id);
     setSpeakerStatus(null);
+    // The pending generation belongs to the conversation being left.
+    setPending(null);
+    setStreamError(null);
     setOpenHistory(false);
   };
 
-  const showEmpty = messages.length === 0 && !sending;
+  const showEmpty = messages.length === 0 && !sending && !pending;
   const notice = speakerStatus ? SPEAKER_NOTICE[speakerStatus] : undefined;
 
   return (
     <AppShell title="Talk">
+      {conversationId && (
+        <TalkStreamSubscription
+          conversationId={conversationId}
+          onEnvelope={handleEnvelope}
+        />
+      )}
       <div className="flex flex-col min-h-[calc(100vh-theme(spacing.topbar-height))] bg-background relative">
         <header className="px-gutter-desktop pt-vertical-gap max-w-3xl mx-auto w-full">
           <div className="flex items-start justify-between flex-wrap gap-3">
@@ -529,13 +707,65 @@ export default function TalkPage() {
                 {messages.map((m) => (
                   <ChatMessage key={m.id} message={m} />
                 ))}
-                {sending && (
+                {sending && !pending && (
                   <div className="flex items-center gap-2 text-caption text-on-surface-variant">
                     <Loader2
                       className="h-4 w-4 animate-spin"
                       strokeWidth={2}
                     />
-                    Self Jr is thinking…
+                    Sending…
+                  </div>
+                )}
+                {pending && (
+                  <div className="space-y-2">
+                    {pending.text ? (
+                      <ChatMessage
+                        message={{
+                          id: `pending-${pending.generationId}`,
+                          role: "self_jr",
+                          text: pending.text,
+                          ts: "",
+                        }}
+                      />
+                    ) : (
+                      <div className="flex items-center gap-2 text-caption text-on-surface-variant">
+                        <Loader2
+                          className="h-4 w-4 animate-spin"
+                          strokeWidth={2}
+                        />
+                        Self Jr is starting…
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3 text-caption text-on-surface-variant">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Loader2
+                          className="h-3.5 w-3.5 animate-spin"
+                          strokeWidth={2}
+                        />
+                        generating… ({pending.tokenCount} token
+                        {pending.tokenCount === 1 ? "" : "s"} · {elapsedSeconds}
+                        s)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void onStop()}
+                        disabled={cancelBusy}
+                        aria-label="Stop generating"
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-outline-variant text-on-surface hover:bg-surface-container-low disabled:opacity-40 transition-colors"
+                      >
+                        <Square className="h-3 w-3" strokeWidth={2} />
+                        Stop
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {streamError && (
+                  <div className="flex items-start gap-2 bg-error-container/30 border border-error/30 rounded-lg px-3 py-2 text-caption text-on-surface">
+                    <AlertTriangle
+                      className="h-4 w-4 shrink-0 mt-0.5"
+                      strokeWidth={1.75}
+                    />
+                    <span>{streamError}</span>
                   </div>
                 )}
                 {notice && (
@@ -583,19 +813,6 @@ export default function TalkPage() {
             />
             <div className="flex items-center justify-between border-t border-outline-variant/20 px-3 py-2 flex-wrap gap-2">
               <div className="flex items-center gap-1 flex-wrap">
-                <button
-                  type="button"
-                  disabled
-                  title="File attachments — coming soon"
-                  className="p-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Attach file (coming soon)"
-                >
-                  <Paperclip
-                    className="h-4 w-4 text-on-surface-variant"
-                    strokeWidth={1.75}
-                  />
-                </button>
-                <span className="h-4 w-px bg-outline-variant mx-1" />
                 {SLASH_CHIPS.map((chip) => (
                   <button
                     key={chip}

@@ -758,6 +758,49 @@ class TestToolIntegration:
         assert "tool.result" in cats
 
     @pytest.mark.asyncio
+    async def test_structured_tool_call_audited_distinctly(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        # S8 mini-prereq: a <selffork-tool-call> whose tool name is an
+        # AskUserQuestion-style structured choice is routed to the
+        # tool.structured_question / tool.structured_answer categories
+        # (NOT the generic tool.call / tool.result). Routing is by name,
+        # decided before invocation, so the tool need not be registered —
+        # the unknown-tool result still lands in tool.structured_answer.
+        from selffork_orchestrator.tools import build_default_registry
+
+        reply = (
+            "Let me ask.\n"
+            "<selffork-tool-call>\n"
+            '{"tool": "AskUserQuestion", "args": {"question": "Which CLI?"}}\n'
+            "</selffork-tool-call>"
+        )
+        runtime = _FakeRuntime(replies=[reply, f"done {DONE_SENTINEL}"])
+        sandbox = _FakeSandbox(workspace_path=str(tmp_path / "ws"))
+        sandbox.configure_exec(lines=[b"output\n"], exit_code=0)
+        agent = _FakeCLIAgent()
+
+        session, _, audit = _build_session(
+            tmp_path,
+            runtime=runtime,
+            sandbox=sandbox,
+            agent=agent,
+        )
+        session._tool_registry = build_default_registry()
+
+        outcome = await session.run()
+        assert outcome == SessionState.COMPLETED
+
+        cats = _categories(audit)
+        # Routing is exclusive: the structured categories appear, the
+        # generic ones do not (no other tool call ran this session).
+        assert "tool.structured_question" in cats
+        assert "tool.structured_answer" in cats
+        assert "tool.call" not in cats
+        assert "tool.result" not in cats
+
+    @pytest.mark.asyncio
     async def test_invalid_tool_call_returns_error_to_jr(
         self,
         tmp_path: Path,

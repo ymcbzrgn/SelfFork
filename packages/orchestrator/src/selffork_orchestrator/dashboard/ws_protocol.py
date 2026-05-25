@@ -70,6 +70,13 @@ WsEventType = Literal[
     "provider_auth_status",  # provider.auth.* / provider.token.* event
     # M6 — Talk surface (ADR-007 §4 S1): operator ↔ Self Jr message.
     "talk.message",
+    # S-Stream (ADR-011 §3.2) — Self Jr token-by-token streaming. Each
+    # ``talk.token`` carries one SSE delta; the stream finalises with a
+    # ``talk.message`` (assistant role) OR a ``talk.error`` (transport /
+    # malformed / stalled) OR a ``talk.cancelled`` (operator hit Stop).
+    "talk.token",
+    "talk.error",
+    "talk.cancelled",
     # M6 — Live Run Theater (ADR-007 §4 S2): workspace 3-pane stream.
     "snapshot",  # full theater state, sent first on WS connect
     "cli.output.append",  # one new CLI output / jr-prompt chunk
@@ -91,6 +98,9 @@ WS_EVENT_TYPES: tuple[WsEventType, ...] = (
     "body_observation",
     "provider_auth_status",
     "talk.message",
+    "talk.token",
+    "talk.error",
+    "talk.cancelled",
     "snapshot",
     "cli.output.append",
     "thought.new",

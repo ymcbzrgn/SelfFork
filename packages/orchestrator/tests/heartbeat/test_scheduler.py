@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 
 from selffork_orchestrator.heartbeat.actions import LegalAction
+from selffork_orchestrator.heartbeat.audit import AuditWriter
 from selffork_orchestrator.heartbeat.config import (
+    DEFAULT_DELIBERATION_BUDGET_SECONDS,
     DEFAULT_RECONCILIATION_SECONDS,
     DEFAULT_TICK_SECONDS,
     DEFAULT_TIMEZONE,
@@ -16,6 +18,7 @@ from selffork_orchestrator.heartbeat.config import (
     build_default_heartbeat,
     build_default_heartbeat_config,
 )
+from selffork_orchestrator.heartbeat.deliberation import DeliberationLayer
 from selffork_orchestrator.heartbeat.scheduler import (
     HeartbeatEvent,
     HeartbeatScheduler,
@@ -23,6 +26,7 @@ from selffork_orchestrator.heartbeat.scheduler import (
     _parse_hhmm,
 )
 from selffork_orchestrator.telegram.inbound_router import PauseSignal
+from selffork_shared.errors import SpeakerStalledError
 
 
 def _enabled_config(**overrides: object) -> HeartbeatConfig:
@@ -36,6 +40,26 @@ def _enabled_config(**overrides: object) -> HeartbeatConfig:
     )
     base.update(overrides)
     return HeartbeatConfig(**base)  # type: ignore[arg-type]
+
+
+@pytest.fixture(autouse=True)
+def _isolate_autonomy_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Point the autonomy YAML store at a per-test tmp path.
+
+    ``build_default_heartbeat`` resolves ``AutonomyStore.default()`` →
+    ``~/.selffork/heartbeat/autonomy.yaml`` — a real file on any machine
+    that has run the daemon (e.g. a persisted ``enabled: true`` from the
+    Settings panel). Without this isolation the "default ⇒ DISABLED"
+    expectation flips to ``INACTIVE`` on such a machine. Redirecting the
+    path keeps every ``build_default_heartbeat`` test hermetic regardless
+    of the developer's / operator's real ~/.selffork state.
+    """
+    monkeypatch.setattr(
+        "selffork_orchestrator.heartbeat.autonomy.default_autonomy_path",
+        lambda: tmp_path / "autonomy.yaml",
+    )
 
 
 # ── lifecycle ─────────────────────────────────────────────────────────
@@ -402,6 +426,84 @@ def test_build_default_heartbeat_always_wires_executor(
     _clear_heartbeat_env(monkeypatch)
     sched = build_default_heartbeat()
     assert sched._executor is not None
+
+
+# ── ADR-011 §3.4 — deliberation budget wiring + stalled integration ──
+
+
+def test_build_default_heartbeat_wires_deliberation_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The per-tick budget reaches the constructed DeliberationLayer."""
+    _clear_heartbeat_env(monkeypatch)
+    monkeypatch.setenv(
+        "SELFFORK_TALK_MODEL_ENDPOINT", "http://127.0.0.1:8080/v1"
+    )
+    monkeypatch.setenv("SELFFORK_TALK_MODEL", "gemma-4-e2b")
+    sched = build_default_heartbeat()
+    assert sched._deliberation is not None
+    assert (
+        sched._deliberation._tick_budget_seconds
+        == DEFAULT_DELIBERATION_BUDGET_SECONDS
+    )
+
+
+def test_build_default_heartbeat_budget_env_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_heartbeat_env(monkeypatch)
+    monkeypatch.setenv(
+        "SELFFORK_TALK_MODEL_ENDPOINT", "http://127.0.0.1:8080/v1"
+    )
+    monkeypatch.setenv("SELFFORK_TALK_MODEL", "gemma-4-e2b")
+    monkeypatch.setenv(
+        "SELFFORK_HEARTBEAT_DELIBERATION_BUDGET_SECONDS", "42"
+    )
+    sched = build_default_heartbeat()
+    assert sched._deliberation is not None
+    assert sched._deliberation._tick_budget_seconds == 42.0
+
+
+@pytest.mark.asyncio
+async def test_decide_tick_records_stalled_and_loop_survives(
+    tmp_path: Path,
+) -> None:
+    """A stalled deliberation degrades to WAIT, audits decision_stalled,
+    and the daemon keeps ticking (the autonomy loop never wedges)."""
+
+    class _StalledSpeaker:
+        async def reply(self, messages: object) -> str:
+            raise SpeakerStalledError("no tokens — wedged")
+
+    pause = PauseSignal(flag_path=tmp_path / "pause.flag")
+    deliberation = DeliberationLayer(speaker=_StalledSpeaker())
+    audit_path = tmp_path / "audit.jsonl"
+    sched = HeartbeatScheduler(
+        config=_enabled_config(),
+        pause_signal=pause,
+        deliberation_layer=deliberation,
+        audit_writer=AuditWriter(path=audit_path),
+    )
+    await sched.start()
+    sched.submit_event(HeartbeatEvent.KANBAN_CHANGED)
+    await asyncio.sleep(0.1)
+
+    decision = sched.last_action_decision
+    assert decision is not None
+    assert decision.action is LegalAction.WAIT
+    assert decision.stalled is True
+
+    # The loop survived the stalled tick — daemon still RUNNING and a
+    # second tick still produces a decision (no wedge).
+    assert sched.state is HeartbeatState.RUNNING
+    sched.submit_event(HeartbeatEvent.KANBAN_CHANGED)
+    await asyncio.sleep(0.1)
+    assert sched.last_action_decision is not None
+    await sched.stop()
+
+    # At least one audit row records the stalled deliberation.
+    entries = list(AuditWriter(path=audit_path).read_all())
+    assert any(e.decision_stalled for e in entries)
 
 
 # ── Faz D executor integration ─────────────────────────────────────

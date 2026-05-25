@@ -59,6 +59,11 @@ class AuditEntry(BaseModel):
     decision_action: str | None = None
     decision_reasoning: str | None = None
     decision_fallback: bool | None = None
+    # ADR-011 §3.4 — True when the fallback WAIT was caused by a slow /
+    # wedged model (idle-token watchdog or per-tick budget), distinct from
+    # an unreachable/unparseable model. Lets a feed/replay surface "the
+    # loop stayed alive through a slow tick" without conflating causes.
+    decision_stalled: bool | None = None
     result_action: str | None = None
     result_outcome: str | None = None
     result_summary: str | None = None
@@ -178,6 +183,9 @@ def build_audit_entry(
         decision_reasoning=decision.reasoning if decision is not None else None,
         decision_fallback=(
             decision.fallback if decision is not None else None
+        ),
+        decision_stalled=(
+            decision.stalled if decision is not None else None
         ),
         result_action=result.action.value if result is not None else None,
         result_outcome=result.outcome if result is not None else None,

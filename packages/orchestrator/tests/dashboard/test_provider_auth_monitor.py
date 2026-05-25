@@ -191,7 +191,12 @@ def _client_and_bridge() -> tuple[TestClient, _RecordingBridge]:
     registry = ProviderRegistry()
     app = FastAPI()
     app.include_router(
-        build_provider_router(registry=registry, auth_monitor=monitor),
+        # ``creds_detector=dict`` (empty map) keeps these registry-focused
+        # tests hermetic — no real keychain subprocess / ~/.codex reads —
+        # so list_providers falls back to the in-memory record status.
+        build_provider_router(
+            registry=registry, auth_monitor=monitor, creds_detector=dict
+        ),
     )
     return TestClient(app), bridge
 

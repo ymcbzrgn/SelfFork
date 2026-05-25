@@ -30,6 +30,7 @@ from selffork_mind.memory.tiers import (
 from selffork_mind.rag.retriever import HybridRetriever
 from selffork_mind.store.base import MindStore
 from selffork_orchestrator.cli_agent.base import CLIAgent
+from selffork_orchestrator.cli_agent.structured_tools import is_structured_question
 from selffork_orchestrator.lifecycle.destructive_guard import (
     DestructiveActionBlockedError,
     check_destructive_action,
@@ -577,7 +578,13 @@ class Session:
         results: list[ToolResult] = []
         for call in calls:
             self._audit.emit(
-                "tool.call",
+                # S8 — route AskUserQuestion-style structured calls to a
+                # distinct category so the activity feed + S-Train can
+                # surface them. ``call_id`` (session+round+order) pairs the
+                # question with its answer event below.
+                "tool.structured_question"
+                if is_structured_question(call.tool)
+                else "tool.call",
                 payload={
                     "round": rounds_completed,
                     "tool": call.tool,
@@ -592,12 +599,18 @@ class Session:
             # additive field the cockpit Chat tab inlines for tool calls
             # — redaction-safe, capped to 5 KB per result.
             self._audit.emit(
-                "tool.result",
+                # S8 — the answer to a structured question lands in the
+                # paired category. ``order`` mirrors the question's
+                # ``order`` so the activity feed groups the Q/A pair.
+                "tool.structured_answer"
+                if is_structured_question(result.tool)
+                else "tool.result",
                 payload={
                     "round": rounds_completed,
                     "tool": result.tool,
                     "status": result.status,
                     "error": result.error,
+                    "order": call.order_in_reply,
                     "payload_keys": list(result.payload or {}),
                     "result_payload_preview": _redact_preview(result.payload),
                 },

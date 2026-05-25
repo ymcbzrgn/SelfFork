@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 
@@ -20,7 +21,7 @@ from selffork_orchestrator.heartbeat.filter import (
     DEFAULT_QUOTA_EXHAUSTION_THRESHOLD_PCT,
     WorldState,
 )
-from selffork_shared.errors import RuntimeUnhealthyError
+from selffork_shared.errors import RuntimeUnhealthyError, SpeakerStalledError
 from selffork_shared.quota import QuotaSnapshot, WindowKind, WindowState
 
 # ── Fixtures ─────────────────────────────────────────────────────────
@@ -43,6 +44,20 @@ class _StubSpeaker:
         self.calls.append([dict(m) for m in messages])
         if self._exception is not None:
             raise self._exception
+        return self._reply_text
+
+
+class _SlowReplySpeaker:
+    """Speaker whose reply sleeps — exercises the per-tick budget timeout."""
+
+    def __init__(
+        self, *, delay_seconds: float, reply_text: str = "{}"
+    ) -> None:
+        self._delay = delay_seconds
+        self._reply_text = reply_text
+
+    async def reply(self, messages: Sequence[Mapping[str, str]]) -> str:
+        await asyncio.sleep(self._delay)
         return self._reply_text
 
 
@@ -181,7 +196,63 @@ async def test_select_speaker_unhealthy_falls_back() -> None:
     )
     assert decision.action is LegalAction.WAIT
     assert decision.fallback is True
+    # Unreachable ≠ stalled — the model was never even contacted.
+    assert decision.stalled is False
     assert "speaker unreachable" in decision.reasoning
+
+
+# ── ADR-011 §3.4 — stalled / per-tick-budget fallbacks ──────────────
+
+
+@pytest.mark.asyncio
+async def test_select_stalled_on_speaker_stalled() -> None:
+    """Idle-token watchdog (SpeakerStalledError) → stalled WAIT."""
+    speaker = _StubSpeaker(
+        exception=SpeakerStalledError("no tokens for 90s — wedged")
+    )
+    layer = DeliberationLayer(speaker=speaker)
+    decision = await layer.select(
+        legal_actions=_FULL_LEGAL, world_state=_state()
+    )
+    assert decision.action is LegalAction.WAIT
+    assert decision.fallback is True
+    assert decision.stalled is True
+    assert "stalled" in decision.reasoning
+
+
+@pytest.mark.asyncio
+async def test_select_stalled_on_budget_exceeded() -> None:
+    """A slow-but-producing model past the per-tick budget → stalled WAIT.
+
+    The autonomy loop must stay responsive: the tick budget cancels the
+    in-flight reply and degrades to a stalled WAIT rather than blocking.
+    """
+    speaker = _SlowReplySpeaker(delay_seconds=5.0)
+    layer = DeliberationLayer(speaker=speaker, tick_budget_seconds=0.2)
+    decision = await asyncio.wait_for(
+        layer.select(legal_actions=_FULL_LEGAL, world_state=_state()),
+        timeout=2.0,  # the budget (0.2s) must fire well before this guard
+    )
+    assert decision.action is LegalAction.WAIT
+    assert decision.fallback is True
+    assert decision.stalled is True
+    assert "budget" in decision.reasoning
+
+
+@pytest.mark.asyncio
+async def test_select_within_budget_succeeds() -> None:
+    """A reply that lands inside the budget is a normal (non-stalled) decision."""
+    speaker = _StubSpeaker(
+        reply_text='{"action": "bekle", "reasoning": "sakin tick"}'
+    )
+    layer = DeliberationLayer(speaker=speaker, tick_budget_seconds=5.0)
+    decision = await layer.select(
+        legal_actions=_FULL_LEGAL, world_state=_state()
+    )
+    assert decision.action is LegalAction.WAIT
+    assert decision.fallback is False
+    assert decision.stalled is False
+    assert decision.reasoning == "sakin tick"
 
 
 @pytest.mark.asyncio

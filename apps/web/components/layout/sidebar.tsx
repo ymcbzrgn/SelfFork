@@ -1,10 +1,12 @@
 /**
  * SelfFork v3 sidebar.
  *
- * Linear v1 left rail. Five top-level destinations; the Workspaces
- * entry is expandable and lists live projects pulled from
- * `listProjects()`. Active workspace gets a green dot. Footer shows
- * Self Jr's online status + model endpoint slug.
+ * Linear v1 left rail. Five top-level destinations; the Workspaces entry is
+ * expandable and lists live projects pulled from `listProjects()`. A "Show
+ * archived" toggle re-fetches with archived workspaces included (rendered
+ * italic + Archive icon). Active workspace gets a green dot. Footer derives
+ * Self Jr's online state from /api/health and the model label from the
+ * configured endpoint — no hardcoded values (S8 no-mock).
  */
 "use client";
 
@@ -12,6 +14,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  Archive,
   ChevronDown,
   Cpu,
   CheckCircle2,
@@ -24,7 +27,13 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { listProjects, type ProjectResponse } from "@/lib/api";
+import { Switch } from "@/components/ui/switch";
+import {
+  getHealth,
+  getModelEndpoint,
+  listProjects,
+  type ProjectResponse,
+} from "@/lib/api";
 
 interface NavItem {
   href: string;
@@ -52,10 +61,16 @@ export function Sidebar() {
   const inWorkspaces = pathname.startsWith("/workspaces");
   const [projects, setProjects] = useState<ProjectResponse[]>([]);
   const [open, setOpen] = useState<boolean>(true);
+  const [showArchived, setShowArchived] = useState(false);
+  const [online, setOnline] = useState(true);
+  const [modelLabel, setModelLabel] = useState<string | null>(null);
 
+  // Workspace list — re-fetch whenever the archived filter flips. The
+  // backend ``include_archived`` flag (S7) drives whether archived slugs
+  // come back; default off keeps the rail focused on active work.
   useEffect(() => {
     let cancelled = false;
-    listProjects()
+    listProjects({ include_archived: showArchived })
       .then((p) => {
         if (!cancelled) setProjects(p);
       })
@@ -65,11 +80,46 @@ export function Sidebar() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [showArchived]);
 
   useEffect(() => {
     if (inWorkspaces) setOpen(true);
   }, [inWorkspaces]);
+
+  // Footer health — poll /api/health every 15s (matches the topbar pill).
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        await getHealth();
+        if (!cancelled) setOnline(true);
+      } catch {
+        if (!cancelled) setOnline(false);
+      }
+    };
+    void tick();
+    const id = window.setInterval(() => void tick(), 15_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  // Footer model label — the configured endpoint's model name (or an
+  // honest "no model endpoint" when none is set). No hardcoded slug.
+  useEffect(() => {
+    let cancelled = false;
+    getModelEndpoint()
+      .then((m) => {
+        if (!cancelled) setModelLabel(m.model_name || null);
+      })
+      .catch(() => {
+        if (!cancelled) setModelLabel(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <aside
@@ -135,12 +185,14 @@ export function Sidebar() {
               ) : (
                 projects.map((p) => {
                   const active = pathname === `/workspaces/${p.slug}`;
+                  const archived = p.archived_at !== null;
                   return (
                     <Link
                       key={p.slug}
                       href={`/workspaces/${p.slug}`}
                       className={cn(
                         "py-1 text-caption flex items-center gap-2 transition-colors",
+                        archived && "italic opacity-60",
                         active
                           ? "text-on-surface font-medium"
                           : "text-on-surface-variant hover:text-on-surface",
@@ -149,7 +201,13 @@ export function Sidebar() {
                       {active && (
                         <span className="w-1.5 h-1.5 rounded-full bg-success" />
                       )}
-                      <span>{p.name}</span>
+                      <span className="truncate">{p.name}</span>
+                      {archived && (
+                        <Archive
+                          className="h-3 w-3 ml-auto text-on-surface-variant"
+                          strokeWidth={1.75}
+                        />
+                      )}
                     </Link>
                   );
                 })
@@ -161,6 +219,21 @@ export function Sidebar() {
                 <Plus className="h-3 w-3" strokeWidth={2} />
                 <span>New project</span>
               </Link>
+              <div className="flex items-center justify-between pt-1">
+                <label
+                  htmlFor="show-archived"
+                  className="flex items-center gap-1.5 text-[10px] text-on-surface-variant/70 cursor-pointer"
+                >
+                  <Archive className="h-3 w-3" strokeWidth={1.75} />
+                  Show archived
+                </label>
+                <Switch
+                  id="show-archived"
+                  checked={showArchived}
+                  onCheckedChange={setShowArchived}
+                  className="scale-75"
+                />
+              </div>
             </div>
           )}
         </div>
@@ -191,12 +264,19 @@ export function Sidebar() {
             <Cpu className="h-3.5 w-3.5" strokeWidth={1.75} />
             <span>
               Self Jr ·{" "}
-              <span className="text-success font-bold">● Online</span>
+              <span
+                className={cn(
+                  "font-bold",
+                  online ? "text-success" : "text-error",
+                )}
+              >
+                ● {online ? "Online" : "Offline"}
+              </span>
             </span>
           </div>
           <div className="flex items-center gap-2 font-mono text-[11px] text-on-surface-variant">
             <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-            <span>gemma-4 @ mac</span>
+            <span className="truncate">{modelLabel ?? "no model endpoint"}</span>
           </div>
         </div>
       </div>

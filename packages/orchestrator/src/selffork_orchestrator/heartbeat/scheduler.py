@@ -442,6 +442,11 @@ class HeartbeatScheduler:
                     if self._last_action_decision is not None
                     else None
                 ),
+                "stalled": (
+                    self._last_action_decision.stalled
+                    if self._last_action_decision is not None
+                    else None
+                ),
                 "outcome": (
                     self._last_action_result.outcome
                     if self._last_action_result is not None

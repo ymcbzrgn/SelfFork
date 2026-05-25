@@ -160,12 +160,78 @@ export function getHealth(): Promise<DashboardHealth> {
   return request<DashboardHealth>("/api/health");
 }
 
+export interface CodexBarStatusResponse {
+  state: string;
+  binary: string | null;
+  base_url: string | null;
+  port: number | null;
+  fail_reason: string | null;
+}
+
+export function getCodexBarStatus(): Promise<CodexBarStatusResponse> {
+  return request<CodexBarStatusResponse>("/api/codexbar/status");
+}
+
 export function listPausedSessions(): Promise<PausedSession[]> {
   return request<PausedSession[]>("/api/sessions/paused");
 }
 
 export function listRecentSessions(): Promise<RecentSession[]> {
   return request<RecentSession[]>("/api/sessions/recent");
+}
+
+// ── Activity feed — S8 (ADR-007 §4 S8) ───────────────────────────────────────
+
+export type ActivityKind =
+  | "session_started"
+  | "session_ended"
+  | "tool_call"
+  | "tool.structured_question"
+  | "tool.structured_answer"
+  | "heartbeat_tick"
+  | "destructive_confirm_requested"
+  | "destructive_confirm_resolved"
+  | "telegram_inbound"
+  | "telegram_outbound"
+  | "project_archived"
+  | "project_unarchived"
+  | "project_paused"
+  | "project_resumed";
+
+export interface ActivityRow {
+  id: string;
+  ts: string;
+  seq_id: number;
+  event_kind: ActivityKind;
+  summary: string;
+  intent: string | null;
+  project_slug: string | null;
+  session_id: string | null;
+  correlation_id: string | null;
+  payload: Record<string, unknown>;
+  severity: "info" | "warn" | "error";
+}
+
+export interface ActivityResponse {
+  rows: ActivityRow[];
+  has_more: boolean;
+}
+
+export function getActivity(options?: {
+  limit?: number;
+  since?: string;
+  before?: string;
+  project_slug?: string;
+  event_kind?: string;
+}): Promise<ActivityResponse> {
+  const params = new URLSearchParams();
+  if (options?.limit !== undefined) params.set("limit", String(options.limit));
+  if (options?.since) params.set("since", options.since);
+  if (options?.before) params.set("before", options.before);
+  if (options?.project_slug) params.set("project_slug", options.project_slug);
+  if (options?.event_kind) params.set("event_kind", options.event_kind);
+  const qs = params.toString();
+  return request<ActivityResponse>(`/api/activity${qs ? `?${qs}` : ""}`);
 }
 
 export function getSessionEvents(sessionId: string): Promise<AuditEvent[]> {
@@ -924,8 +990,55 @@ export interface ConversationThreadResponse {
 export interface TalkSendResponse {
   conversation_id: string;
   operator_message: TalkMessageResponse;
+  // Under ADR-011 (S-Stream) the reply streams over the WS — it is not
+  // returned by POST /send. `reply` stays in the type for back-compat
+  // but is `null` in the streaming path.
   reply: TalkMessageResponse | null;
-  speaker_status: "ok" | "offline" | "not_configured";
+  speaker_status: "streaming" | "not_configured" | "ok" | "offline";
+  // Present (non-null) when `speaker_status === "streaming"`: identifies
+  // the background generation so the UI can pair talk.token/.message/
+  // .error/.cancelled frames and cancel via `cancelTalkGeneration`.
+  generation_id: string | null;
+}
+
+export interface TalkCancelResponse {
+  cancelled: boolean;
+  reason: string | null;
+}
+
+/** Payload of a `talk.token` WS envelope — one SSE delta (ADR-011 §3.2). */
+export interface TalkTokenPayload {
+  conversation_id: string;
+  generation_id: string;
+  text: string;
+}
+
+/** Payload of a `talk.error` WS envelope — a failed/stalled generation. */
+export interface TalkErrorPayload {
+  conversation_id: string;
+  generation_id: string;
+  kind: "unhealthy" | "stalled" | "empty_reply" | "internal";
+  detail: string;
+}
+
+/** Payload of a `talk.cancelled` WS envelope — operator hit Stop. */
+export interface TalkCancelledPayload {
+  conversation_id: string;
+  generation_id: string;
+  partial_text: string;
+  message: TalkMessagePayload | null;
+}
+
+/** Payload of a `talk.message` WS envelope (operator or final self_jr). */
+export interface TalkMessagePayload {
+  conversation_id: string;
+  message_id: string;
+  seq: number;
+  role: "operator" | "self_jr";
+  content: string;
+  created_at: string;
+  // Present on the final assistant message of a streaming generation.
+  generation_id?: string;
 }
 
 export function listTalkConversations(): Promise<ConversationResponse[]> {
@@ -957,6 +1070,19 @@ export function talkStreamUrl(conversationId: string): string {
 
 export function openTalkStream(conversationId: string): WebSocket {
   return new WebSocket(talkStreamUrl(conversationId));
+}
+
+/** Stop an in-flight streaming reply (ADR-011 §3.4 Stop button). */
+export function cancelTalkGeneration(
+  conversationId: string,
+  generationId: string,
+): Promise<TalkCancelResponse> {
+  return request<TalkCancelResponse>(
+    `/api/talk/conversations/${encodeURIComponent(
+      conversationId,
+    )}/cancel-generation/${encodeURIComponent(generationId)}`,
+    { method: "POST" },
+  );
 }
 
 // ── Heartbeat (S-Auto Faz G) ─────────────────────────────────────

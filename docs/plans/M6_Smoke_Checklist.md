@@ -1411,3 +1411,166 @@ Theater "Switch CLI" dialog, Talk `/cli`, Telegram `/cli`. Backend
   current revert-on-failure pratik ama gerçek atomicity yok.
 - **CSS bundle audit** for @uiw/react-md-editor (dynamic import yapılsa da
   top-level CSS imports bundle'a sızabilir; Next.js trace ile ölçüm gerekli).
+
+## S8 — Dashboard Activity + Final Cleanup (Wave 2 · ADR-007 §4 S8)
+
+### Ön-Koşullar
+- [ ] `selffork ui` çalışıyor; dashboard `/` açılıyor.
+- [ ] `~/.selffork/audit/` (orphan) + `~/.selffork/projects/<slug>/audit/`
+      + `~/.selffork/heartbeat/audit.jsonl` mevcut olabilir (audit data
+      toplanmışsa). Boşsa feed dürüst empty döner — mock YOK.
+
+### Senaryo a — `/api/activity` aggregate
+- [ ] `GET /api/activity` → `{rows, has_more}`; rows ts-DESC.
+- [ ] Boş sistem → `{"rows": [], "has_more": false}` (no-mock).
+- [ ] Dört kaynak birleşiyor: session audit (orphan + per-project) +
+      heartbeat audit + activity.jsonl (project mutations) + Telegram ring.
+- [ ] `?limit=` 200'de cap'lenir; `?since=` / `?before=` ts penceresi;
+      `?project_slug=` / `?event_kind=` filtreler.
+- [ ] `?event_kind=project_archived` → yalnız o kind döner; heartbeat/session
+      kaynakları okunmaz (short-circuit, çıktı değişmez —
+      `test_event_kind_filter_excludes_other_sources`).
+- [ ] >120 session dosyası → `has_more=true` (file-cap truncation sinyali —
+      audit-god MAJOR #1 fix, `test_file_cap_truncation_flags_has_more`).
+
+### Senaryo b — Dashboard "Recent activity" wire
+- [ ] Dashboard `/` ActivityFeedItem'ları gerçek `/api/activity`'den çekiyor
+      (mount + 10s poll, operator pick).
+- [ ] 14-kind ikon eşlemesi: session_started/ended, tool_call,
+      tool.structured_question (❓) / answer (✅), heartbeat_tick,
+      destructive_confirm_*, telegram_in/out, project_*.
+- [ ] severity rengi (info/warn/error) + intent ikinci satır + project pill.
+- [ ] Boş → honest empty state ("No activity yet…").
+
+### Senaryo c — AskUserQuestion mini-prereq (structured tool detection)
+- [ ] Self Jr bir `<selffork-tool-call>{tool:"AskUserQuestion"}` emit ederse
+      audit category `tool.structured_question` (call) +
+      `tool.structured_answer` (result) yazılır; generic `tool.call` /
+      `tool.result` YAZILMAZ (exclusive routing —
+      `test_structured_tool_call_audited_distinctly`).
+- [ ] Detection isim-tabanlı + CLI-agnostic: AskUserQuestion /
+      ask_user_question / askUserQuestion → dört CLI'nin (claude-code /
+      codex / gemini-cli / opencode) hangisi emit ederse yakalanır.
+- [ ] Activity feed'de Q + A `correlation_id` (session:round:order) ile
+      eşleşip yan yana görünür.
+- [ ] **Bu bridge DEĞİL** — interactive round-trip S-Bridge sprint'i.
+
+### Senaryo d — Topbar wiring (0 dead button)
+- [ ] Title button → page-specific DropdownMenu (usePathname): Dashboard/
+      Talk/Connections/Settings universal (palette + shortcuts + reload);
+      Workspace ek olarak switch/edit/pause/archive (selffork:workspace:*).
+- [ ] Search pill / "Open command palette" / ⌘K → `selffork:open-palette`
+      → **mounted** CommandPalette açılır (audit-god MAJOR #1 fix; AppShell'e
+      mount edildi).
+- [ ] Bell → PendingSheet (global pending confirmations, Approve/Deny);
+      badge count resolve sonrası refresh.
+- [ ] ServerCog → SystemStatusSheet (API + Model + Heartbeat + Telegram +
+      CodexBar; paralel fetch, fail → honest Offline/Unknown).
+- [ ] HelpCircle / `?` tuşu → HelpOverlay (verified keyboard shortcuts).
+
+### Senaryo e — Sidebar wiring
+- [ ] Footer "● Online" → `/api/health` derive (offline → kırmızı);
+      model satırı → `getModelEndpoint().model_name` (yoksa "no model
+      endpoint") — hardcoded "gemma-4 @ mac" SİLİNDİ.
+- [ ] "Show archived" Switch → `listProjects({include_archived:true})`;
+      archived workspace'ler italic + Archive ikon.
+
+### Senaryo f — Command palette (v3 IA)
+- [ ] ⌘K açılır; Navigate grubu Dashboard/Workspaces/Talk/Connections/
+      Settings (v3 route'lar, eski `/projects/`·`/project/?slug=`·`/run/`
+      DEĞİL — audit-god INFO #3 fix).
+- [ ] Workspaces grubu her proje → `/workspaces/<slug>`.
+- [ ] "Keyboard shortcuts" → HelpOverlay (selffork:show-shortcuts).
+
+### Senaryo g — Cross-surface
+- [ ] Workspaces grid'de bir kart → `/talk?workspace=<slug>` → Talk o
+      workspace context'iyle açılır (audit-god MEDIUM #2 fix; eskiden param
+      yok sayılıp ilk projeye düşüyordu).
+
+### Senaryo h — 5-ekran dead-button taraması
+- [ ] Dashboard / Workspace / Talk / Connections / Settings + Topbar +
+      Sidebar — her interaktif kontrol gerçek handler'a bağlı; dispatch
+      edilen her `selffork:*` event'in canlı listener'ı var. Dead = 0.
+- [ ] Talk composer'daki disabled "coming soon" Paperclip SİLİNDİ.
+
+### Senaryo i — Full sweep
+- [ ] `pytest packages/{mind,orchestrator,body}/tests -q` → 2180 passed.
+- [ ] `ruff check packages/ apps/web` clean.
+- [ ] `mypy packages/{orchestrator,body,mind,shared}/src` → Success (254).
+- [ ] `cd apps/web && npx tsc --noEmit` clean.
+
+### Senaryo j — Audit-god rigorous review (S8 Faz F)
+- [ ] 3 paralel audit-god (backend / frontend / dead-button kapsam). 0
+      CRITICAL. Bulgular fix'lendi:
+  - MAJOR (backend) file-cap truncation → `has_more` + regression test.
+  - MAJOR (backend) seq_id cursor over-promise → honest docstring.
+  - MAJOR (frontend/dead-button) CommandPalette hiç mount edilmemiş →
+    AppShell'e mount + route'lar v3 IA.
+  - MINOR event_kind source short-circuit + regression test.
+  - MINOR `import json` module-top.
+  - MINOR superseded `keyboard-shortcuts-overlay.tsx` SİLİNDİ (help-overlay
+    yerine geçti).
+  - MINOR system-status sequential → parallel fetch.
+  - MEDIUM talk `?workspace=` param honored.
+  - INFO payload redaction (inherited audit-layer limit; write-time
+    key-redaction zaten var; UI payload render etmiyor) — noted.
+
+### Senaryo k — Commit-ready
+- [ ] Memory `project_s8_complete_2026_05_25.md` + MEMORY.md pointer.
+- [ ] ADR-007 §4 S8 "✅ done" damgası + audit özeti.
+- [ ] Commit message draft operatöre sunuldu; onay sonrası tek commit
+      (MANDATE 1 — operatör commit).
+
+### S8 sonrası deferred
+- WS push for activity feed (şu an 10s HTTP poll yeterli; WS S-Bridge sonrası).
+- Action commands in command palette (tool-call round-trip → S-Bridge).
+- Activity feed payload-expand UI (raw payload row response'ta var, UI henüz
+  render etmiyor).
+- Gerçek `(ts, id)` cursor (şu an `before` coarse-to-ms; dashboard full-replace
+  poll kullandığı için cursor pagination gerekmiyor).
+- Interactive structured-tool bridge (S-Bridge — bu sprint sadece tag+count).
+
+---
+
+## § S-Stream — Self Jr Slow-Inference Resilience (ADR-011)
+
+> Tüm Self Jr inference seam'leri streaming + non-blocking + no-premature-hang.
+> Operatör'ün CPU dağıtımında yanıt saatler sürebilir; bu senaryolar "yavaş ama
+> canlı" davranışı + cancel + wrong-runtime tespitini doğrular. DOĞRU spawn:
+> `python -m mlx_vlm.server --model FakeRockert543/gemma-4-e2b-it-MLX-4bit --host 127.0.0.1 --port 8081`.
+
+### Senaryo a — Talk yavaş yanıt token-token akar (no hang)
+- [ ] mlx_vlm.server + backend + dev frontend ayakta (model-endpoint :8081/v1).
+- [ ] Talk'tan mesaj gönder → `POST /api/talk/send` **anında** döner
+      (`speaker_status="streaming"`, `generation_id` set; reply=null).
+- [ ] Operatör mesajı hemen görünür; ardından Self Jr balonu **token token büyür**
+      (`generating… (N tokens · M s)` artıyor). UI sonsuza "thinking" yazmıyor.
+- [ ] Yanıt bitince balon final `talk.message` ile sabitlenir (içerik = akan metin).
+
+### Senaryo b — Stop butonu generation'ı iptal eder
+- [ ] Uzun bir yanıt akarken **Stop** bas → `talk.cancelled` gelir; kısmi metin
+      "self_jr" mesajı olarak korunur (uydurma tamamlama YOK). Yeni mesaj gönderilebilir.
+
+### Senaryo c — Wrong-runtime tespiti (mlx_lm-on-VLM hang sınıfı)
+- [ ] `SELFFORK_MLX_WARMUP=true` ile MlxServerRuntime spawn (owned mode) → doğru
+      `mlx_vlm.server` ise warmup token üretir, başlatma geçer.
+- [ ] (Negatif) Endpoint yanlış runtime'a (`mlx_lm.server`) işaret ederse warmup
+      `RuntimeMisconfiguredError` + canonical-spawn mesajı verir — sonsuz sessiz
+      hang YOK.
+
+### Senaryo d — Heartbeat yavaş tick loop'u kilitlemiyor
+- [ ] `SELFFORK_HEARTBEAT_ENABLED=true` + yavaş/wedged model → bir tick'te
+      deliberation idle-watchdog veya per-tick budget'ı aşar → audit satırında
+      `decision_stalled=true` + honest `WAIT`. Autonomy loop bir sonraki tick'e
+      sağ geçer (wedge YOK).
+
+### Senaryo e — Full sweep
+- [ ] `pytest packages/{mind,orchestrator,body}/tests -q` yeşil.
+- [ ] `ruff check packages/ apps/web` temiz · `mypy` Success · `tsc --noEmit` = 0.
+- [ ] Audit-god (S-Stream) 0 CRITICAL.
+
+### S-Stream sonrası deferred
+- Round-loop UI'da token streaming (şu an `chat()` aggregator; Theater token
+  akışı ileride — round-loop CLI çıktısı zaten ayrı stream).
+- Adaptive stall_seconds (donanım profiline göre otomatik ayar) — şimdilik sabit
+  default + env override.

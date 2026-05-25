@@ -11,11 +11,15 @@ for any pillar/feature that doesn't yet have a backend artifact.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
 __all__ = [
     "ActiveBranchPayload",
+    "ActivityKind",
+    "ActivityResponse",
+    "ActivityRow",
     "AuditEvent",
     "BranchResponse",
     "CardCreatePayload",
@@ -44,6 +48,7 @@ __all__ = [
     "RecentSession",
     "RunRequestPayload",
     "RunRequestResponse",
+    "TalkCancelResponse",
     "TalkMessageResponse",
     "TalkSendPayload",
     "TalkSendResponse",
@@ -464,13 +469,115 @@ class TalkSendPayload(BaseModel):
 class TalkSendResponse(_StrictResponse):
     """Response from ``POST /api/talk/send``.
 
-    ``reply`` is ``None`` when the Speaker endpoint is unreachable or
-    unconfigured; ``speaker_status`` (``ok`` | ``offline`` |
-    ``not_configured``) tells the cockpit which honest empty state to
-    render instead of a fabricated reply.
+    Under ADR-011 (S-Stream) the Self Jr reply streams asynchronously over
+    the Talk WebSocket; ``POST /send`` returns as soon as the operator
+    message persists and the generation task is enqueued — it does NOT
+    wait for the reply to land. ``speaker_status`` distinguishes which
+    state the cockpit should render:
+
+    * ``"streaming"`` — the operator message persisted, a background
+      generation task is now running, and ``generation_id`` is set so the
+      cockpit can cancel via ``POST .../cancel-generation/{gid}`` and
+      pair the forthcoming ``talk.token`` / ``talk.message`` /
+      ``talk.error`` / ``talk.cancelled`` envelopes back to this request.
+      ``reply`` is ``None`` (the assistant message arrives over the WS).
+    * ``"not_configured"`` — no Speaker endpoint is configured; ``reply``
+      is ``None`` and ``generation_id`` is ``None``.
+
+    The historic ``"ok"`` / ``"offline"`` values are no longer produced by
+    the streaming path — transport failures arrive as ``talk.error``
+    envelopes over the WebSocket instead, so this response can return
+    immediately even when the upstream model is wedged.
     """
 
     conversation_id: str
     operator_message: TalkMessageResponse
     reply: TalkMessageResponse | None
     speaker_status: str
+    generation_id: str | None = None
+
+
+class TalkCancelResponse(_StrictResponse):
+    """Response from ``POST /api/talk/conversations/{cid}/cancel-generation``.
+
+    ``cancelled`` is ``True`` when a matching active generation was found
+    and signalled to stop; ``False`` when no active task matched (already
+    done, never started, or unknown id). ``reason`` carries a short
+    human-readable explanation suitable for an honest toast in the
+    cockpit (``"cancelled"`` / ``"unknown_generation"`` / ``"already_done"``).
+    """
+
+    cancelled: bool
+    reason: str | None = None
+
+
+# ── Activity feed — S8 (ADR-007 §4 S8) ───────────────────────────────────────
+
+
+ActivityKind = Literal[
+    "session_started",
+    "session_ended",
+    "tool_call",
+    "tool.structured_question",
+    "tool.structured_answer",
+    "heartbeat_tick",
+    "destructive_confirm_requested",
+    "destructive_confirm_resolved",
+    "telegram_inbound",
+    "telegram_outbound",
+    "project_archived",
+    "project_unarchived",
+    "project_paused",
+    "project_resumed",
+]
+"""Closed taxonomy of dashboard activity rows — the ``event_kind``
+discriminator on :class:`ActivityRow` (Letta ``message_type`` pattern). A
+kind is added here only when a real on-disk/in-memory source emits it; no
+speculative entries (no-mock rule)."""
+
+
+class ActivityRow(_StrictResponse):
+    """One row in ``GET /api/activity`` (S8 — ADR-007 §4 S8).
+
+    Source-of-truth: :mod:`selffork_orchestrator.dashboard.activity` merges
+    four real sources — session audit JSONL (orphan + per-project), the
+    heartbeat audit log, the dashboard activity log (project mutations), and
+    the in-memory Telegram activity ring — into one chronological feed. Every
+    row derives from an artifact; nothing is fabricated.
+
+    Flat shape with an ``event_kind`` discriminator (Letta ``LettaMessage``
+    pattern) rather than 14 subclasses — the feed is heterogeneous-by-row and
+    the UI groups visually by ``correlation_id`` (e.g. a
+    ``tool.structured_question`` and its ``tool.structured_answer``).
+    ``intent`` carries the *why* when the source records it (heartbeat
+    reasoning, destructive command summary) — the git-context-controller
+    decision-log lift.
+    """
+
+    id: str
+    ts: datetime
+    seq_id: int
+    """Epoch-milliseconds of ``ts`` — a sortable ordering value, NOT a unique
+    cursor (rows from different sources can share a millisecond). ``?before=
+    <iso ts>`` pages to an older window, coarse to the millisecond; the unique,
+    stable ``id`` is what clients use to de-duplicate rows across polls."""
+
+    event_kind: ActivityKind
+    summary: str
+    intent: str | None
+    project_slug: str | None
+    session_id: str | None
+    correlation_id: str | None
+    payload: dict[str, object]
+    severity: Literal["info", "warn", "error"]
+
+
+class ActivityResponse(_StrictResponse):
+    """Body of ``GET /api/activity`` — rows DESC by ``ts``.
+
+    ``has_more`` is ``True`` when the merge produced more rows than the
+    requested ``limit`` (page with ``?before=`` using the last row's ``ts``).
+    """
+
+    rows: list[ActivityRow]
+    has_more: bool

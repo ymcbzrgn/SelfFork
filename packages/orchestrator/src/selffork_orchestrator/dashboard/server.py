@@ -35,12 +35,20 @@ if TYPE_CHECKING:
         TelegramConfig,
         YamlSettingsStore,
     )
+from selffork_orchestrator.dashboard.activity import (
+    aggregate_activity,
+    append_dashboard_activity,
+    default_activity_log_path,
+    default_heartbeat_audit_path,
+)
 from selffork_orchestrator.dashboard.audit_reader import (
     list_recent_sessions,
     read_session_events,
     tail_session_events,
 )
 from selffork_orchestrator.dashboard.schemas import (
+    ActivityResponse,
+    ActivityRow,
     AuditEvent,
     CardCreatePayload,
     CardMovePayload,
@@ -91,6 +99,11 @@ _log = get_logger(__name__)
 # Number of recent sessions returned by ``GET /api/sessions/recent``.
 # 50 is enough for a dashboard list without paginating.
 _RECENT_LIMIT = 50
+
+# Hard cap on ``GET /api/activity?limit=`` so an always-open dashboard card
+# can't request unbounded aggregation work (S8 — the Letta feed leaves its
+# limit unbounded; ours is capped for a dashboard always polling).
+_ACTIVITY_MAX_LIMIT = 200
 
 # How often the kanban WebSocket re-reads the board file. 0.5s feels
 # instant in the UI without thrashing the disk for an idle project.
@@ -329,6 +342,10 @@ def build_app(config: DashboardConfig) -> FastAPI:
         cli_affinity_provider = getattr(
             _app.state, "cli_affinity_provider", None
         )
+        # S-Stream (ADR-011) — the Talk router spawns background generation
+        # tasks via asyncio.create_task; teardown cancels any in-flight ones
+        # so a shutdown doesn't orphan a streaming reply mid-token.
+        talk_router_state = getattr(_app.state, "talk_router_state", None)
         try:
             # S-Quota Faz B/E — boot the CodexBar sidecar first so the
             # secondary quota source is up before anything starts serving
@@ -396,7 +413,13 @@ def build_app(config: DashboardConfig) -> FastAPI:
                     _log.exception("heartbeat_start_failed")
             yield
         finally:
-            # Heartbeat stops first — releases the outer loop cleanly
+            # Talk streaming tasks first — cancel any in-flight Self Jr
+            # generation so it doesn't write to a store that's about to
+            # close (ADR-011). ``teardown`` is idempotent.
+            if talk_router_state is not None:
+                with contextlib.suppress(Exception):
+                    await talk_router_state.teardown()
+            # Heartbeat stops next — releases the outer loop cleanly
             # before its dependencies (Telegram outbound bridge,
             # CodexBar quota reader) tear down. ``stop`` is idempotent
             # and preserves the ``DISABLED`` terminal state.
@@ -658,12 +681,14 @@ def build_app(config: DashboardConfig) -> FastAPI:
         if talk_endpoint
         else None
     )
-    app.include_router(
-        build_talk_router(
-            talk_db_path=config.talk_db_path,
-            speaker=talk_speaker,
-        ),
+    talk_router = build_talk_router(
+        talk_db_path=config.talk_db_path,
+        speaker=talk_speaker,
     )
+    # Stash the router state so the lifespan can cancel in-flight Self Jr
+    # streaming tasks on shutdown (ADR-011 S-Stream).
+    app.state.talk_router_state = talk_router.state  # type: ignore[attr-defined]
+    app.include_router(talk_router)
 
     # S3 Phase D — Telegram drafts queue surface for the Talk page banner.
     _register_drafts_routes(app)
@@ -994,6 +1019,48 @@ def _register_api_routes(app: FastAPI, config: DashboardConfig) -> None:
 
         return await anyio.to_thread.run_sync(_collect)
 
+    @app.get("/api/activity", response_model=ActivityResponse)
+    async def activity(
+        limit: int = 50,
+        since: datetime | None = None,
+        before: datetime | None = None,
+        project_slug: str | None = None,
+        event_kind: str | None = None,
+    ) -> ActivityResponse:
+        """Aggregate recent activity across all four CLIs' sessions, the
+        heartbeat tick log, project mutations, and the Telegram bridge —
+        ADR-007 §4 S8.
+
+        No-mock: every row derives from a real audit/activity artifact, so
+        an idle system returns an empty feed. ``limit`` is capped server-
+        side (Letta's feed leaves its limit unbounded; a dashboard card
+        polling every 10 s must not be able to request unbounded work).
+        ``since`` / ``before`` bound the ts window; ``project_slug`` /
+        ``event_kind`` filter the merged rows.
+        """
+        capped = max(1, min(limit, _ACTIVITY_MAX_LIMIT))
+        telegram_log = getattr(app.state, "telegram_activity_log", None)
+        telegram_snapshot = (
+            telegram_log.snapshot() if telegram_log is not None else None
+        )
+
+        def _aggregate() -> tuple[list[ActivityRow], bool]:
+            return aggregate_activity(
+                audit_dir=config.audit_dir,
+                projects_root=config.projects_root,
+                heartbeat_audit_path=default_heartbeat_audit_path(config.audit_dir),
+                activity_log_path=default_activity_log_path(config.audit_dir),
+                telegram_activity=telegram_snapshot,
+                limit=capped,
+                since=since,
+                before=before,
+                project_slug=project_slug,
+                event_kind=event_kind,
+            )
+
+        rows, has_more = await anyio.to_thread.run_sync(_aggregate)
+        return ActivityResponse(rows=rows, has_more=has_more)
+
     @app.get(
         "/api/sessions/{session_id}/events",
         response_model=list[AuditEvent],
@@ -1297,6 +1364,14 @@ def _register_api_routes(app: FastAPI, config: DashboardConfig) -> None:
                 )
             except ConfigError as exc:
                 raise HTTPException(status_code=404, detail=str(exc)) from exc
+            with contextlib.suppress(OSError):
+                append_dashboard_activity(
+                    default_activity_log_path(config.audit_dir),
+                    category="project_archived",
+                    summary=f"Workspace '{project.name}' archived",
+                    project_slug=slug,
+                    payload={"name": project.name},
+                )
             return _project_to_response(project, _counts_for(store, slug))
 
         return await anyio.to_thread.run_sync(_archive)
@@ -1315,6 +1390,14 @@ def _register_api_routes(app: FastAPI, config: DashboardConfig) -> None:
                 project = store.update_meta(slug, archived_at=None)
             except ConfigError as exc:
                 raise HTTPException(status_code=404, detail=str(exc)) from exc
+            with contextlib.suppress(OSError):
+                append_dashboard_activity(
+                    default_activity_log_path(config.audit_dir),
+                    category="project_unarchived",
+                    summary=f"Workspace '{project.name}' unarchived",
+                    project_slug=slug,
+                    payload={"name": project.name},
+                )
             return _project_to_response(project, _counts_for(store, slug))
 
         return await anyio.to_thread.run_sync(_unarchive)
@@ -1351,6 +1434,14 @@ def _register_api_routes(app: FastAPI, config: DashboardConfig) -> None:
                 project = store.update_meta(slug, autopilot_paused=True)
             except ConfigError as exc:
                 raise HTTPException(status_code=404, detail=str(exc)) from exc
+            with contextlib.suppress(OSError):
+                append_dashboard_activity(
+                    default_activity_log_path(config.audit_dir),
+                    category="project_paused",
+                    summary=f"Self Jr paused for workspace '{project.name}'",
+                    project_slug=slug,
+                    payload={"name": project.name},
+                )
             return _project_to_response(project, _counts_for(store, slug))
 
         return await anyio.to_thread.run_sync(_pause)
@@ -1369,6 +1460,14 @@ def _register_api_routes(app: FastAPI, config: DashboardConfig) -> None:
                 project = store.update_meta(slug, autopilot_paused=False)
             except ConfigError as exc:
                 raise HTTPException(status_code=404, detail=str(exc)) from exc
+            with contextlib.suppress(OSError):
+                append_dashboard_activity(
+                    default_activity_log_path(config.audit_dir),
+                    category="project_resumed",
+                    summary=f"Self Jr resumed for workspace '{project.name}'",
+                    project_slug=slug,
+                    payload={"name": project.name},
+                )
             return _project_to_response(project, _counts_for(store, slug))
 
         return await anyio.to_thread.run_sync(_resume)

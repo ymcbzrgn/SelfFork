@@ -550,7 +550,28 @@ extraction+abstention green; PerLTQA + LoCoMo Faz G+ ileride.
 (2) Hybrid T-pool split, (3) Heartbeat idle + threshold trigger,
 (4) ADR-009 yeni dosya.
 
-### S8 — Dashboard Activity + Final Cleanup
+### S8 — Dashboard Activity + Final Cleanup ✅ done (2026-05-25)
+
+> Memory: [[s8-complete-2026-05-25]] · Smoke: `M6_Smoke_Checklist.md` § S8
+> Tests: +25 (TestActivity + TestStructuredTools + session structured-routing)
+> → 2180 backend green; ruff (packages + apps/web) + mypy (254 files) + tsc clean.
+>
+> `/api/activity` 4-source aggregate (session audit JSONL orphan+per-project +
+> heartbeat audit + project-mutation `activity.jsonl` + Telegram ring) → a
+> 14-kind Letta-style discriminated feed; dashboard hero card 10s poll; honest
+> empty (no-mock); `_MAX_SESSION_FILES` cap → `has_more`. AskUserQuestion
+> mini-prereq: CLI-agnostic (`AskUserQuestion`/`ask_user_question`/
+> `askUserQuestion`) structured-tool detection → `tool.structured_question` /
+> `tool.structured_answer` audit categories + activity correlation pairing.
+> **NOT the interactive bridge** — that is the S-Bridge sprint; S8 only tags +
+> counts the existing Self Jr `<selffork-tool-call>` path. Topbar: Cmd+K
+> (CommandPalette now mounted in AppShell) + page-specific title dropdown +
+> system-status drawer + help overlay + bell→pending-confirmations. Sidebar:
+> archived filter + health-derived footer (hardcoded slug removed). 5-screen
+> dead-button sweep = 0. Audit-god 3-parallel: **0 CRITICAL** + 3 MAJOR
+> (file-cap→`has_more`, `seq_id` cursor over-promise→honest doc, CommandPalette
+> never mounted) + MINORs — all fixed (+2 regression tests). Commit pending
+> (MANDATE 1 — operator runs `selffork ui`, then commits).
 
 **Hedef:** Son aktivite feed'i + kalan tüm dead button (topbar/sidebar).
 
@@ -572,6 +593,16 @@ satırları) PASS. 5 ekranda dead button = 0.
 
 **Bağımlılık:** S1–S7 (çoğu temizlik önceki sprint'lerin endpoint'lerine
 dayanır).
+
+### S-Stream — Self Jr Slow-Inference Resilience (ADR-011) ✅ done (2026-05-26)
+
+S1-S8 wiring planının parçası DEĞİL — S8 canlı bring-up'ında ortaya çıkan
+sistem-düzeyi sağlamlık açığını kapatan ayrı bir ADR-011 sprint'i (operatör
+direktifi: bu session). Tüm Self Jr inference seam'leri (Talk Speaker · Heartbeat
+deliberation · round-loop `MlxServerRuntime.chat`) artık streaming + non-blocking
++ idle-token-watchdog (premature-timeout YOK) + cancel + wrong-runtime tespiti.
+Detay + implementation record: **`docs/decisions/ADR-011_Inference_Resilience.md` §8**.
+Smoke: `M6_Smoke_Checklist.md § S-Stream`. Pre-M7 + 24/7-agentic-loop ön-koşulu.
 
 ---
 

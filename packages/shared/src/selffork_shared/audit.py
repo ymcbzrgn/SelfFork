@@ -44,6 +44,13 @@ AuditCategory = Literal[
     "agent.spawn_complete",  # child session finished; aggregated back to parent
     "tool.call",  # Jr emitted a <selffork-tool-call> block; we're invoking it
     "tool.result",  # corresponding result returned to Jr's next round
+    # S8 mini-prereq — an AskUserQuestion-style structured-choice tool call
+    # (and its paired result). Detected by name via
+    # ``cli_agent.structured_tools.is_structured_question`` so the dashboard
+    # activity feed surfaces them distinctly and S-Train can over-sample the
+    # reflex. The interactive round-trip itself is S-Bridge, not this.
+    "tool.structured_question",
+    "tool.structured_answer",
     "selffork_jr.reply",  # SelfFork Jr's chat completion output for one round
     "mind.note.write",  # Mind T2 EpisodicWriter or `selffork mind` CLI wrote a Note
     "mind.note.supersede",  # Mind decision superseded (bi-temporal validity stamped)
