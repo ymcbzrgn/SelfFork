@@ -116,6 +116,11 @@ class ToolContext:
     # capability is absent rather than crashing.
     # selffork_orchestrator.tools.structured_question.PendingStructuredQuestionStore
     structured_question_store: object | None = None
+    # S-ToolFleet Faz 0 RAG-over-tools seam — the registry itself, used
+    # by the ``tool_search`` handler to look up deferred specs. Optional
+    # because a test ``ToolContext`` may carry only the tools it needs;
+    # ``tool_search`` returns ``status="unwired"`` when missing.
+    tool_registry: object | None = None  # selffork_orchestrator.tools.base.ToolRegistry
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,6 +181,7 @@ class ToolSpec[A: BaseModel]:
             [ToolContext, A],
             dict[str, Any] | Awaitable[dict[str, Any]],
         ],
+        defer_loading: bool = False,
     ) -> None:
         if not name or " " in name:
             raise ValueError(
@@ -184,6 +190,13 @@ class ToolSpec[A: BaseModel]:
         self.name = name
         self.description = description
         self.args_model: type[A] = args_model
+        # S-ToolFleet Faz 0 RAG-over-tools seam: when ``True``, this
+        # spec is OMITTED from the eager catalog Self Jr sees in its
+        # system prompt and only surfaces after a ``tool_search`` call
+        # retrieves it. Default ``False`` keeps every existing tool
+        # eagerly available — opt-in flag, no behaviour change for
+        # specs that don't set it.
+        self.defer_loading = defer_loading
         # Wrap the typed handler in a BaseModel-typed handler so the
         # registry can store handlers uniformly. Both sync and async
         # handlers are supported — the registry resolves them via
@@ -227,8 +240,16 @@ class ToolRegistry:
     def get(self, name: str) -> ToolSpec[Any] | None:
         return self._tools.get(name)
 
-    def catalog(self) -> list[dict[str, Any]]:
-        """Catalog suitable for injecting into Jr's system prompt."""
+    def catalog(
+        self, *, include_deferred: bool = True,
+    ) -> list[dict[str, Any]]:
+        """Catalog suitable for injecting into Jr's system prompt.
+
+        S-ToolFleet Faz 0: with ``include_deferred=False`` skip specs
+        whose ``defer_loading=True`` is set so the eager system-prompt
+        catalog stays compact. Deferred tools surface only after a
+        ``tool_search`` call retrieves them (RAG-over-tools).
+        """
         return [
             {
                 "name": spec.name,
@@ -236,7 +257,28 @@ class ToolRegistry:
                 "args_schema": spec.json_schema(),
             }
             for spec in self._tools.values()
+            if include_deferred or not spec.defer_loading
         ]
+
+    def eager_names(self) -> list[str]:
+        """Names of tools loaded eagerly into the system prompt.
+
+        S-ToolFleet Faz 0 helper: complement of :meth:`deferred_names`.
+        """
+        return sorted(
+            name for name, spec in self._tools.items()
+            if not spec.defer_loading
+        )
+
+    def deferred_names(self) -> list[str]:
+        """Names of tools that must be retrieved via ``tool_search``."""
+        return sorted(
+            name for name, spec in self._tools.items() if spec.defer_loading
+        )
+
+    def deferred_specs(self) -> list[ToolSpec[Any]]:
+        """ToolSpec instances of every deferred tool (RAG corpus side)."""
+        return [s for s in self._tools.values() if s.defer_loading]
 
     def invoke(self, call: ToolCall, ctx: ToolContext) -> ToolResult:
         """Validate args + invoke a SYNC handler. Always returns a result —

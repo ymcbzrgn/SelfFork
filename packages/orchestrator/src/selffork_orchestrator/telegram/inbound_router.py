@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from selffork_orchestrator.heartbeat.audit import AuditWriter
     from selffork_orchestrator.tools.structured_question import (
         PendingStructuredQuestionStore,
+        SqlitePendingStructuredQuestionStore,
     )
 from selffork_orchestrator.talk.models import Conversation
 from selffork_orchestrator.talk.store import TalkStore
@@ -168,7 +169,11 @@ class InboundRouter:
         cli_override_store: CliOverrideStore | None = None,
         voice_backend: VoiceBackend | None = None,
         audit_writer: AuditWriter | None = None,
-        structured_question_store: PendingStructuredQuestionStore | None = None,
+        structured_question_store: (
+            PendingStructuredQuestionStore
+            | SqlitePendingStructuredQuestionStore
+            | None
+        ) = None,
     ) -> None:
         self._allowlist = allowlist
         self._pending = pending_store

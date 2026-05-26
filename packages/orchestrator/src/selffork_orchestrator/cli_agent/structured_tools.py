@@ -64,6 +64,16 @@ __all__ = [
 # Membership is a hard fact (verified transcript or our own wire contract),
 # never a guess — matching is by exact name so an unrelated tool can't be
 # mis-tagged.
+#
+# **Canonical name (S-ToolFleet Faz 0 F3):** ``AskUserQuestion`` is the ONLY
+# name registered in the SelfFork tool registry; Self Jr's fine-tune corpus
+# emits this spelling. The other two entries exist to AUDIT-route calls
+# observed in third-party CLI transcripts (claude-code/codex) where this
+# module's registry isn't the invocation surface. If Self Jr drifts to
+# snake_case or camelCase, the call lands as ``status="unknown_tool"`` but
+# still routes to ``tool.structured_*`` audit categories — drift is caught,
+# not silently swallowed. See ``test_structured_tool_canonical_is_pascalcase
+# _drift_unknown`` for the pinned invariant.
 STRUCTURED_TOOL_NAMES: frozenset[str] = frozenset(
     {
         "AskUserQuestion",

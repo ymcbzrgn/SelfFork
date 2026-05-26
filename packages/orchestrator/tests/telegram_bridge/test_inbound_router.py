@@ -1062,7 +1062,7 @@ async def test_answer_resolves_pending_question(
     )
     assert outcome.handled is True
     assert entry.correlation_id in outcome.reply
-    stored = structured_question_store.get(entry.correlation_id)
+    stored = await structured_question_store.get(entry.correlation_id)
     assert stored is not None
     assert stored.answer == "ship it"
 
@@ -1094,7 +1094,7 @@ async def test_cancelq_resolves_pending_question(
     )
     assert outcome.handled is True
     assert entry.correlation_id in outcome.reply
-    stored = structured_question_store.get(entry.correlation_id)
+    stored = await structured_question_store.get(entry.correlation_id)
     assert stored is not None and stored.cancelled is True
 
 

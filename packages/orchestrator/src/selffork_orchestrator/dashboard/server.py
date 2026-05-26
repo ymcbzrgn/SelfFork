@@ -369,6 +369,13 @@ def build_app(config: DashboardConfig) -> FastAPI:
         # tasks via asyncio.create_task; teardown cancels any in-flight ones
         # so a shutdown doesn't orphan a streaming reply mid-token.
         talk_router_state = getattr(_app.state, "talk_router_state", None)
+        # S-ToolFleet Faz 0 F4 — periodic cleanup of expired pending
+        # structured questions so a long-lived dashboard process does
+        # not accumulate stale dict entries.
+        structured_question_store = getattr(
+            _app.state, "structured_question_store", None
+        )
+        structured_question_cleanup_task: asyncio.Task[None] | None = None
         try:
             # S-Quota Faz B/E — boot the CodexBar sidecar first so the
             # secondary quota source is up before anything starts serving
@@ -431,6 +438,15 @@ def build_app(config: DashboardConfig) -> FastAPI:
                 expire_task = asyncio.create_task(
                     expire_loop(store=pending_store, interval_seconds=60.0)
                 )
+            if structured_question_store is not None:
+                from selffork_orchestrator.tools.structured_question import (
+                    cleanup_loop as _structured_question_cleanup_loop,
+                )
+
+                structured_question_cleanup_task = asyncio.create_task(
+                    _structured_question_cleanup_loop(structured_question_store),
+                    name="selffork.structured_question_cleanup",
+                )
             # S-Auto Faz A — Heartbeat boots last so the daemon sees a
             # fully-up dependency graph (CodexBar quota signal +
             # Telegram bridge). ``start`` is a no-op when the daemon
@@ -473,6 +489,10 @@ def build_app(config: DashboardConfig) -> FastAPI:
                 expire_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await expire_task
+            if structured_question_cleanup_task is not None:
+                structured_question_cleanup_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await structured_question_cleanup_task
             if ptb_app is not None:
                 with contextlib.suppress(Exception):
                     if ptb_app.updater is not None:
@@ -871,16 +891,18 @@ def _wire_telegram_inbound(
     # stay friendly.
     from selffork_orchestrator.heartbeat.audit import AuditWriter
     from selffork_orchestrator.tools.structured_question import (
-        PendingStructuredQuestionStore,
+        build_structured_question_store,
     )
     from selffork_orchestrator.voice import default_voice_backend
 
-    # S-Bridge CORE — dashboard-local pending structured-question store.
-    # Resolves Telegram ``/answer`` for any pending question registered
-    # in THIS dashboard process. Cross-process resolution (CLI session
-    # in a separate ``selffork run`` process) requires disk-backed
-    # persistence — deferred to S-Bridge follow-up.
-    structured_question_store = PendingStructuredQuestionStore()
+    # S-Bridge CORE + S-ToolFleet Faz 0 F2 — cross-process pending
+    # structured-question store. ``build_structured_question_store()``
+    # picks the SQLite backend when ``SELFFORK_STRUCTURED_QUESTION_DB``
+    # is set so this dashboard process and ``selffork run`` subprocesses
+    # share one DB; without the env, falls back to in-memory (legacy
+    # dashboard-only path — Telegram ``/answer`` only resolves
+    # dashboard-spawned sessions).
+    structured_question_store = build_structured_question_store()
     app.state.structured_question_store = structured_question_store
 
     inbound_router = InboundRouter(

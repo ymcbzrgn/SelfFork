@@ -61,6 +61,7 @@ from selffork_orchestrator.theater.store import TheaterStore, theater_db_path
 from selffork_orchestrator.tmux.factory import build_tmux_driver
 from selffork_orchestrator.tools.structured_question import (
     PendingStructuredQuestionStore,
+    SqlitePendingStructuredQuestionStore,
 )
 from selffork_shared.audit import AuditLogger
 from selffork_shared.config import SelfForkSettings, load_settings
@@ -1589,20 +1590,24 @@ def _humanize_delta(total_seconds: float) -> str:
     return " ".join(parts)
 
 
-def _build_structured_question_store() -> PendingStructuredQuestionStore:
+def _build_structured_question_store() -> (
+    PendingStructuredQuestionStore | SqlitePendingStructuredQuestionStore
+):
     """Build the S-Bridge pending structured-question store for a run.
 
-    Lives in-memory for the session's lifetime. The Telegram inbound
-    side (``/answer`` command) resolves entries via the same instance
-    stashed on ``app.state`` in the dashboard; the CLI ``selffork run``
-    path has its own instance because each ``run`` is a separate
-    process.
+    Faz 0 F2: defers to :func:`build_structured_question_store`. The
+    factory picks the SQLite backend when ``SELFFORK_STRUCTURED_QUESTION_DB``
+    is set so the ``selffork run`` subprocess and the dashboard process
+    can share one DB and Telegram ``/answer`` reaches the CLI subprocess.
+    Unset env ⇒ in-memory store (legacy behaviour: each ``run`` is a
+    separate process with its own instance; Telegram ``/answer`` only
+    resolves dashboard-spawned sessions).
     """
     from selffork_orchestrator.tools.structured_question import (
-        PendingStructuredQuestionStore,
+        build_structured_question_store,
     )
 
-    return PendingStructuredQuestionStore()
+    return build_structured_question_store()
 
 
 def main() -> None:

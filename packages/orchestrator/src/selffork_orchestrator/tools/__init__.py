@@ -27,6 +27,7 @@ from selffork_orchestrator.tools.session import build_session_tools
 from selffork_orchestrator.tools.structured_question import (
     build_ask_user_question_spec,
 )
+from selffork_orchestrator.tools.tool_search import build_tool_search_spec
 
 
 def build_default_registry() -> ToolRegistry:
@@ -35,7 +36,10 @@ def build_default_registry() -> ToolRegistry:
     Kanban + Mind from MVP; M3 Order 4 adds the Jr autopilot fleet (quota
     observation + session lifecycle + act tools); M5 Order 4 adds the body
     pillar surface (10 ``body_*`` tools — driver actions gated by warden);
-    S-Bridge adds ``AskUserQuestion`` (interactive structured-choice).
+    S-Bridge adds ``AskUserQuestion`` (interactive structured-choice);
+    S-ToolFleet Faz 0 adds ``tool_search`` (RAG-over-tools meta-tool for
+    discovering deferred specs once the fleet grows past the eager-prompt
+    ceiling).
     """
     return ToolRegistry(
         specs=[
@@ -48,6 +52,7 @@ def build_default_registry() -> ToolRegistry:
             *build_router_tools(),
             *build_auto_pr_tools(),
             build_ask_user_question_spec(),
+            build_tool_search_spec(),
         ],
     )
 

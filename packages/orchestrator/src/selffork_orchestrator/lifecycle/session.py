@@ -170,6 +170,17 @@ class Session:
         pending_store: PendingConfirmationStore | None = None,
         stuck_detector: StuckDetector | None = None,
         structured_question_store: object | None = None,
+        # S-ToolFleet Faz 0 F1 — round-loop Body access. Heartbeat owns
+        # its own driver via :mod:`heartbeat.executor`; these are the
+        # ToolContext-side wires so a ``<selffork-tool-call>`` issuing
+        # ``body_*`` from Jr's reply can also reach the driver. Default
+        # ``None`` keeps the warden's ``no_warden_wired`` deny intact for
+        # callers that don't boot the Body subsystem (orphan runs,
+        # existing tests, ``selffork run`` pre-S-ToolFleet Faz 1).
+        body_driver: object | None = None,
+        vision_runtime: object | None = None,
+        permission_warden: object | None = None,
+        screenshot_store: object | None = None,
     ) -> None:
         self._session_id = session_id
         self._prd_text = prd_text
@@ -219,6 +230,12 @@ class Session:
         # ``None`` disables detection (existing tests / orphan runs); cli.py
         # injects a live detector so production runs are guarded.
         self._stuck_detector = stuck_detector
+        # S-ToolFleet Faz 0 F1 — Body subsystem references for the
+        # round-loop's ToolContext. See param docs above.
+        self._body_driver = body_driver
+        self._vision_runtime = vision_runtime
+        self._permission_warden = permission_warden
+        self._screenshot_store = screenshot_store
         self._state: SessionState = SessionState.IDLE
         self._failure_reason: str | None = None
         # Rounds the agent loop completed — read after :meth:`run` for the
@@ -700,10 +717,15 @@ class Session:
             proactive_reader=self._proactive_reader,
             launchd_scheduler=self._launchd_scheduler,
             resume_store=self._resume_store,
+            body_driver=self._body_driver,
+            vision_runtime=self._vision_runtime,
+            permission_warden=self._permission_warden,
+            screenshot_store=self._screenshot_store,
             cli_override_store=self._cli_override_store,
             cli_runtime_store=self._cli_runtime_store,
             audit_logger=self._audit,
             structured_question_store=self._structured_question_store,
+            tool_registry=self._tool_registry,
         )
         results: list[ToolResult] = []
         for call in calls:

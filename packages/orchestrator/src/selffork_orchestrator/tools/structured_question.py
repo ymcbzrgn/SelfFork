@@ -38,13 +38,19 @@ Design choices:
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import json
 import logging
 import os
+import sqlite3
 import uuid
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Annotated, Any
 
+import anyio
 from pydantic import BaseModel, ConfigDict, Field
 
 from selffork_orchestrator.tools.base import (
@@ -53,13 +59,18 @@ from selffork_orchestrator.tools.base import (
 )
 
 __all__ = [
+    "DEFAULT_CLEANUP_INTERVAL_SECONDS",
+    "DEFAULT_SQLITE_POLL_INTERVAL_SECONDS",
     "DEFAULT_STRUCTURED_QUESTION_TIMEOUT_SECONDS",
     "AskUserOption",
     "AskUserQuestion",
     "AskUserQuestionArgs",
     "PendingStructuredQuestion",
     "PendingStructuredQuestionStore",
+    "SqlitePendingStructuredQuestionStore",
     "build_ask_user_question_spec",
+    "build_structured_question_store",
+    "cleanup_loop",
     "handle_ask_user_question",
 ]
 
@@ -218,13 +229,19 @@ class PendingStructuredQuestionStore:
             return None
         return entry.answer
 
-    def get(
+    async def get(
         self, correlation_id: str,
     ) -> PendingStructuredQuestion | None:
-        """Read one entry — does NOT remove it from the store."""
+        """Read one entry — does NOT remove it from the store.
+
+        Async (Faz 0 F2) so the in-memory and SQLite stores share one
+        contract — callers can ``await store.get(...)`` regardless of
+        backend. The in-memory implementation is still a constant-time
+        dict access; the ``async`` is for shape consistency only.
+        """
         return self._entries.get(correlation_id)
 
-    def list_pending(self) -> list[PendingStructuredQuestion]:
+    async def list_pending(self) -> list[PendingStructuredQuestion]:
         """Snapshot of every unanswered entry, oldest first."""
         return sorted(
             (e for e in self._entries.values() if not e.event.is_set()),
@@ -258,6 +275,368 @@ class PendingStructuredQuestionStore:
                     extra={"removed": len(expired_ids)},
                 )
             return len(expired_ids)
+
+
+DEFAULT_CLEANUP_INTERVAL_SECONDS: float = 60.0
+
+
+async def cleanup_loop(
+    store: PendingStructuredQuestionStore
+    | SqlitePendingStructuredQuestionStore,
+    interval_seconds: float = DEFAULT_CLEANUP_INTERVAL_SECONDS,
+) -> None:
+    """Periodically purge expired entries from ``store``.
+
+    Mirrors :func:`selffork_orchestrator.telegram.expire_loop.expire_loop`:
+    sweep first, then sleep, with a final sweep on cancellation. Dashboard
+    lifespan owns this loop so a long-lived process doesn't accumulate
+    stale pending dict entries (Faz 0 substrate fix — ``cleanup_expired``
+    had no production caller pre-fix). Transient store failures log and
+    continue so a one-off bug cannot kill the watchdog. Accepts either
+    the in-memory or SQLite-backed store (Faz 0 F2).
+    """
+    if interval_seconds <= 0:
+        msg = "interval_seconds must be positive"
+        raise ValueError(msg)
+    try:
+        while True:
+            try:
+                await store.cleanup_expired()
+            except Exception:  # pragma: no cover — defensive log only
+                _log.exception("structured_question_cleanup_loop_failed")
+            await asyncio.sleep(interval_seconds)
+    except asyncio.CancelledError:
+        with contextlib.suppress(Exception):
+            await store.cleanup_expired()
+        raise
+
+
+# ── SQLite-backed store (cross-process variant) ─────────────────────
+
+
+DEFAULT_SQLITE_POLL_INTERVAL_SECONDS: float = 0.5
+"""How often :class:`SqlitePendingStructuredQuestionStore` re-checks the
+database for an answer while a producer is blocked. 0.5s is fast enough
+for round-loop responsiveness without thrashing the disk; humans rarely
+answer in under a second anyway."""
+
+
+_SQLITE_DDL = """
+CREATE TABLE IF NOT EXISTS pending_structured_questions (
+    correlation_id TEXT PRIMARY KEY,
+    payload_json TEXT NOT NULL,
+    session_id TEXT,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    answer TEXT,
+    answered_at TEXT,
+    cancelled INTEGER NOT NULL DEFAULT 0
+);
+"""
+
+_SQLITE_INDEX_DDL = (
+    "CREATE INDEX IF NOT EXISTS idx_psq_expires_at "
+    "ON pending_structured_questions(expires_at);"
+)
+
+
+class SqlitePendingStructuredQuestionStore:
+    """Cross-process structured-question store backed by SQLite.
+
+    Same async API as :class:`PendingStructuredQuestionStore`. The
+    operational difference: the in-memory store handshakes producer +
+    consumer via an ``asyncio.Event`` that only crosses **inside one
+    process**. ``selffork run`` runs the round-loop in a subprocess but
+    the dashboard process owns Telegram ``/answer`` — without a shared
+    backing store the subprocess never sees the answer (silent
+    timeout). This class writes every pending entry to a SQLite file
+    (default ``~/.selffork/structured_questions.db``) that both
+    processes open; ``wait_for_answer`` polls the row instead of
+    blocking on an event.
+
+    Threading: SQLite calls run inside ``anyio.to_thread.run_sync`` so
+    the dashboard's event loop never blocks on disk I/O. WAL keeps
+    reads non-blocking against the rare write; ``busy_timeout`` waits
+    out brief contention between the two processes.
+    """
+
+    def __init__(
+        self,
+        *,
+        db_path: Path,
+        poll_interval_seconds: float = DEFAULT_SQLITE_POLL_INTERVAL_SECONDS,
+        busy_timeout_ms: int = 5000,
+    ) -> None:
+        if poll_interval_seconds <= 0:
+            msg = "poll_interval_seconds must be positive"
+            raise ValueError(msg)
+        self._db_path = db_path
+        self._poll_interval = poll_interval_seconds
+        self._busy_timeout_ms = busy_timeout_ms
+        self._setup_done = False
+        self._setup_lock = asyncio.Lock()
+
+    async def _ensure_setup(self) -> None:
+        # Single-check under the lock — setup runs once and is short,
+        # so the lock cost dominates only on cold start.
+        async with self._setup_lock:
+            if self._setup_done:
+                return
+            self._db_path.parent.mkdir(parents=True, exist_ok=True)
+            await anyio.to_thread.run_sync(self._init_schema_sync)
+            self._setup_done = True
+
+    def _init_schema_sync(self) -> None:
+        with closing(self._connect()) as conn:
+            conn.execute(_SQLITE_DDL)
+            conn.execute(_SQLITE_INDEX_DDL)
+            conn.commit()
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(
+            str(self._db_path), check_same_thread=False, timeout=2.0,
+        )
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute(f"PRAGMA busy_timeout = {self._busy_timeout_ms};")
+        return conn
+
+    @staticmethod
+    def _row_to_entry(row: sqlite3.Row) -> PendingStructuredQuestion:
+        created_at = datetime.fromisoformat(row["created_at"])
+        expires_at = datetime.fromisoformat(row["expires_at"])
+        answered_at = (
+            datetime.fromisoformat(row["answered_at"])
+            if row["answered_at"] else None
+        )
+        entry = PendingStructuredQuestion(
+            correlation_id=row["correlation_id"],
+            payload=json.loads(row["payload_json"]),
+            session_id=row["session_id"],
+            created_at=created_at,
+            expires_at=expires_at,
+            event=asyncio.Event(),  # vestigial — wait_for_answer polls
+            answer=row["answer"],
+            answered_at=answered_at,
+            cancelled=bool(row["cancelled"]),
+        )
+        # Mirror in-memory semantics: a resolved row presents an
+        # already-set event so ``list_pending`` excludes it.
+        if entry.answer is not None or entry.cancelled:
+            entry.event.set()
+        return entry
+
+    async def register(
+        self,
+        *,
+        payload: dict[str, Any],
+        session_id: str | None = None,
+        ttl_seconds: float = DEFAULT_STRUCTURED_QUESTION_TIMEOUT_SECONDS,
+    ) -> PendingStructuredQuestion:
+        await self._ensure_setup()
+        corr_id = uuid.uuid4().hex[:8]
+        now = datetime.now(UTC)
+        expires_at = now + timedelta(seconds=max(5.0, ttl_seconds))
+        entry = PendingStructuredQuestion(
+            correlation_id=corr_id,
+            payload=payload,
+            session_id=session_id,
+            created_at=now,
+            expires_at=expires_at,
+            event=asyncio.Event(),
+        )
+
+        def _insert() -> None:
+            with closing(self._connect()) as conn:
+                conn.execute(
+                    "INSERT INTO pending_structured_questions "
+                    "(correlation_id, payload_json, session_id, "
+                    "created_at, expires_at, answer, answered_at, "
+                    "cancelled) VALUES (?, ?, ?, ?, ?, NULL, NULL, 0)",
+                    (
+                        corr_id,
+                        json.dumps(payload),
+                        session_id,
+                        now.isoformat(),
+                        expires_at.isoformat(),
+                    ),
+                )
+                conn.commit()
+
+        await anyio.to_thread.run_sync(_insert)
+        _log.info(
+            "structured_question_registered",
+            extra={
+                "correlation_id": corr_id,
+                "session_id": session_id,
+                "ttl_seconds": ttl_seconds,
+                "backend": "sqlite",
+            },
+        )
+        return entry
+
+    async def submit_answer(
+        self, correlation_id: str, answer: str,
+    ) -> bool:
+        await self._ensure_setup()
+        answered_at = datetime.now(UTC).isoformat()
+
+        def _update() -> int:
+            with closing(self._connect()) as conn:
+                cur = conn.execute(
+                    "UPDATE pending_structured_questions "
+                    "SET answer = ?, answered_at = ? "
+                    "WHERE correlation_id = ? "
+                    "  AND answer IS NULL "
+                    "  AND cancelled = 0",
+                    (answer, answered_at, correlation_id),
+                )
+                conn.commit()
+                return cur.rowcount
+
+        rowcount = await anyio.to_thread.run_sync(_update)
+        if rowcount > 0:
+            _log.info(
+                "structured_question_answered",
+                extra={
+                    "correlation_id": correlation_id,
+                    "backend": "sqlite",
+                },
+            )
+            return True
+        return False
+
+    async def cancel(self, correlation_id: str) -> bool:
+        await self._ensure_setup()
+
+        def _update() -> int:
+            with closing(self._connect()) as conn:
+                cur = conn.execute(
+                    "UPDATE pending_structured_questions "
+                    "SET cancelled = 1 "
+                    "WHERE correlation_id = ? "
+                    "  AND answer IS NULL "
+                    "  AND cancelled = 0",
+                    (correlation_id,),
+                )
+                conn.commit()
+                return cur.rowcount
+
+        rowcount = await anyio.to_thread.run_sync(_update)
+        if rowcount > 0:
+            _log.info(
+                "structured_question_cancelled",
+                extra={
+                    "correlation_id": correlation_id,
+                    "backend": "sqlite",
+                },
+            )
+            return True
+        return False
+
+    async def wait_for_answer(
+        self, correlation_id: str, *, timeout_seconds: float,
+    ) -> str | None:
+        """Poll the row until an answer / cancellation / timeout."""
+        await self._ensure_setup()
+        deadline = asyncio.get_event_loop().time() + max(0.0, timeout_seconds)
+        while True:
+            entry = await self.get(correlation_id)
+            if entry is None:
+                return None
+            if entry.answer is not None:
+                return entry.answer
+            if entry.cancelled:
+                return None
+            remaining = deadline - asyncio.get_event_loop().time()
+            if remaining <= 0:
+                return None
+            await asyncio.sleep(min(self._poll_interval, remaining))
+
+    async def get(
+        self, correlation_id: str,
+    ) -> PendingStructuredQuestion | None:
+        await self._ensure_setup()
+
+        def _select() -> sqlite3.Row | None:
+            with closing(self._connect()) as conn:
+                conn.row_factory = sqlite3.Row
+                row: sqlite3.Row | None = conn.execute(
+                    "SELECT * FROM pending_structured_questions "
+                    "WHERE correlation_id = ?",
+                    (correlation_id,),
+                ).fetchone()
+                return row
+
+        row = await anyio.to_thread.run_sync(_select)
+        if row is None:
+            return None
+        return self._row_to_entry(row)
+
+    async def list_pending(self) -> list[PendingStructuredQuestion]:
+        await self._ensure_setup()
+
+        def _select() -> list[sqlite3.Row]:
+            with closing(self._connect()) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute(
+                    "SELECT * FROM pending_structured_questions "
+                    "WHERE answer IS NULL AND cancelled = 0 "
+                    "ORDER BY created_at ASC",
+                ).fetchall()
+                return list(rows)
+
+        rows = await anyio.to_thread.run_sync(_select)
+        return [self._row_to_entry(r) for r in rows]
+
+    async def cleanup_expired(self) -> int:
+        await self._ensure_setup()
+        now_iso = datetime.now(UTC).isoformat()
+
+        def _delete() -> int:
+            with closing(self._connect()) as conn:
+                cur = conn.execute(
+                    "DELETE FROM pending_structured_questions "
+                    "WHERE expires_at < ? "
+                    "  AND answer IS NULL "
+                    "  AND cancelled = 0",
+                    (now_iso,),
+                )
+                conn.commit()
+                return cur.rowcount
+
+        removed = await anyio.to_thread.run_sync(_delete)
+        if removed:
+            _log.info(
+                "structured_question_cleanup",
+                extra={"removed": removed, "backend": "sqlite"},
+            )
+        return removed
+
+
+def _resolve_store_path_from_env() -> Path | None:
+    """Env-knob lookup for the SQLite path. ``None`` ⇒ in-memory."""
+    raw = os.environ.get("SELFFORK_STRUCTURED_QUESTION_DB", "").strip()
+    if not raw:
+        return None
+    return Path(raw).expanduser()
+
+
+def build_structured_question_store(
+    *,
+    db_path: Path | None = None,
+) -> PendingStructuredQuestionStore | SqlitePendingStructuredQuestionStore:
+    """Factory — disk-backed when a path is supplied, in-memory otherwise.
+
+    ``db_path`` precedence: explicit argument > ``SELFFORK_STRUCTURED_QUESTION_DB``
+    env > ``None`` (in-memory). The in-memory store remains the default for
+    tests and orphan boots; the SQLite store is opt-in via env or explicit
+    construction so existing callers (the legacy ``selffork run`` subprocess
+    + dashboard pair) keep working until both wire the shared path.
+    """
+    resolved = db_path if db_path is not None else _resolve_store_path_from_env()
+    if resolved is None:
+        return PendingStructuredQuestionStore()
+    return SqlitePendingStructuredQuestionStore(db_path=resolved)
 
 
 # ── AskUserQuestion args schema (mirrors Anthropic's tool format) ───
@@ -333,15 +712,19 @@ async def handle_ask_user_question(
     the activity feed + Telegram ``/answer`` flow.
     """
     store = ctx.structured_question_store
-    if not isinstance(store, PendingStructuredQuestionStore):
+    if not isinstance(
+        store,
+        (PendingStructuredQuestionStore, SqlitePendingStructuredQuestionStore),
+    ):
         return {
             "status": "unwired",
             "correlation_id": None,
             "answer": None,
             "message": (
                 "PendingStructuredQuestionStore is not wired into this "
-                "session. The orchestrator must inject it via "
-                "ToolContext for AskUserQuestion to function."
+                "session. The orchestrator must inject it (in-memory or "
+                "SQLite-backed) via ToolContext for AskUserQuestion to "
+                "function."
             ),
         }
 
@@ -388,7 +771,7 @@ async def handle_ask_user_question(
             "answer": answer,
         }
     # Re-read the entry to distinguish cancellation vs timeout.
-    final = store.get(entry.correlation_id)
+    final = await store.get(entry.correlation_id)
     if final is not None and final.cancelled:
         return {
             "status": "cancelled",

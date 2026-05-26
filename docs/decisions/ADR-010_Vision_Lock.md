@@ -256,6 +256,23 @@ snapshot is locked at S-Vision close; inventory:
 - **`auto_pr_create` tool name + `_AutoPRCreateArgs` Pydantic schema** (`tools/auto_pr.py`, S-Vision
   Faz E). Frozen fields: `title` (1-200), `body` (1-20000), `base` (default `main`), `head`,
   `draft`. Renaming the tool or its args post-M7 breaks the trained Self Jr reflex.
+- **`ToolSpec.defer_loading: bool` field** (`tools/base.py`, S-ToolFleet Faz 0). Per-spec opt-in
+  flag — when `True`, the spec is OMITTED from the eager system-prompt catalog Self Jr sees by
+  default and only surfaces after a `tool_search` retrieval. Frozen so existing specs keep
+  defaulting to `False` (eager) and Faz 1+ fan-out can flip individual specs without breaking
+  the trained reflex.
+- **`tool_search` tool name + `ToolSearchArgs` Pydantic schema** (`tools/tool_search.py`,
+  S-ToolFleet Faz 0 RAG-over-tools seam). Frozen fields: `query` (1-2000 chars), `top_k` (1-20,
+  default 5), `include_eager` (default `False`). Result shape:
+  `{status, query, results: [{name, description, args_schema}], matches}` — mirrors
+  `ToolRegistry.catalog()` row shape so retrieved tools splice into the next round identically
+  to eager ones.
+- **`SqlitePendingStructuredQuestionStore` schema** (`tools/structured_question.py`,
+  S-ToolFleet Faz 0 F2). Table `pending_structured_questions` with frozen columns:
+  `correlation_id TEXT PK`, `payload_json TEXT`, `session_id TEXT`, `created_at TEXT (ISO)`,
+  `expires_at TEXT (ISO)`, `answer TEXT`, `answered_at TEXT`, `cancelled INTEGER`. WAL mode
+  + busy_timeout 5s default. Env knob: `SELFFORK_STRUCTURED_QUESTION_DB` (empty ⇒ in-memory).
+  Cross-process schema break = lost CLI/dashboard handshake.
 
 ---
 
@@ -292,7 +309,75 @@ MUST table now reads "SEAM shipped, WIRE deferred" where applicable). Format Fre
 recorded in §5 covers 10 wire surfaces now (4 added at S-Vision close: LegalAction Turkish closed
 set, `Correction` schema, `VoiceBackend.transcribe` signature, `auto_pr_create` tool name+args).
 
-**Sprint order ([[sprint-order-2026-05-22]] tail):** S-Vision ✅ → **S-Bridge (next — wires Voice
-inbound + Correction → Mind T2 + interactive structured-tool round-trip)** → S-ToolFleet (~250-380
-tools + RAG-over-tools + real Body drivers + ~120 mobile pack) → S-Train → M7. S-Stream (ADR-011) ✅
-landed earlier as the agentic-loop prerequisite.
+**Sprint order ([[sprint-order-2026-05-22]] tail):** S-Vision ✅ → S-Bridge ✅ →
+**S-ToolFleet (in progress — Faz 0 substrate solidify ✅; Faz 1-4 fan-out next)** → S-Train → M7.
+S-Stream (ADR-011) ✅ landed earlier as the agentic-loop prerequisite.
+
+---
+
+## 9. §S-ToolFleet Amendment (2026-05-26 evening)
+
+**Trigger.** S-Bridge close + 4-agent parallel pre-kickoff audit
+(explorer-god ×2 + selffork-researcher + audit-god) surfaced four substrate gaps
+(F1 body wire DEAD in round-loop, F2 cross-process structured-question gap,
+F3 STRUCTURED_TOOL_NAMES vs registry drift, F4 cleanup_expired with no production caller)
+plus the structural absence of a RAG-over-tools seam and the hierarchical-namespace
+ceiling. Operator response (4-question AskUserQuestion, 2026-05-26 ~17:35): all
+Recommended path — Faz 0 substrate first, Mind-HybridRetriever-reuse Anthropic Tool Search
+emulation, Quest3-ADB-full + Vision Pro-vision-only split, Mobile-first wave first.
+See [[s-toolfleet-scope-2026-05-26]] + [[substrate-findings-2026-05-26]].
+
+### 9.1 Locked decisions (operator AskUserQuestion, 2026-05-26)
+
+| # | Question | Locked answer |
+|---|---|---|
+| 1 | **Faz sırası** — substrate vs fan-out parallel? | **Faz 0 önce — substrate solidify** (F1+F2+F3+F4 + RAG seam + hierarchical tree) before any fan-out. ~1.5 hafta scope. |
+| 2 | **RAG retrieval baseline** | **Anthropic Tool Search emulation + Mind HybridRetriever reuse** (BM25 + token-overlap tie-breaker; per-turn top-3-5 retrieval; `defer_loading` flag per ToolSpec). Pure-dense LanceDB rejected (adversarial collapse risk, arXiv:2510.03992); bipartite tool+agent retrieval deferred (overkill at 250-tool scale). |
+| 3 | **VR/AR scope** | **Quest 3 = Android ADB+MQDH full driver (~20 tool)** + **Vision Pro = Gemma 4 VLM OCR vision-only (~5-8 tool)** — modalite-çift kabul. visionOS XCTest "Designed for iPad" sınırlı; Appium yok. Honest reality, not equal effort. |
+| 4 | **Wave 1 öncelik** | **Mobile-first dalga ~120 tool** (iOS-DEEP + Android-DEEP + Expo + UI-verify + crash/state). mobile-mcp + mobile-use + appium-mcp adopt; AndroidWorld eval. Operator daily-driver = Expo apps. |
+
+### 9.2 Faz 0 deliverables (✅ all shipped 2026-05-26 evening, single session)
+
+| Item | Site | Tests |
+|---|---|---|
+| **F4** — `cleanup_loop` + dashboard lifespan periodic task | `tools/structured_question.py::cleanup_loop` + `dashboard/server.py` lifespan | +3 |
+| **F1** — Body wire through round-loop | `lifecycle/session.py::__init__` + ToolContext propagate (`body_driver`/`vision_runtime`/`permission_warden`/`screenshot_store`); cli.py + dashboard wire **DEFERRED to Faz 1** (no driver factory yet — Faz 0 opens the wire, Faz 1 Mobile Wave constructs the driver). | +1 |
+| **F3** — Canonical structured-tool name | `cli_agent/structured_tools.py` docstring tightened (canonical = `AskUserQuestion`, drift caught as `unknown_tool` while still routing to `tool.structured_*` audit). Registry **single name only** — aliases would pollute the catalog. | +1 |
+| **F2** — Cross-process `SqlitePendingStructuredQuestionStore` | `tools/structured_question.py` + `build_structured_question_store()` factory + `SELFFORK_STRUCTURED_QUESTION_DB` env. CLI subprocess + dashboard share one SQLite file when env is set; in-memory default kept for tests + legacy boots. Polling-based `wait_for_answer` (asyncio.Event doesn't cross processes). | +16 |
+| **RAG-over-tools seam** | `tools/tool_search.py` (BM25Okapi + token-overlap tie-breaker) + `ToolSpec.defer_loading` field + `ToolRegistry.{catalog(include_deferred=...),eager_names(),deferred_names(),deferred_specs()}` + `tool_search` registered in default registry + `ToolContext.tool_registry`. Faz 0 ships the SEAM; every existing spec defaults `defer_loading=False` (no behaviour change). | +27 |
+| **Hierarchical refactor** — `tools/body/` subpackage | Old `tools/body.py` (520 LoC, 10 tools flat) split into `body/{__init__ aggregator, _internal helpers, interaction (5 tools), observation (2), lifecycle (3)}`. Args + `build_body_tools` + private handlers re-exported from `__init__` so existing import paths are unchanged. Pattern for Faz 1+ mobile/browser/vr/desktop subpackages. | 0 (existing 16 body tests still pass after re-import) |
+| **ADR-010 amendment** | This section (§9) + §5 Format Freeze additions (4 new items). | — |
+
+**Faz 0 baseline:** 2576 backend tests pass (was 2528 pre-Faz 0; net +48), ruff/mypy/tsc clean.
+Eager catalog stays at 36 tools (was 35; `tool_search` is the new addition, every spec
+still `defer_loading=False`). Operator-driven commit per MANDATE 1.
+
+### 9.3 5-Faz plan ([[s-toolfleet-scope-2026-05-26]])
+
+| Faz | Süre | Scope |
+|---|---|---|
+| **0 — Substrate solidify** ✅ | ~1.5 hafta | F1 + F2 + F3 + F4 + RAG seam + hierarchical tree refactor + this amendment. |
+| **1 — Mobile-first wave** | ~3 hafta | ~120 tool: iOS-DEEP (Appium XCUITest + WDA) + Android-DEEP (mobile-mcp adopt + UI Automator + Docker emulator) + Expo dev workflow + UI-verify (a11y tree primary, screenshot fallback) + crash/state capture. Real `body_driver` factory + cli.py wire (closes F1's WIRE side). AndroidWorld eval harness adopt. |
+| **2 — Browser wave** | ~2 hafta | ~60 tool: browser-use registry decorator + stagehand 4-method API (`act`/`extract`/`observe`/`agent`) + CloakBrowser drop-in (Cloudflare bypass) + DeepLocator (shadow DOM + iframe). Apache 2.0/MIT lift-only — Skyvern AGPL kod kopyalama YASAK, fikir-only. |
+| **3 — Cross-cutting (GitHub + Desktop + Skills)** | ~1.5 hafta | ~40 tool: gh CLI wrapper + GitHub App auth (PAT over App per [[s-vision-candidates-github-rag-2026-05-24]] decision) + Gravatar identity + Self Jr self-commit + cua-driver background macOS non-focus + skill installer subagent loop + dev tooling. |
+| **4 — VR/AR** | ~1.5 hafta | Quest 3 = Android driver reuse + MQDH ADB-over-WiFi (~20 tool); Vision Pro = Gemma 4 VLM OCR + screenshot click coords (~5-8 tool) — modalite-çift kabul. |
+| **Total** | ~9.5 hafta | ~245-265 tool (~250-380 hedef alt-uç, kalite > sayı per [[quality-over-speed]]). |
+
+### 9.4 Faz 0 substrate findings + remediation summary
+
+| # | Severity | Gap | Remediation |
+|---|---|---|---|
+| **F1** | CRITICAL (explorer-god, grep verified) | Body tools DEAD in round-loop — `session.py:692-707` ToolContext construction never injected `body_driver`/`vision_runtime`/`permission_warden`/`screenshot_store`. Self Jr emitting `<selffork-tool-call>{"tool":"body_screenshot",...}` hit `unauthorized` (`body.py::_require_driver`). Heartbeat had its own `driver` parameter via `heartbeat/executor.py` — wire was forgotten on the round-loop side. | Session.__init__ accepts the 4 params (default `None`); ToolContext propagation wired; cli.py / dashboard production wire deferred to Faz 1 Mobile Wave (which constructs the real driver). New test `test_body_tool_call_reaches_driver_through_round_loop` pins the wire. |
+| **F2** | HIGH (audit-god) | In-memory `PendingStructuredQuestionStore` per-process — `selffork run` subprocess + dashboard process kept separate instances. Telegram `/answer` reached dashboard's store; CLI subprocess's pending question silently timed out (default 1h). S-Bridge memory claimed "CORE complete" but cross-process round-trip never worked. | New `SqlitePendingStructuredQuestionStore` (WAL + busy_timeout 5s + polling `wait_for_answer`); `build_structured_question_store()` factory picks backend via `SELFFORK_STRUCTURED_QUESTION_DB` env; cli.py + dashboard both route through factory. In-memory default kept for tests/legacy. 16 SQLite tests including cross-process handshake. |
+| **F3** | HIGH (audit-god) | `STRUCTURED_TOOL_NAMES` set in `cli_agent/structured_tools.py` recognised 3 spellings (`AskUserQuestion` + snake_case + camelCase) for cross-CLI audit detection, but the registry registered only PascalCase. Drift = audit said `tool.structured_question` while result said `unknown_tool` — confusing UI. | Docstring pins **canonical = `AskUserQuestion`** (Self Jr fine-tune corpus emits this). Registry stays single (aliases would pollute catalog + RAG retrieval). Other two names kept ONLY for transcript detection of third-party CLIs (claude-code emits both). Drift invariant test confirms the pair. |
+| **F4** | MEDIUM (audit-god, grep verified) | `cleanup_expired` had no production caller — dashboard process is long-lived so pending dict grew unbounded. | `cleanup_loop` (sweep-first/sleep-then pattern, mirrors `expire_loop`); dashboard lifespan starts/cancels `selffork.structured_question_cleanup` task. Final sweep on cancel. 3 tests. |
+
+### 9.5 Status
+
+**S-ToolFleet Faz 0 — ACCEPTED 2026-05-26 evening.** Substrate is solid: body
+wire opened, cross-process IPC ships disk-backed, drift caught as `unknown_tool`,
+periodic cleanup wired, RAG seam ready for fan-out, body subpackage establishes the
+hierarchical pattern. Faz 1 Mobile Wave is the next sprint (~3 weeks, ~120 tools)
+and closes F1's WIRE side by constructing the real `body_driver` factory. Quality
+over speed ([[quality-over-speed]]) — better to ship Faz 0 properly than rush Faz 1
+on a cracked substrate.

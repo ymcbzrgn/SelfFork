@@ -245,6 +245,10 @@ def _build_session(
     stuck_detector: StuckDetector | None = None,
     hard_action_cap: int | None = 50,
     wall_clock_cap_seconds: float | None = None,
+    body_driver: object | None = None,
+    vision_runtime: object | None = None,
+    permission_warden: object | None = None,
+    screenshot_store: object | None = None,
 ) -> tuple[Session, FilesystemPlanStore, AuditLogger]:
     workspace = Path(sandbox.host_workspace_path)
     workspace.mkdir(parents=True, exist_ok=True)
@@ -275,6 +279,10 @@ def _build_session(
         rate_limit_handler=rate_limit_handler,
         spawn_handler=spawn_handler,
         stuck_detector=stuck_detector,
+        body_driver=body_driver,
+        vision_runtime=vision_runtime,
+        permission_warden=permission_warden,
+        screenshot_store=screenshot_store,
     )
     return session, plan_store, audit
 
@@ -941,6 +949,135 @@ class TestToolIntegration:
         assert "tool.structured_answer" in cats
         assert "tool.call" not in cats
         assert "tool.result" not in cats
+
+    @pytest.mark.asyncio
+    async def test_structured_tool_canonical_is_pascalcase_drift_unknown(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """S-ToolFleet Faz 0 F3: pin the canonical structured-tool name.
+
+        ``STRUCTURED_TOOL_NAMES`` covers three spellings for cross-CLI
+        audit detection (claude-code transcripts use PascalCase + snake
+        case; SelfFork's own wire is camelCase). But only ``AskUserQuestion``
+        is registered. This test pins the invariant: if Self Jr drifts to
+        snake_case ``ask_user_question``, the call still routes to the
+        ``tool.structured_*`` audit categories (so the activity feed +
+        S-Train signal them) but the registry returns ``unknown_tool`` —
+        catching the drift instead of silently succeeding. The contract
+        is: ``AskUserQuestion`` is canonical, anything else gets unknown.
+        """
+        from selffork_orchestrator.tools import build_default_registry
+
+        reply = (
+            "Let me ask.\n"
+            "<selffork-tool-call>\n"
+            '{"tool": "ask_user_question", "args": {"question": "X?"}}\n'
+            "</selffork-tool-call>"
+        )
+        runtime = _FakeRuntime(replies=[reply, f"done {DONE_SENTINEL}"])
+        sandbox = _FakeSandbox(workspace_path=str(tmp_path / "ws"))
+        sandbox.configure_exec(lines=[b"output\n"], exit_code=0)
+        agent = _FakeCLIAgent()
+
+        session, _, audit = _build_session(
+            tmp_path,
+            runtime=runtime,
+            sandbox=sandbox,
+            agent=agent,
+        )
+        session._tool_registry = build_default_registry()
+
+        outcome = await session.run()
+        assert outcome == SessionState.COMPLETED
+
+        records = _read_audit(audit)
+        # The pre-invoke audit still routes by name match (structured).
+        structured_q = [
+            r for r in records
+            if r.get("category") == "tool.structured_question"
+        ]
+        assert len(structured_q) == 1, structured_q
+        assert structured_q[0]["payload"]["tool"] == "ask_user_question"
+        # The post-invoke audit reports the drift as ``unknown_tool``.
+        structured_a = [
+            r for r in records
+            if r.get("category") == "tool.structured_answer"
+        ]
+        assert len(structured_a) == 1, structured_a
+        assert structured_a[0]["payload"]["status"] == "unknown_tool"
+
+    @pytest.mark.asyncio
+    async def test_body_tool_call_reaches_driver_through_round_loop(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """S-ToolFleet Faz 0 F1: body_driver propagation through Session.
+
+        Before F1, ``<selffork-tool-call>{"tool": "body_screenshot"}`` from
+        Jr's reply hit ``ToolContext.body_driver == None`` and returned
+        ``status="unauthorized"`` — every Body tool was unreachable from
+        the round-loop. This test pins the wire: a Session built with
+        ``body_driver`` + ``permission_warden`` propagates them into
+        ToolContext, and the call lands as ``status="ok"`` instead.
+        """
+        from selffork_body.sandbox.warden import (
+            PermissionWarden,
+            WardenMode,
+        )
+        from selffork_orchestrator.tools import build_default_registry
+
+        class _StubBodyDriver:
+            def __init__(self) -> None:
+                self.calls: list[str] = []
+
+            async def screenshot(self, rect: object = None) -> bytes:
+                self.calls.append("screenshot")
+                return b"\x89PNG\r\n\x1a\n" + b"x" * 16
+
+        driver = _StubBodyDriver()
+        reply = (
+            "let me look at the screen\n"
+            "<selffork-tool-call>\n"
+            '{"tool": "body_screenshot", "args": {}}\n'
+            "</selffork-tool-call>"
+        )
+        runtime = _FakeRuntime(replies=[reply, f"done {DONE_SENTINEL}"])
+        sandbox = _FakeSandbox(workspace_path=str(tmp_path / "ws"))
+        sandbox.configure_exec(lines=[b"output\n"], exit_code=0)
+        agent = _FakeCLIAgent()
+
+        session, _, audit = _build_session(
+            tmp_path,
+            runtime=runtime,
+            sandbox=sandbox,
+            agent=agent,
+            body_driver=driver,
+            permission_warden=PermissionWarden(
+                mode=WardenMode.DANGER_FULL_ACCESS,
+            ),
+        )
+        session._tool_registry = build_default_registry()
+
+        outcome = await session.run()
+        assert outcome == SessionState.COMPLETED
+
+        records = _read_audit(audit)
+        body_results = [
+            r for r in records
+            if r.get("category") == "tool.result"
+            and isinstance(r.get("payload"), dict)
+            and r["payload"].get("tool") == "body_screenshot"
+        ]
+        assert len(body_results) == 1, (
+            f"expected one body_screenshot result, got: {body_results}"
+        )
+        assert body_results[0]["payload"]["status"] == "ok", (
+            "F1 wire broken — body_driver did not reach ToolContext"
+        )
+        assert driver.calls == ["screenshot"], (
+            "driver.screenshot was never invoked through the round-loop"
+        )
 
     @pytest.mark.asyncio
     async def test_invalid_tool_call_returns_error_to_jr(
