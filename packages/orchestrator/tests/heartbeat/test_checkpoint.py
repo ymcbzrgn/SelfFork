@@ -133,3 +133,32 @@ def test_writer_clear_idempotent_when_absent(tmp_path: Path) -> None:
 def test_writer_default_path() -> None:
     assert default_checkpoint_path().name == "checkpoint.json"
     assert default_checkpoint_path().parent.name == "heartbeat"
+
+
+# ── ADR-010 §2.2.6 — cross-tick resume workspace ──────────────────
+
+
+def test_checkpoint_workspace_defaults_none() -> None:
+    assert _ck().workspace is None
+
+
+def test_checkpoint_workspace_roundtrip(tmp_path: Path) -> None:
+    target = tmp_path / "checkpoint.json"
+    writer = CheckpointWriter(path=target)
+    writer.write(_ck(workspace="beta"))
+    loaded = writer.read()
+    assert loaded is not None
+    assert loaded.workspace == "beta"
+
+
+def test_checkpoint_reads_legacy_without_workspace(tmp_path: Path) -> None:
+    """A pre-S-Vision checkpoint (no ``workspace`` key) still validates."""
+    target = tmp_path / "checkpoint.json"
+    target.write_text(
+        '{"step":"act","progress":"p","next_action":"task_başlat",'
+        '"updated_at":"2026-05-23T12:00:00+00:00"}',
+        encoding="utf-8",
+    )
+    loaded = CheckpointWriter(path=target).read()
+    assert loaded is not None
+    assert loaded.workspace is None

@@ -33,6 +33,7 @@ from selffork_orchestrator.cli_agent.factory import build_cli_agent
 from selffork_orchestrator.cli_mind import mind_app
 from selffork_orchestrator.lifecycle.session import Session
 from selffork_orchestrator.lifecycle.states import SessionState
+from selffork_orchestrator.lifecycle.stuck_detector import StuckDetector
 from selffork_orchestrator.limits.base import RateLimited
 from selffork_orchestrator.limits.factory import build_limit_detector
 from selffork_orchestrator.plan.factory import build_plan_store
@@ -68,9 +69,7 @@ from selffork_shared.ulid import new_ulid
 # one JSON file under here. Override via ``SELFFORK_RESUME_DIR`` env var.
 _DEFAULT_RESUME_DIR = Path("~/.selffork/scheduled").expanduser()
 _DEFAULT_PROJECTS_ROOT = Path("~/.selffork/projects").expanduser()
-_DEFAULT_PENDING_AUDIT_PATH = Path(
-    "~/.selffork/pending_confirmations.jsonl"
-).expanduser()
+_DEFAULT_PENDING_AUDIT_PATH = Path("~/.selffork/pending_confirmations.jsonl").expanduser()
 
 # Strong references to in-flight Telegram notify tasks so they don't get
 # garbage-collected mid-await. The callback in :func:`_build_pending_telegram_hook`
@@ -690,6 +689,7 @@ async def _amain(
         pending_store=_build_pending_store(
             telegram_bridge=telegram_bridge_for_tools,
         ),
+        stuck_detector=StuckDetector(),
     )
     # Run the snapper fleet in parallel with the session; tear it down
     # when the session returns (regardless of outcome).
@@ -1037,6 +1037,163 @@ def project_show(
             typer.echo(f"    - {card.title}  [{card.id[:14]}…]")
         if len(cards) > 5:
             typer.echo(f"    … {len(cards) - 5} more")
+
+
+# ── selffork train ────────────────────────────────────────────────────────────
+
+
+@app.command()
+def train(
+    info_only: Annotated[
+        bool,
+        typer.Option(
+            "--info",
+            help="Show current adapter info and exit; do not emit a training plan.",
+        ),
+    ] = False,
+    method: Annotated[
+        str,
+        typer.Option(
+            "--method",
+            help=(
+                "Adapter method — QLoRA (default) | LoRA | Full. The "
+                "M7 worker today only ships QLoRA."
+            ),
+        ),
+    ] = "QLoRA",
+    dataset_source: Annotated[
+        str,
+        typer.Option(
+            "--dataset",
+            help=(
+                "``auto`` (session history) or a filesystem path to a "
+                "JSONL dataset for the M7 worker."
+            ),
+        ),
+    ] = "auto",
+    lora_rank: Annotated[
+        int,
+        typer.Option("--lora-rank", help="LoRA rank (must be > 0)."),
+    ] = 32,
+    lora_alpha: Annotated[
+        int,
+        typer.Option("--lora-alpha", help="LoRA alpha (must be > 0)."),
+    ] = 16,
+    learning_rate: Annotated[
+        str,
+        typer.Option(
+            "--learning-rate",
+            "--lr",
+            help="Learning rate string forwarded to the worker (default 2e-4).",
+        ),
+    ] = "2e-4",
+    epochs: Annotated[
+        int,
+        typer.Option(
+            "--epochs",
+            help="Number of training epochs (must be > 0).",
+        ),
+    ] = 3,
+    target_modules: Annotated[
+        str,
+        typer.Option(
+            "--target-modules",
+            help=(
+                "``attention`` (LoRA on attention only) or "
+                "``attention+mlp`` (both)."
+            ),
+        ),
+    ] = "attention",
+    adapter_manifest: Annotated[
+        Path | None,
+        typer.Option(
+            "--adapter-manifest",
+            help=(
+                "Manifest path override (defaults to "
+                "~/.selffork/reflex/adapters/current/manifest.json)."
+            ),
+        ),
+    ] = None,
+) -> None:
+    """Reflex pillar fine-tune entry point (M7).
+
+    Reads the canonical adapter manifest at
+    ``~/.selffork/reflex/adapters/current/manifest.json`` and reports
+    the current adapter state plus what *would* be queued for
+    training. The real QLoRA worker lands in M7 (Pillar 1); pre-M7
+    this command is a planning + status surface — no weights are
+    written, no GPU is held.
+
+    Reflex training is intentionally **out of the dashboard UI** (it
+    is a one-shot operation, not a daily-driver dial). Run from a
+    shell whenever you want to refresh the adapter; the result lands
+    at the manifest path and the Heartbeat filter / dashboard pick it
+    up automatically.
+    """
+    from selffork_orchestrator.reflex_manifest import (
+        ADAPTER_MANIFEST_PATH,
+        load_adapter_manifest,
+    )
+
+    manifest_path = (
+        adapter_manifest if adapter_manifest is not None else ADAPTER_MANIFEST_PATH
+    )
+    manifest = load_adapter_manifest(manifest_path)
+    if manifest.trained:
+        typer.echo(
+            f"Current adapter: version={manifest.version} "
+            f"method={manifest.method} "
+            f"trained_at={manifest.trained_at} "
+            f"age_days={manifest.age_days} "
+            f"examples={manifest.examples}",
+        )
+    else:
+        typer.echo(manifest.message or "No adapter trained yet.")
+
+    if info_only:
+        raise typer.Exit(code=0)
+
+    valid_methods = {"QLoRA", "LoRA", "Full"}
+    if method not in valid_methods:
+        typer.echo(
+            f"selffork: invalid --method {method!r}; "
+            f"expected one of {sorted(valid_methods)}",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    valid_targets = {"attention", "attention+mlp"}
+    if target_modules not in valid_targets:
+        typer.echo(
+            f"selffork: invalid --target-modules {target_modules!r}; "
+            f"expected one of {sorted(valid_targets)}",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    if epochs <= 0:
+        typer.echo("selffork: --epochs must be > 0", err=True)
+        raise typer.Exit(code=2)
+    if lora_rank <= 0:
+        typer.echo("selffork: --lora-rank must be > 0", err=True)
+        raise typer.Exit(code=2)
+    if lora_alpha <= 0:
+        typer.echo("selffork: --lora-alpha must be > 0", err=True)
+        raise typer.Exit(code=2)
+
+    typer.echo("")
+    typer.echo("--- training plan (M7 worker stub) ---")
+    typer.echo(f"method:         {method}")
+    typer.echo(f"dataset:        {dataset_source}")
+    typer.echo(f"lora_rank:      {lora_rank}")
+    typer.echo(f"lora_alpha:     {lora_alpha}")
+    typer.echo(f"learning_rate:  {learning_rate}")
+    typer.echo(f"epochs:         {epochs}")
+    typer.echo(f"target_modules: {target_modules}")
+    typer.echo("")
+    typer.echo(
+        "Real QLoRA worker lands in M7 (Pillar 1 Reflex). Job not "
+        "started; no GPU held. Track progress at "
+        "~/.selffork/reflex/adapters/ once M7 ships.",
+    )
 
 
 # ── selffork ui ───────────────────────────────────────────────────────────────

@@ -22,6 +22,13 @@ Rules implemented in Faz B (each tied to one ADR-008 §6 safety layer):
    actually take new work).
 5. **Creative toggle** — when Yaratma mode is OFF (Faz F default
    pre-M7) ``IDEATE`` drops out.
+6. **Body-daemon-alive gate** (ADR-010 §4 S-Vision) — when the Body
+   daemon is not alive (no probe wired or the probe returns ``False``)
+   both ``BODY_USE`` and ``BODY_REVIEW`` drop out; the model cannot pick
+   a Body action when the body cannot move. Fail-CLOSED: a missing
+   probe defaults to ``False`` (the inverse of the active-hours
+   fail-OPEN convention — moving the body when nothing is listening is
+   silently lossy).
 
 Rules deferred:
 
@@ -114,6 +121,12 @@ class WorldState:
         last_active_workspace: Slug of the workspace the operator last
             interacted with (TalkStore source). ``None`` when there is
             no recent operator activity.
+        body_daemon_alive: ``True`` when the Body pillar daemon is up +
+            the scheduler may legally pick a Body action (ADR-010 §4
+            S-Vision). Defaults to ``False`` so a missing probe / dead
+            Body never lets the model "move" — fail-CLOSED (the inverse
+            of the active-hours fail-OPEN convention, because moving the
+            body when nothing's listening is silently lossy).
     """
 
     pause_active: bool
@@ -127,6 +140,7 @@ class WorldState:
     )
     supervised_mode: bool = False
     last_active_workspace: str | None = None
+    body_daemon_alive: bool = False
 
     def cli_has_quota(self, cli_id: str) -> bool:
         """Return ``True`` when ``cli_id`` is not exhausted.
@@ -179,6 +193,16 @@ _WorkspaceEligibleProbe = Callable[[str], Awaitable[bool]]
 """Async function returning the last active workspace slug from TalkStore."""
 
 
+_BodyAliveProbe = Callable[[], Awaitable[bool]]
+"""Async function returning ``True`` when the Body pillar daemon is healthy.
+
+ADR-010 §4 S-Vision — wired by the dashboard when the Body subsystem is up.
+Fail-CLOSED: an absent or failing probe defaults to ``False`` so
+``BODY_USE``/``BODY_REVIEW`` are never legal until a real probe affirms a
+live body.
+"""
+
+
 class WorldStateBuilder:
     """Build a :class:`WorldState` per Heartbeat tick.
 
@@ -196,6 +220,7 @@ class WorldStateBuilder:
         concurrency_probe: _ConcurrencyProbe | None = None,
         talk_last_workspace_probe: _TalkLastWorkspaceProbe | None = None,
         workspace_eligible_probe: _WorkspaceEligibleProbe | None = None,
+        body_daemon_alive_probe: _BodyAliveProbe | None = None,
         creative_mode_provider: Callable[[], bool] | None = None,
         supervised_mode_provider: Callable[[], bool] | None = None,
         within_active_hours_probe: Callable[[], bool] | None = None,
@@ -208,6 +233,7 @@ class WorldStateBuilder:
         self._concurrency = concurrency_probe
         self._talk_last_workspace = talk_last_workspace_probe
         self._workspace_eligible = workspace_eligible_probe
+        self._body_alive = body_daemon_alive_probe
         self._creative_mode = creative_mode_provider
         self._supervised_mode = supervised_mode_provider
         self._within_active_hours = within_active_hours_probe
@@ -263,6 +289,16 @@ class WorldStateBuilder:
             if not eligible:
                 last_workspace = None
 
+        # ADR-010 §4 S-Vision — Body pillar alive gate. Fail-CLOSED: any
+        # probe failure (or no probe wired) maps to ``False`` so the model
+        # can never pick BODY_USE/BODY_REVIEW when the body cannot move.
+        body_alive = False
+        if self._body_alive is not None:
+            try:
+                body_alive = await self._body_alive()
+            except Exception:
+                body_alive = False
+
         return WorldState(
             pause_active=pause_active,
             within_active_hours=within_active_hours,
@@ -273,6 +309,7 @@ class WorldStateBuilder:
             quota_exhaustion_threshold_pct=self._quota_threshold_pct,
             supervised_mode=supervised,
             last_active_workspace=last_workspace,
+            body_daemon_alive=body_alive,
         )
 
 
@@ -329,5 +366,11 @@ class LegalActionFilter:
         # Rule 5 — Yaratma mode toggle removes IDEATE when off.
         if not state.creative_mode_enabled:
             legal.discard(LegalAction.IDEATE)
+
+        # Rule 6 — Body-daemon-alive gate (ADR-010 §4 S-Vision). No live
+        # body ⇒ neither BODY action is legal (fail-CLOSED).
+        if not state.body_daemon_alive:
+            legal.discard(LegalAction.BODY_USE)
+            legal.discard(LegalAction.BODY_REVIEW)
 
         return frozenset(legal)

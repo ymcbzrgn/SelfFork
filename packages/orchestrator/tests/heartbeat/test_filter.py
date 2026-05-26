@@ -49,6 +49,7 @@ def _healthy_state(**overrides: object) -> WorldState:
         quota_exhaustion_threshold_pct=DEFAULT_QUOTA_EXHAUSTION_THRESHOLD_PCT,
         supervised_mode=False,
         last_active_workspace="alpha",
+        body_daemon_alive=True,
     )
     base.update(overrides)
     return WorldState(**base)  # type: ignore[arg-type]
@@ -58,8 +59,8 @@ def _healthy_state(**overrides: object) -> WorldState:
 
 
 def test_legal_action_enum_count_matches_adr() -> None:
-    """ADR-008 §4.4 declares exactly 8 actions; the enum must match."""
-    assert len({*LegalAction}) == 8
+    """ADR-008 §4.4 + ADR-010 §4 declare exactly 10 actions; enum must match."""
+    assert len({*LegalAction}) == 10
 
 
 def test_legal_action_values_are_turkish_labels() -> None:
@@ -189,6 +190,26 @@ def test_filter_creative_on_keeps_ideate() -> None:
     assert LegalAction.IDEATE in legal
 
 
+# ── ADR-010 §4 S-Vision — Rule 6 body-daemon-alive gate ─────────────
+
+
+def test_filter_body_alive_keeps_body_actions() -> None:
+    legal = LegalActionFilter().legal_actions(_healthy_state(body_daemon_alive=True))
+    assert LegalAction.BODY_USE in legal
+    assert LegalAction.BODY_REVIEW in legal
+
+
+def test_filter_body_not_alive_drops_body_actions() -> None:
+    legal = LegalActionFilter().legal_actions(
+        _healthy_state(body_daemon_alive=False)
+    )
+    assert LegalAction.BODY_USE not in legal
+    assert LegalAction.BODY_REVIEW not in legal
+    # Body gate is local to BODY_* — other actions stay legal.
+    assert LegalAction.TASK_START in legal
+    assert LegalAction.OPERATOR_ASK in legal
+
+
 def test_filter_returns_frozenset() -> None:
     legal = LegalActionFilter().legal_actions(_healthy_state())
     assert isinstance(legal, frozenset)
@@ -204,11 +225,16 @@ def test_filter_combined_rules() -> None:
         creative_mode_enabled=False,
     )
     legal = LegalActionFilter().legal_actions(state)
+    # Body daemon alive (default in ``_healthy_state``) keeps BODY_USE +
+    # BODY_REVIEW legal; quota+concurrency only drop the non-body
+    # productive actions.
     expected = frozenset(
         {
             LegalAction.SESSION_RESUME,
             LegalAction.KANBAN_SUGGEST,
             LegalAction.OPERATOR_ASK,
+            LegalAction.BODY_USE,
+            LegalAction.BODY_REVIEW,
             LegalAction.WAIT,
             LegalAction.SELF_STOP,
         }
@@ -244,6 +270,7 @@ async def test_builder_degraded_with_no_dependencies(tmp_path: Path) -> None:
     assert state.creative_mode_enabled is False
     assert state.supervised_mode is False
     assert state.last_active_workspace is None
+    assert state.body_daemon_alive is False
     assert all(state.cli_quota[cli] is None for cli in DEFAULT_CLI_IDS)
 
 
@@ -456,3 +483,56 @@ async def test_builder_workspace_gate_no_op_when_no_talk_probe(
     )
     state = await builder.build()
     assert state.last_active_workspace is None
+
+
+# ── ADR-010 §4 S-Vision — body_daemon_alive_probe ──────────────────
+
+
+@pytest.mark.asyncio
+async def test_builder_body_alive_probe_true(tmp_path: Path) -> None:
+    async def probe() -> bool:
+        return True
+
+    pause = PauseSignal(flag_path=tmp_path / "pause.flag")
+    builder = WorldStateBuilder(
+        config=HeartbeatConfig(enabled=True),
+        pause_signal=pause,
+        body_daemon_alive_probe=probe,
+    )
+    state = await builder.build()
+    assert state.body_daemon_alive is True
+
+
+@pytest.mark.asyncio
+async def test_builder_body_alive_probe_false(tmp_path: Path) -> None:
+    async def probe() -> bool:
+        return False
+
+    pause = PauseSignal(flag_path=tmp_path / "pause.flag")
+    builder = WorldStateBuilder(
+        config=HeartbeatConfig(enabled=True),
+        pause_signal=pause,
+        body_daemon_alive_probe=probe,
+    )
+    state = await builder.build()
+    assert state.body_daemon_alive is False
+
+
+@pytest.mark.asyncio
+async def test_builder_body_alive_probe_exception_fails_closed(
+    tmp_path: Path,
+) -> None:
+    """Fail-CLOSED: a probe exception maps to ``False`` (no body actions)."""
+
+    async def boom() -> bool:
+        msg = "body daemon socket refused"
+        raise RuntimeError(msg)
+
+    pause = PauseSignal(flag_path=tmp_path / "pause.flag")
+    builder = WorldStateBuilder(
+        config=HeartbeatConfig(enabled=True),
+        pause_signal=pause,
+        body_daemon_alive_probe=boom,
+    )
+    state = await builder.build()
+    assert state.body_daemon_alive is False

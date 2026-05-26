@@ -27,6 +27,7 @@ from selffork_orchestrator.lifecycle.session import (
     SpawnHandler,
 )
 from selffork_orchestrator.lifecycle.states import SessionState
+from selffork_orchestrator.lifecycle.stuck_detector import StuckDetector
 from selffork_orchestrator.limits.base import (
     AuthRequired,
     LimitDetector,
@@ -241,6 +242,9 @@ def _build_session(
     limit_detector: LimitDetector | None = None,
     rate_limit_handler: RateLimitHandler | None = None,
     spawn_handler: SpawnHandler | None = None,
+    stuck_detector: StuckDetector | None = None,
+    hard_action_cap: int | None = 50,
+    wall_clock_cap_seconds: float | None = None,
 ) -> tuple[Session, FilesystemPlanStore, AuditLogger]:
     workspace = Path(sandbox.host_workspace_path)
     workspace.mkdir(parents=True, exist_ok=True)
@@ -261,10 +265,16 @@ def _build_session(
         cli_agent=agent,
         plan_store=plan_store,
         audit_logger=audit,
-        lifecycle_config=LifecycleConfig(skip_verify=skip_verify, max_rounds=max_rounds),
+        lifecycle_config=LifecycleConfig(
+            skip_verify=skip_verify,
+            max_rounds=max_rounds,
+            hard_action_cap=hard_action_cap,
+            wall_clock_cap_seconds=wall_clock_cap_seconds,
+        ),
         limit_detector=limit_detector,
         rate_limit_handler=rate_limit_handler,
         spawn_handler=spawn_handler,
+        stuck_detector=stuck_detector,
     )
     return session, plan_store, audit
 
@@ -281,6 +291,138 @@ def _categories(audit: AuditLogger) -> set[str]:
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
+
+
+class TestStuckDetectorWiring:
+    """ADR-010 §2.2 — round-loop deterministic stuck-detector + hard caps."""
+
+    @pytest.mark.asyncio
+    async def test_repeated_action_aborts_with_stuck(self, tmp_path: Path) -> None:
+        # Same reply + same CLI output every round -> the cli action key
+        # repeats -> the detector hard-aborts at the 3rd identical round.
+        runtime = _FakeRuntime(replies=["keep going"] * 50)
+        sandbox = _FakeSandbox(workspace_path=str(tmp_path / "ws"))
+        sandbox.configure_exec(lines=[b"ok\n"], exit_code=0)
+        agent = _FakeCLIAgent()
+        session, _, audit = _build_session(
+            tmp_path,
+            runtime=runtime,
+            sandbox=sandbox,
+            agent=agent,
+            max_rounds=20,
+            hard_action_cap=None,  # isolate the detector from the cap
+            stuck_detector=StuckDetector(),
+        )
+        outcome = await session.run()
+        assert outcome == SessionState.FAILED
+        assert "stuck" in (session.failure_reason or "")
+        assert "loop.stuck" in _categories(audit)
+
+    @pytest.mark.asyncio
+    async def test_hard_action_cap_aborts(self, tmp_path: Path) -> None:
+        # Distinct replies -> no stuck; the action cap is the backstop.
+        runtime = _FakeRuntime(replies=[f"round {i}" for i in range(50)])
+        sandbox = _FakeSandbox(workspace_path=str(tmp_path / "ws"))
+        sandbox.configure_exec(lines=[b"ok\n"], exit_code=0)
+        agent = _FakeCLIAgent()
+        session, _, audit = _build_session(
+            tmp_path,
+            runtime=runtime,
+            sandbox=sandbox,
+            agent=agent,
+            max_rounds=20,
+            hard_action_cap=3,
+            stuck_detector=None,  # isolate the cap from the detector
+        )
+        outcome = await session.run()
+        assert outcome == SessionState.FAILED
+        assert "action cap" in (session.failure_reason or "")
+        assert "loop.cap_reached" in _categories(audit)
+
+    @pytest.mark.asyncio
+    async def test_soft_nudge_injects_corrective_and_completes(self, tmp_path: Path) -> None:
+        # Same reply twice (soft nudge @2) then DONE -> the loop survives and
+        # the corrective is injected into the history Jr sees next round.
+        runtime = _FakeRuntime(replies=["keep going", "keep going", DONE_SENTINEL])
+        sandbox = _FakeSandbox(workspace_path=str(tmp_path / "ws"))
+        sandbox.configure_exec(lines=[b"ok\n"], exit_code=0)
+        agent = _FakeCLIAgent()
+        session, _, audit = _build_session(
+            tmp_path,
+            runtime=runtime,
+            sandbox=sandbox,
+            agent=agent,
+            max_rounds=20,
+            hard_action_cap=None,
+            stuck_detector=StuckDetector(),
+        )
+        outcome = await session.run()
+        assert outcome == SessionState.COMPLETED
+        assert "loop.stuck_warning" in _categories(audit)
+        injected = any(
+            any("[orchestrator]" in str(m.get("content", "")) for m in history)
+            for history in runtime.chat_calls
+        )
+        assert injected
+
+    @pytest.mark.asyncio
+    async def test_detector_off_runs_to_max_rounds(self, tmp_path: Path) -> None:
+        # Detector + cap both off -> a repeating reply is NOT flagged; the loop
+        # runs to max_rounds (opt-out preserves the pre-S-Vision behaviour).
+        runtime = _FakeRuntime(replies=["keep going"] * 50)
+        sandbox = _FakeSandbox(workspace_path=str(tmp_path / "ws"))
+        sandbox.configure_exec(lines=[b"ok\n"], exit_code=0)
+        agent = _FakeCLIAgent()
+        session, _, _ = _build_session(
+            tmp_path,
+            runtime=runtime,
+            sandbox=sandbox,
+            agent=agent,
+            max_rounds=4,
+            hard_action_cap=None,
+            stuck_detector=None,
+        )
+        outcome = await session.run()
+        assert outcome == SessionState.FAILED
+        assert "max_rounds" in (session.failure_reason or "")
+
+    @pytest.mark.asyncio
+    async def test_wall_clock_cap_aborts(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Opt-in wall-clock cap (ADR-010 §2.2.3, default OFF). A deterministic
+        # clock jumps past the cap on the first in-loop check -> abort before
+        # any round runs. Only the session module's ``time`` is patched, so
+        # asyncio's own clock is untouched.
+        import types
+
+        clock = iter([0.0])  # loop_started=0.0; every later call -> 1000.0
+        monkeypatch.setattr(
+            "selffork_orchestrator.lifecycle.session.time",
+            types.SimpleNamespace(monotonic=lambda: next(clock, 1000.0)),
+        )
+        runtime = _FakeRuntime(replies=["work"] * 5)
+        sandbox = _FakeSandbox(workspace_path=str(tmp_path / "ws"))
+        sandbox.configure_exec(lines=[b"ok\n"], exit_code=0)
+        agent = _FakeCLIAgent()
+        session, _, audit = _build_session(
+            tmp_path,
+            runtime=runtime,
+            sandbox=sandbox,
+            agent=agent,
+            max_rounds=20,
+            hard_action_cap=None,  # isolate the wall-clock cap
+            wall_clock_cap_seconds=1.0,
+            stuck_detector=None,
+        )
+        outcome = await session.run()
+        assert outcome == SessionState.FAILED
+        assert "wall-clock" in (session.failure_reason or "")
+        cap_records = [
+            rec for rec in _read_audit(audit) if rec["category"] == "loop.cap_reached"
+        ]
+        assert cap_records
+        assert cap_records[0]["payload"]["kind"] == "wall_clock"
 
 
 class TestHappyPath:

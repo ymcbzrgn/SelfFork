@@ -6,6 +6,7 @@ default-tool catalog.
 
 from __future__ import annotations
 
+from selffork_orchestrator.tools.auto_pr import build_auto_pr_tools
 from selffork_orchestrator.tools.autopilot import build_autopilot_tools
 from selffork_orchestrator.tools.base import (
     ToolArgs,
@@ -41,6 +42,7 @@ def build_default_registry() -> ToolRegistry:
             *build_autopilot_tools(),
             *build_body_tools(),
             *build_router_tools(),
+            *build_auto_pr_tools(),
         ],
     )
 
@@ -52,6 +54,7 @@ __all__ = [
     "ToolRegistry",
     "ToolResult",
     "ToolSpec",
+    "build_auto_pr_tools",
     "build_autopilot_tools",
     "build_body_tools",
     "build_default_registry",

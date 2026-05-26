@@ -1,4 +1,4 @@
-"""S-Auto Faz E — AuditEntry + AuditWriter + build_audit_entry tests."""
+"""S-Auto Faz E / S-Vision §coaching — AuditEntry + AuditWriter + Correction tests."""
 
 from __future__ import annotations
 
@@ -257,3 +257,152 @@ def test_build_audit_entry_idempotency_key_global_fallback() -> None:
         world_state=_state(last_active_workspace=None),
     )
     assert entry.idempotency_key == "3:noop:global"
+
+
+# ── ADR-010 §coaching / S-Vision Faz D — operator Corrections ──────
+
+
+def test_correction_minimal_fields() -> None:
+    from selffork_orchestrator.heartbeat.audit import Correction
+
+    cp = Correction(
+        audit_idempotency_key="7:task_başlat:alpha",
+        correction_text="bekle demeliydin, kota düşük",
+    )
+    assert cp.audit_idempotency_key == "7:task_başlat:alpha"
+    assert cp.correction_text == "bekle demeliydin, kota düşük"
+    assert cp.suggested_action is None
+    assert cp.source == "operator"
+    assert cp.corrected_at.tzinfo is UTC
+
+
+def test_correction_is_frozen() -> None:
+    from pydantic import ValidationError
+
+    from selffork_orchestrator.heartbeat.audit import Correction
+
+    cp = Correction(audit_idempotency_key="k", correction_text="t")
+    with pytest.raises(ValidationError):
+        cp.correction_text = "edited"  # type: ignore[misc]
+
+
+def test_correction_extra_field_rejected() -> None:
+    from pydantic import ValidationError
+
+    from selffork_orchestrator.heartbeat.audit import Correction
+
+    with pytest.raises(ValidationError):
+        Correction.model_validate(
+            {
+                "audit_idempotency_key": "k",
+                "correction_text": "t",
+                "sneaky_field": "rejected",
+            }
+        )
+
+
+def test_correction_serializes_json() -> None:
+    from selffork_orchestrator.heartbeat.audit import Correction
+
+    cp = Correction(
+        audit_idempotency_key="9:bekle:alpha",
+        correction_text="kanban_task_öner doğru olurdu",
+        suggested_action="kanban_task_öner",
+    )
+    body = cp.as_jsonl()
+    assert body.endswith("\n")
+    assert '"audit_idempotency_key":"9:bekle:alpha"' in body
+    assert '"suggested_action":"kanban_task_öner"' in body
+
+
+def test_writer_corrections_path_sits_next_to_audit(tmp_path: Path) -> None:
+    target = tmp_path / "audit.jsonl"
+    writer = AuditWriter(path=target)
+    assert writer.corrections_path == tmp_path / "corrections.jsonl"
+
+
+def test_writer_write_correction_creates_parent_dir(tmp_path: Path) -> None:
+    from selffork_orchestrator.heartbeat.audit import Correction
+
+    target = tmp_path / "nested" / "audit.jsonl"
+    writer = AuditWriter(path=target)
+    writer.write_correction(
+        Correction(audit_idempotency_key="k", correction_text="t")
+    )
+    assert (tmp_path / "nested" / "corrections.jsonl").is_file()
+
+
+def test_writer_correction_roundtrip(tmp_path: Path) -> None:
+    from selffork_orchestrator.heartbeat.audit import Correction
+
+    writer = AuditWriter(path=tmp_path / "audit.jsonl")
+    writer.write_correction(
+        Correction(
+            audit_idempotency_key="3:task_başlat:beta",
+            correction_text="bu sırada bekle",
+            suggested_action="bekle",
+            source="operator",
+        )
+    )
+    writer.write_correction(
+        Correction(
+            audit_idempotency_key="4:bekle:beta",
+            correction_text="aslında kanban öner",
+            suggested_action="kanban_task_öner",
+        )
+    )
+    loaded = list(writer.read_corrections())
+    assert len(loaded) == 2
+    assert loaded[0].audit_idempotency_key == "3:task_başlat:beta"
+    assert loaded[0].suggested_action == "bekle"
+    assert loaded[1].suggested_action == "kanban_task_öner"
+
+
+def test_writer_read_corrections_absent_file(tmp_path: Path) -> None:
+    writer = AuditWriter(path=tmp_path / "audit.jsonl")
+    assert list(writer.read_corrections()) == []
+
+
+def test_writer_read_corrections_skips_malformed_lines(tmp_path: Path) -> None:
+    from selffork_orchestrator.heartbeat.audit import Correction
+
+    target = tmp_path / "corrections.jsonl"
+    target.write_text(
+        Correction(
+            audit_idempotency_key="k", correction_text="ok"
+        ).as_jsonl()
+        + "this is not json\n"
+        + Correction(
+            audit_idempotency_key="k2", correction_text="also ok"
+        ).as_jsonl(),
+        encoding="utf-8",
+    )
+    writer = AuditWriter(path=tmp_path / "audit.jsonl")
+    loaded = list(writer.read_corrections())
+    assert len(loaded) == 2
+    assert {c.audit_idempotency_key for c in loaded} == {"k", "k2"}
+
+
+def test_writer_audit_and_corrections_independent(tmp_path: Path) -> None:
+    """Writing AuditEntry rows must not pollute the corrections log
+    and vice versa — distinct files."""
+    from selffork_orchestrator.heartbeat.audit import Correction
+
+    writer = AuditWriter(path=tmp_path / "audit.jsonl")
+    writer.write(
+        AuditEntry(
+            tick=1, timestamp=datetime(2026, 5, 26, tzinfo=UTC), trigger="t"
+        )
+    )
+    writer.write_correction(
+        Correction(audit_idempotency_key="1:noop:global", correction_text="x")
+    )
+    assert len(list(writer.read_all())) == 1
+    assert len(list(writer.read_corrections())) == 1
+
+
+def test_default_corrections_path_basename() -> None:
+    from selffork_orchestrator.heartbeat.audit import default_corrections_path
+
+    assert default_corrections_path().name == "corrections.jsonl"
+    assert default_corrections_path().parent.name == "heartbeat"

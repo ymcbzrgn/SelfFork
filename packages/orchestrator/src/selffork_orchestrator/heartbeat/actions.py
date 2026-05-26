@@ -1,4 +1,4 @@
-"""Heartbeat action vocabulary — closed enum of 8 outer-loop actions.
+"""Heartbeat action vocabulary — closed enum of 10 outer-loop actions.
 
 ADR-008 §4.4: the action vocabulary is **closed** (no arbitrary actions)
 so the audit log + Settings panel + deliberative model can reason about
@@ -18,11 +18,14 @@ __all__ = ["LegalAction"]
 
 
 class LegalAction(StrEnum):
-    """One of the 8 closed outer-loop action labels (ADR-008 §4.4).
+    """One of the 10 closed outer-loop action labels (ADR-008 §4.4 + ADR-010 §4).
 
-    Order matches the ADR-008 §4.4 table. Adding an action requires a
-    coordinated change across ADR-008, this enum, and the rules in
-    :class:`LegalActionFilter`.
+    Order matches the ADR-008 §4.4 + ADR-010 §4 tables. ``BODY_USE`` and
+    ``BODY_REVIEW`` were added by S-Vision (ADR-010 §4) to give the model
+    a granular hook for the Body pillar (write/click/screenshot vs.
+    read-only vision parse) — distillation-friendly for M7 + auditable.
+    Adding an action requires a coordinated change across ADR-008/010,
+    this enum, and the rules in :class:`LegalActionFilter`.
     """
 
     TASK_START = "task_başlat"
@@ -31,5 +34,7 @@ class LegalAction(StrEnum):
     KANBAN_SUGGEST = "kanban_task_öner"
     OPERATOR_ASK = "operatöre_sor"
     IDEATE = "fikirleş"
+    BODY_USE = "uzvunu_kullan"
+    BODY_REVIEW = "uzvunu_incele"
     WAIT = "bekle"
     SELF_STOP = "kendini_durdur"

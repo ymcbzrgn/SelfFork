@@ -10,6 +10,12 @@ POSIX guarantees concurrent readers never observe partial content. The ``fsync``
 between write-and-replace is paranoid but cheap; SnapperRunner runs at 1 Hz, so
 the syscall cost is negligible compared to the cost of a torn read corrupting
 :class:`UsageAggregator` proactive cache.
+
+Operator-tunable env vars:
+
+* ``SELFFORK_CLI_STATE_DIR`` — override the canonical state directory
+  (default ``~/.selffork/cli-state/``). Used by tests to isolate from
+  the operator's real on-disk surfaces.
 """
 from __future__ import annotations
 
@@ -35,7 +41,15 @@ def default_state_dir() -> Path:
     """Canonical directory for SelfFork CLI state snapshots.
 
     ``~/.selffork/cli-state/`` — created lazily on first write.
+
+    The ``SELFFORK_CLI_STATE_DIR`` env var overrides the default for
+    every consumer (SnapperRunner write side + ProactiveUsageReader
+    read side + tooling); set it to a per-test tmp path to keep test
+    suites hermetic.
     """
+    raw = os.environ.get("SELFFORK_CLI_STATE_DIR", "").strip()
+    if raw:
+        return Path(raw).expanduser()
     return Path.home() / ".selffork" / "cli-state"
 
 

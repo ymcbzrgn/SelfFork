@@ -10,8 +10,10 @@ import pytest
 
 from selffork_orchestrator.snappers.base import Snapper
 from selffork_orchestrator.snappers.runner import (
+    DEFAULT_SIDECAR_INTERVAL_SECONDS,
     SnapperRunner,
     SnapperRunnerConfig,
+    build_default_snapper_runner,
 )
 from selffork_shared.quota import (
     ContextState,
@@ -144,3 +146,104 @@ async def test_runner_stop_returns_promptly(tmp_path: Path) -> None:
         await anyio.sleep(0.05)
         runner.stop()
     # Reaching here means the task group exited within move_on_after window.
+
+
+# ── build_default_snapper_runner (dashboard sidecar factory) ──────────────────
+
+
+def test_build_default_snapper_runner_constructs_full_fleet(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Default invocation builds a runner wired with every registered snapper."""
+    monkeypatch.delenv("SELFFORK_SNAPPER_RUNNER_ENABLED", raising=False)
+    monkeypatch.delenv(
+        "SELFFORK_SNAPPER_RUNNER_DEFAULT_INTERVAL_SECONDS", raising=False
+    )
+    monkeypatch.delenv("SELFFORK_SNAPPER_RUNNER_STATE_DIR", raising=False)
+    runner = build_default_snapper_runner()
+    assert runner is not None
+    cli_ids = {s.cli_id for s in runner.snappers}
+    # All registered CLI snappers wired today (6 entries).
+    assert {
+        "claude-code",
+        "codex",
+        "gemini-cli",
+        "opencode",
+        "minimax-cli",
+        "zai",
+    } <= cli_ids
+    # Default cadence is the dashboard sidecar constant (slower than the
+    # per-session 1 Hz default — see DEFAULT_SIDECAR_INTERVAL_SECONDS).
+    assert (
+        runner.config.default_interval_seconds == DEFAULT_SIDECAR_INTERVAL_SECONDS
+    )
+    # No state_dir override → consumers (proactive reader) fall back to
+    # base.default_state_dir().
+    assert runner.config.state_dir is None
+
+
+def test_build_default_snapper_runner_disabled_via_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``SELFFORK_SNAPPER_RUNNER_ENABLED=false`` disables the sidecar."""
+    for disabled in ("false", "0", "no", "FALSE", "No"):
+        monkeypatch.setenv("SELFFORK_SNAPPER_RUNNER_ENABLED", disabled)
+        assert build_default_snapper_runner() is None
+    # Any other value (including ``true``, empty) enables (auto-detect).
+    monkeypatch.setenv("SELFFORK_SNAPPER_RUNNER_ENABLED", "true")
+    assert build_default_snapper_runner() is not None
+    monkeypatch.setenv("SELFFORK_SNAPPER_RUNNER_ENABLED", "")
+    assert build_default_snapper_runner() is not None
+
+
+def test_build_default_snapper_runner_honors_interval_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SELFFORK_SNAPPER_RUNNER_ENABLED", raising=False)
+    monkeypatch.setenv(
+        "SELFFORK_SNAPPER_RUNNER_DEFAULT_INTERVAL_SECONDS", "2.5"
+    )
+    runner = build_default_snapper_runner()
+    assert runner is not None
+    assert runner.config.default_interval_seconds == 2.5
+
+
+def test_build_default_snapper_runner_falls_back_on_invalid_interval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SELFFORK_SNAPPER_RUNNER_ENABLED", raising=False)
+    monkeypatch.setenv(
+        "SELFFORK_SNAPPER_RUNNER_DEFAULT_INTERVAL_SECONDS", "not-a-number"
+    )
+    runner = build_default_snapper_runner()
+    assert runner is not None
+    assert (
+        runner.config.default_interval_seconds == DEFAULT_SIDECAR_INTERVAL_SECONDS
+    )
+
+
+def test_build_default_snapper_runner_clamps_low_interval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Interval is clamped to >= 0.25s to keep the fleet kind to disk + CPU."""
+    monkeypatch.delenv("SELFFORK_SNAPPER_RUNNER_ENABLED", raising=False)
+    monkeypatch.setenv(
+        "SELFFORK_SNAPPER_RUNNER_DEFAULT_INTERVAL_SECONDS", "0.05"
+    )
+    runner = build_default_snapper_runner()
+    assert runner is not None
+    assert runner.config.default_interval_seconds == 0.25
+
+
+def test_build_default_snapper_runner_honors_state_dir_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.delenv("SELFFORK_SNAPPER_RUNNER_ENABLED", raising=False)
+    monkeypatch.setenv(
+        "SELFFORK_SNAPPER_RUNNER_STATE_DIR",
+        str(tmp_path / "custom-state"),
+    )
+    runner = build_default_snapper_runner()
+    assert runner is not None
+    assert runner.config.state_dir == tmp_path / "custom-state"

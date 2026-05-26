@@ -1,4 +1,4 @@
-"""S-Auto Faz D — ActionExecutor tests (8 closed-vocabulary actions)."""
+"""S-Auto Faz D / S-Vision §4 — ActionExecutor tests (10 closed-vocabulary actions)."""
 
 from __future__ import annotations
 
@@ -433,3 +433,104 @@ def test_action_result_default_executed_at_utc() -> None:
         action=LegalAction.WAIT, outcome="executed", summary="ok"
     )
     assert result.executed_at.tzinfo is UTC
+
+
+# ── ADR-010 §4 S-Vision — BODY_USE + BODY_REVIEW ────────────────────
+
+
+@pytest.mark.asyncio
+async def test_body_use_without_driver_skips() -> None:
+    executor = ActionExecutor(body_use_driver=None)
+    result = await executor.execute(
+        _decision(LegalAction.BODY_USE, "Open browser, click login"),
+        _state(),
+    )
+    assert result.outcome == "skipped"
+    assert "not wired" in result.summary
+
+
+@pytest.mark.asyncio
+async def test_body_use_calls_driver_and_returns_executed() -> None:
+    from selffork_orchestrator.heartbeat.executor import BodyDriverOutcome
+
+    captured: dict[str, object] = {}
+
+    async def driver(state: WorldState, decision: ActionDecision) -> BodyDriverOutcome:
+        captured["workspace"] = state.last_active_workspace
+        captured["intent"] = decision.reasoning
+        return BodyDriverOutcome(
+            succeeded=True,
+            summary="clicked #login",
+            metadata={"selector": "#login"},
+        )
+
+    executor = ActionExecutor(body_use_driver=driver)
+    result = await executor.execute(
+        _decision(LegalAction.BODY_USE, "click login"),
+        _state(),
+    )
+    assert result.outcome == "executed"
+    assert result.action is LegalAction.BODY_USE
+    assert result.summary == "clicked #login"
+    assert result.metadata["selector"] == "#login"
+    assert captured == {"workspace": "alpha", "intent": "click login"}
+
+
+@pytest.mark.asyncio
+async def test_body_use_driver_returning_failure_lands_failed() -> None:
+    from selffork_orchestrator.heartbeat.executor import BodyDriverOutcome
+
+    async def driver(state: WorldState, decision: ActionDecision) -> BodyDriverOutcome:
+        return BodyDriverOutcome(
+            succeeded=False,
+            summary="selector not found",
+            metadata={"selector": "#missing"},
+        )
+
+    executor = ActionExecutor(body_use_driver=driver)
+    result = await executor.execute(_decision(LegalAction.BODY_USE), _state())
+    assert result.outcome == "failed"
+    assert "selector not found" in result.summary
+
+
+@pytest.mark.asyncio
+async def test_body_use_driver_raises_fails() -> None:
+    async def driver(state: WorldState, decision: ActionDecision) -> object:
+        msg = "browser crashed"
+        raise RuntimeError(msg)
+
+    executor = ActionExecutor(body_use_driver=driver)  # type: ignore[arg-type]
+    result = await executor.execute(_decision(LegalAction.BODY_USE), _state())
+    assert result.outcome == "failed"
+    assert "browser crashed" in result.summary
+
+
+@pytest.mark.asyncio
+async def test_body_review_without_driver_skips() -> None:
+    executor = ActionExecutor(body_review_driver=None)
+    result = await executor.execute(
+        _decision(LegalAction.BODY_REVIEW, "Read the page for a heading"),
+        _state(),
+    )
+    assert result.outcome == "skipped"
+    assert "not wired" in result.summary
+
+
+@pytest.mark.asyncio
+async def test_body_review_calls_driver_and_returns_executed() -> None:
+    from selffork_orchestrator.heartbeat.executor import BodyDriverOutcome
+
+    async def driver(state: WorldState, decision: ActionDecision) -> BodyDriverOutcome:
+        return BodyDriverOutcome(
+            succeeded=True,
+            summary="found heading 'Sign In'",
+            metadata={"text": "Sign In"},
+        )
+
+    executor = ActionExecutor(body_review_driver=driver)
+    result = await executor.execute(
+        _decision(LegalAction.BODY_REVIEW), _state()
+    )
+    assert result.outcome == "executed"
+    assert result.action is LegalAction.BODY_REVIEW
+    assert result.metadata["text"] == "Sign In"

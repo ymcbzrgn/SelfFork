@@ -1574,3 +1574,50 @@ Theater "Switch CLI" dialog, Talk `/cli`, Telegram `/cli`. Backend
   akışı ileride — round-loop CLI çıktısı zaten ayrı stream).
 - Adaptive stall_seconds (donanım profiline göre otomatik ayar) — şimdilik sabit
   default + env override.
+
+
+## S-Vision §2 — Agentic Loop: Stuck-Detector + Hard Caps + Checkpoint→Resume (ADR-010 §2)
+
+**Hedef:** 24/7 agentic loop güvenlik ağları — deterministik StuckDetector
+(same-tool-3x / no-change-3x / consec-fail-3x / oscillation k-cycle; soft@2 NUDGE /
+hard@3 ABORT), hard action-cap (50, always-on) + opt-in wall-clock cap (default OFF),
+ve cross-tick checkpoint→resume (Heartbeat boot'ta son checkpoint'i okur → ilk üretken
+deliberation tick'ine one-shot resume-hint besler). Davranış deterministik unit
+test'lerle kanıtlı; aşağısı operatör-runnable doğrulama.
+
+### Senaryo a — StuckDetector + round-loop wiring (deterministik)
+- [ ] `pytest packages/orchestrator/tests/lifecycle/test_stuck_detector.py -q` yeşil
+      (her reason + soft/hard + exempt + oscillation + reset + validation).
+- [ ] `pytest packages/orchestrator/tests/lifecycle/test_session.py -q -k StuckDetectorWiring`
+      → repeated→ABORT (`loop.stuck`) · action-cap→`loop.cap_reached` · soft-NUDGE
+      corrective inject→COMPLETED · detector-OFF→max_rounds · wall-clock-cap→
+      `loop.cap_reached` (`kind="wall_clock"`).
+
+### Senaryo b — Checkpoint→resume (cross-tick, Heartbeat dış döngü)
+- [ ] `pytest packages/orchestrator/tests/heartbeat/test_checkpoint.py
+      packages/orchestrator/tests/heartbeat/test_scheduler.py
+      packages/orchestrator/tests/heartbeat/test_deliberation.py -q` yeşil.
+- [ ] Üretken checkpoint (`step=act`, productive next_action) → boot'ta `resumed_from`
+      set + ilk gerçek deliberation tick prompt'unda "Resuming after a restart" +
+      sonraki tick'lerde YOK. Halt / `bekle` checkpoint → resume-hint YOK.
+- [ ] Stalled ilk tick resume-hint'i TÜKETMEZ → bir sonraki gerçek tick'e taşır
+      (consume-on-delivery).
+
+### Senaryo c — Canlı gözlem (opsiyonel, model gerektirir)
+- [ ] Manuel `selffork run` + döngüsel/tıkanan Jr → audit JSONL'de `loop.stuck`
+      (WARNING, hard ABORT → FAILED) veya `loop.stuck_warning` (soft NUDGE corrective,
+      loop kendini düzeltir, spin YOK).
+- [ ] Heartbeat restart (mid-task, halt değil) → struct log'da
+      `heartbeat_resumed_from_checkpoint`.
+
+### Senaryo d — Full sweep
+- [ ] `pytest packages/{mind,orchestrator,body,shared}/tests -q` yeşil (≥2377).
+- [ ] `ruff check packages/ apps/web` temiz · `mypy` Success · `tsc --noEmit` = 0.
+- [ ] Audit-god (§2, 3-paralel) 0 CRITICAL / 0 HIGH.
+
+### S-Vision §2 sonrası deferred
+- Worker/queue split (CPU-hours tick out-of-band) → S-ToolFleet (ADR-010 §2.2.2).
+- Round-loop `loop.*` audit → Mind T2 surfacing (şu an per-session audit; cross-pillar
+  wire ileride — audit-god C#1).
+- StuckDetector eşikleri Settings'e wire (şu an cli.py default inject).
+- Oscillation audit `repeats` = eşik (gözlenen cycle sayısı değil; kozmetik).

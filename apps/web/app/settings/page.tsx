@@ -11,22 +11,17 @@ import {
   type HeartbeatStateResponse,
   type ModelEndpointConfig,
   type ModelEndpointHealth,
-  type ReflexAdapterInfo,
-  type ReflexHyperParams,
-  type StartTrainingPayload,
   applyHeartbeatPreset,
   getCodexBarSettings,
   getDestructiveWhitelist,
   getHeartbeatAutonomy,
   getHeartbeatState,
   getModelEndpoint,
-  getReflexAdapterInfo,
   putCodexBarSettings,
   putDestructiveCategoryWindow,
   putDestructiveWhitelist,
   putHeartbeatAutonomy,
   putModelEndpoint,
-  startTraining,
   testModelEndpoint,
 } from "@/lib/api";
 import { AppShell } from "@/components/layout/app-shell";
@@ -41,14 +36,12 @@ interface CodexBarStatus {
 
 type Section =
   | "model"
-  | "fine-tune"
   | "telegram"
   | "codexbar"
   | "autonomy";
 
 const DEFAULT_OPEN: Record<Section, boolean> = {
   model: true,
-  "fine-tune": true,
   telegram: true,
   codexbar: false,
   autonomy: true,
@@ -61,15 +54,6 @@ const SAVE_WINDOW_OPTIONS = [
   { hours: 8, label: "8 hours" },
   { hours: 24, label: "24 hours" },
 ];
-
-const DEFAULT_HYPERPARAMS: ReflexHyperParams = {
-  method: "QLoRA",
-  lora_rank: 32,
-  lora_alpha: 16,
-  learning_rate: "2e-4",
-  epochs: 3,
-  target_modules: "attention only",
-};
 
 export default function SettingsPage() {
   const [open, setOpen] = useState<Record<Section, boolean>>(DEFAULT_OPEN);
@@ -97,15 +81,6 @@ export default function SettingsPage() {
           onToggle={toggle}
         >
           <ModelEndpointSection />
-        </SectionCard>
-
-        <SectionCard
-          id="fine-tune"
-          title="Fine-tune"
-          open={open}
-          onToggle={toggle}
-        >
-          <FineTuneSection />
         </SectionCard>
 
         <SectionCard
@@ -449,270 +424,6 @@ function ModelEndpointSection() {
         </div>
       </div>
     </div>
-  );
-}
-
-// ── Fine-tune section ──────────────────────────────────────────────────────
-
-function FineTuneSection() {
-  const [adapter, setAdapter] = useState<ReflexAdapterInfo | null>(null);
-  const [adapterError, setAdapterError] = useState<string | null>(null);
-  const [hyperparams, setHyperparams] = useState<ReflexHyperParams>(
-    DEFAULT_HYPERPARAMS,
-  );
-  const [datasetSource, setDatasetSource] = useState<"auto" | "manual">(
-    "auto",
-  );
-  const [datasetPath, setDatasetPath] = useState("");
-  const [trainingEndpointKind, setTrainingEndpointKind] = useState<
-    "same" | "separate"
-  >("same");
-  const [trainingEndpoint, setTrainingEndpoint] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [lastJobId, setLastJobId] = useState<string | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getReflexAdapterInfo()
-      .then((info) => !cancelled && setAdapter(info))
-      .catch(
-        (err: Error) => !cancelled && setAdapterError(err.message),
-      );
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handleStart = useCallback(async () => {
-    setSubmitting(true);
-    setSubmitError(null);
-    const payload: StartTrainingPayload = {
-      dataset_source: datasetSource,
-      dataset_path:
-        datasetSource === "manual" ? datasetPath || undefined : undefined,
-      hyperparams,
-      training_endpoint:
-        trainingEndpointKind === "separate"
-          ? trainingEndpoint
-          : undefined,
-    };
-    try {
-      const job = await startTraining(payload);
-      setLastJobId(job.job_id);
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "submit failed");
-    } finally {
-      setSubmitting(false);
-    }
-  }, [
-    datasetSource,
-    datasetPath,
-    hyperparams,
-    trainingEndpoint,
-    trainingEndpointKind,
-  ]);
-
-  return (
-    <div className="pt-4 space-y-5">
-      <div>
-        <h4 className="text-caption font-bold uppercase tracking-wider text-on-surface-variant mb-3">
-          Training dataset
-        </h4>
-        <RadioGroup<"auto" | "manual">
-          value={datasetSource}
-          onChange={setDatasetSource}
-          options={[
-            { v: "auto", label: "Auto from session history (recommended)" },
-            { v: "manual", label: "Manual path" },
-          ]}
-          vertical
-        />
-        {datasetSource === "manual" && (
-          <input
-            type="text"
-            value={datasetPath}
-            onChange={(e) => setDatasetPath(e.target.value)}
-            placeholder="/path/to/dataset.jsonl"
-            className="w-full font-mono text-caption px-3 py-2 mt-2 bg-surface-container-low border border-outline-variant rounded-lg"
-          />
-        )}
-      </div>
-
-      <div>
-        <h4 className="text-caption font-bold uppercase tracking-wider text-on-surface-variant mb-3">
-          Hyperparams
-        </h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormRow label="Method">
-            <select
-              value={hyperparams.method}
-              onChange={(e) =>
-                setHyperparams({
-                  ...hyperparams,
-                  method: e.target.value as ReflexHyperParams["method"],
-                })
-              }
-              className="w-full text-caption px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg"
-            >
-              <option>QLoRA</option>
-              <option>LoRA</option>
-              <option>Full</option>
-            </select>
-          </FormRow>
-          <FormRow label="Target modules">
-            <select
-              value={hyperparams.target_modules}
-              onChange={(e) =>
-                setHyperparams({
-                  ...hyperparams,
-                  target_modules: e.target
-                    .value as ReflexHyperParams["target_modules"],
-                })
-              }
-              className="w-full text-caption px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg"
-            >
-              <option>attention only</option>
-              <option>attention + MLP</option>
-            </select>
-          </FormRow>
-          <FormRow label="LoRA rank">
-            <input
-              type="number"
-              value={hyperparams.lora_rank}
-              onChange={(e) =>
-                setHyperparams({
-                  ...hyperparams,
-                  lora_rank: Number(e.target.value) || 0,
-                })
-              }
-              className="w-full text-caption px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg tabular-nums"
-            />
-          </FormRow>
-          <FormRow label="LoRA alpha">
-            <input
-              type="number"
-              value={hyperparams.lora_alpha}
-              onChange={(e) =>
-                setHyperparams({
-                  ...hyperparams,
-                  lora_alpha: Number(e.target.value) || 0,
-                })
-              }
-              className="w-full text-caption px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg tabular-nums"
-            />
-          </FormRow>
-          <FormRow label="Learning rate">
-            <input
-              type="text"
-              value={hyperparams.learning_rate}
-              onChange={(e) =>
-                setHyperparams({
-                  ...hyperparams,
-                  learning_rate: e.target.value,
-                })
-              }
-              className="w-full font-mono text-caption px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg"
-            />
-          </FormRow>
-          <FormRow label="Epochs">
-            <input
-              type="number"
-              value={hyperparams.epochs}
-              onChange={(e) =>
-                setHyperparams({
-                  ...hyperparams,
-                  epochs: Number(e.target.value) || 0,
-                })
-              }
-              className="w-full text-caption px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg tabular-nums"
-            />
-          </FormRow>
-        </div>
-      </div>
-
-      <div>
-        <h4 className="text-caption font-bold uppercase tracking-wider text-on-surface-variant mb-3">
-          Training endpoint
-        </h4>
-        <RadioGroup<"same" | "separate">
-          value={trainingEndpointKind}
-          onChange={setTrainingEndpointKind}
-          options={[
-            { v: "same", label: "Same as model endpoint" },
-            { v: "separate", label: "Separate" },
-          ]}
-          vertical
-        />
-        {trainingEndpointKind === "separate" && (
-          <input
-            type="text"
-            value={trainingEndpoint}
-            onChange={(e) => setTrainingEndpoint(e.target.value)}
-            placeholder="https://train.gpu.example.com"
-            className="w-full font-mono text-caption px-3 py-2 mt-2 bg-surface-container-low border border-outline-variant rounded-lg"
-          />
-        )}
-      </div>
-
-      <div className="pt-4 border-t border-outline-variant/30 flex items-center justify-between flex-wrap gap-3">
-        <div className="text-caption text-on-surface-variant">
-          <AdapterStatus adapter={adapter} error={adapterError} />
-        </div>
-        <div className="flex items-center gap-3">
-          {lastJobId && (
-            <span className="text-caption text-on-surface-variant">
-              Queued · job{" "}
-              <span className="font-mono">{lastJobId}</span> (M7 worker
-              pending)
-            </span>
-          )}
-          {submitError && (
-            <span className="text-caption text-error">{submitError}</span>
-          )}
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={() => void handleStart()}
-            className="px-5 py-2 bg-primary text-white text-caption font-bold rounded-lg hover:bg-primary-container flex items-center gap-1 disabled:opacity-50"
-          >
-            <Play className="h-4 w-4" strokeWidth={2} />
-            {submitting ? "Queueing…" : "Start training"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AdapterStatus({
-  adapter,
-  error,
-}: {
-  adapter: ReflexAdapterInfo | null;
-  error: string | null;
-}) {
-  if (error) {
-    return <span className="text-error">Adapter status: {error}</span>;
-  }
-  if (!adapter) {
-    return <span className="italic">Reading adapter manifest…</span>;
-  }
-  if (!adapter.adapter_trained) {
-    return (
-      <span>
-        Current adapter: <span className="italic">{adapter.message ?? "none"}</span>
-      </span>
-    );
-  }
-  return (
-    <span>
-      Current adapter:{" "}
-      <span className="font-mono">{adapter.version ?? "?"}</span>
-      {adapter.age_days !== null && ` · ${adapter.age_days} days old`}
-      {adapter.method && ` · ${adapter.method}`}
-      {adapter.examples !== null && ` · ${adapter.examples} examples`}
-    </span>
   );
 }
 

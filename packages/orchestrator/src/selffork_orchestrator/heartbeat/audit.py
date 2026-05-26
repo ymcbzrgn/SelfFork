@@ -38,8 +38,10 @@ from selffork_orchestrator.heartbeat.filter import WorldState
 __all__ = [
     "AuditEntry",
     "AuditWriter",
+    "Correction",
     "build_audit_entry",
     "default_audit_path",
+    "default_corrections_path",
 ]
 
 
@@ -81,6 +83,46 @@ def default_audit_path() -> Path:
     return Path("~/.selffork/heartbeat/audit.jsonl").expanduser()
 
 
+def default_corrections_path() -> Path:
+    """Default location: sibling of :func:`default_audit_path`.
+
+    Resolves to ``~/.selffork/heartbeat/corrections.jsonl`` today (kept in
+    lock-step with the audit path via :meth:`Path.with_name` so a future
+    relocation of :func:`default_audit_path` carries this sibling along
+    instead of silently drifting). The coaching-loop record (ADR-010
+    §coaching, S-Vision Faz D) lives in its own append-only JSONL so the
+    operator's correction history can be diffed against the
+    :class:`AuditEntry` stream without schema mixing.
+    """
+    return default_audit_path().with_name("corrections.jsonl")
+
+
+class Correction(BaseModel):
+    """Operator coaching record — an explicit "this decision was wrong" event.
+
+    ADR-010 §coaching / S-Vision Faz D. Each :class:`Correction` references
+    a prior :class:`AuditEntry` by its ``idempotency_key`` and carries the
+    operator's free-text correction plus an optional ``suggested_action``
+    label. S-Train later uses these as high-weight reflex examples
+    ("operator over the model").
+
+    Append-only by design — the audit log never rewrites, so a correction
+    is a NEW record next to the original entry, not an in-place edit.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    audit_idempotency_key: str
+    correction_text: str
+    suggested_action: str | None = None
+    corrected_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
+    source: str = "operator"
+
+    def as_jsonl(self) -> str:
+        """Serialize for append — newline-delimited JSON, one line."""
+        return self.model_dump_json() + "\n"
+
+
 @dataclass(frozen=True, slots=True)
 class AuditWriter:
     """Append :class:`AuditEntry` rows to disk (sync, atomic-per-line).
@@ -117,6 +159,45 @@ class AuditWriter:
                     _log.warning(
                         "heartbeat_audit_replay_malformed_line",
                         extra={"path": str(self.path)},
+                    )
+
+    @property
+    def corrections_path(self) -> Path:
+        """Sibling JSONL where :class:`Correction` rows append (ADR-010 §coaching).
+
+        Derived from :attr:`path` so a custom audit location keeps its
+        coaching trail next door (e.g. per-test ``tmp_path``).
+        """
+        return self.path.with_name("corrections.jsonl")
+
+    def write_correction(self, correction: Correction) -> None:
+        """Atomically append one :class:`Correction`. Creates parent dir on demand.
+
+        Append-only mirrors :meth:`write` — corrections never rewrite an
+        :class:`AuditEntry`; S-Train + Mind compaction stitch the original
+        record and its corrections by ``audit_idempotency_key``.
+        """
+        self.corrections_path.parent.mkdir(parents=True, exist_ok=True)
+        line = correction.as_jsonl()
+        with self.corrections_path.open("a", encoding="utf-8") as fp:
+            fp.write(line)
+
+    def read_corrections(self) -> Iterator[Correction]:
+        """Iterate every :class:`Correction` on disk; skip malformed lines."""
+        if not self.corrections_path.is_file():
+            return
+        with self.corrections_path.open("r", encoding="utf-8") as fp:
+            for raw in fp:
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    payload = json.loads(raw)
+                    yield Correction.model_validate(payload)
+                except (json.JSONDecodeError, ValueError):
+                    _log.warning(
+                        "heartbeat_audit_corrections_malformed_line",
+                        extra={"path": str(self.corrections_path)},
                     )
 
     @classmethod

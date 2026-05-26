@@ -48,6 +48,9 @@ __all__ = [
     "ActionExecutor",
     "ActionOutcome",
     "ActionResult",
+    "BodyDriverOutcome",
+    "BodyReviewDriver",
+    "BodyUseDriver",
     "CliSelectionOutcome",
     "CliSelector",
     "KanbanCardCreator",
@@ -118,6 +121,43 @@ selection metadata (``chosen_cli`` / ``method`` / ``scores`` / ...). When
 
 
 @dataclass(frozen=True, slots=True)
+class BodyDriverOutcome:
+    """Pillar-internal shape a Body driver returns to the executor.
+
+    ADR-010 §4 S-Vision — kept deliberately small + defined here so
+    :mod:`heartbeat` never imports the Body package; the dashboard adapts
+    a real Body driver to this protocol. ``succeeded=False`` lands the
+    action as ``ActionResult(outcome="failed")``; ``True`` lands
+    ``"executed"``.
+    """
+
+    succeeded: bool
+    summary: str
+    metadata: dict[str, object] = field(default_factory=dict)
+
+
+BodyUseDriver = Callable[["WorldState", ActionDecision], Awaitable[BodyDriverOutcome]]
+"""``async (world_state, decision) → BodyDriverOutcome`` — write/click/screenshot.
+
+ADR-010 §4 S-Vision wires the pillar seam. The fat per-platform tool
+surface (browser-use / mobile-use / VR-AR — ~250-380 tools) is
+S-ToolFleet's scope; the driver receives the model's intent text via
+``decision.reasoning`` and the world snapshot, then performs the side
+effect through whichever Body subsystem the dashboard wired (``None`` ⇒
+``skipped``).
+"""
+
+
+BodyReviewDriver = Callable[["WorldState", ActionDecision], Awaitable[BodyDriverOutcome]]
+"""``async (world_state, decision) → BodyDriverOutcome`` — read-only vision parse.
+
+The non-mutating sibling of :data:`BodyUseDriver`. Same signature so the
+executor handlers are symmetric; the semantic difference (no write) is
+the contract the wired driver must honor.
+"""
+
+
+@dataclass(frozen=True, slots=True)
 class ActionResult:
     """The outcome of one :class:`ActionExecutor.execute` call.
 
@@ -140,7 +180,7 @@ class ActionResult:
 
 
 class ActionExecutor:
-    """Dispatch table for the 8 closed ADR-008 §4.4 action labels.
+    """Dispatch table for the 10 closed ADR-008 §4.4 + ADR-010 §4 action labels.
 
     Construct once with whichever side-effect callables the host
     process has wired. ``None`` for any callable means "not wired" —
@@ -158,12 +198,16 @@ class ActionExecutor:
         kanban_card_creator: KanbanCardCreator | None = None,
         ideation_manager: IdeationManager | None = None,
         cli_selector: CliSelector | None = None,
+        body_use_driver: BodyUseDriver | None = None,
+        body_review_driver: BodyReviewDriver | None = None,
     ) -> None:
         self._telegram = telegram_bridge
         self._task_starter = task_starter
         self._kanban_creator = kanban_card_creator
         self._ideation = ideation_manager
         self._cli_selector = cli_selector
+        self._body_use = body_use_driver
+        self._body_review = body_review_driver
 
     async def execute(
         self, decision: ActionDecision, world_state: WorldState
@@ -191,6 +235,10 @@ class ActionExecutor:
             return await self._cli_select(world_state)
         if action is LegalAction.IDEATE:
             return self._ideate(decision, world_state)
+        if action is LegalAction.BODY_USE:
+            return await self._body_use_action(decision, world_state)
+        if action is LegalAction.BODY_REVIEW:
+            return await self._body_review_action(decision, world_state)
         # Exhaustive — :func:`assert_never` ensures the enum stays in
         # lockstep with the dispatch table at type-check time and
         # raises at runtime if a new label sneaks in unhandled.
@@ -403,6 +451,74 @@ class ActionExecutor:
             outcome="executed",
             summary=selection.reasoning,
             metadata=selection.metadata,
+        )
+
+    async def _body_use_action(
+        self, decision: ActionDecision, state: WorldState
+    ) -> ActionResult:
+        return await self._dispatch_body(
+            action=LegalAction.BODY_USE,
+            driver=self._body_use,
+            decision=decision,
+            state=state,
+        )
+
+    async def _body_review_action(
+        self, decision: ActionDecision, state: WorldState
+    ) -> ActionResult:
+        return await self._dispatch_body(
+            action=LegalAction.BODY_REVIEW,
+            driver=self._body_review,
+            decision=decision,
+            state=state,
+        )
+
+    async def _dispatch_body(
+        self,
+        *,
+        action: LegalAction,
+        driver: BodyUseDriver | BodyReviewDriver | None,
+        decision: ActionDecision,
+        state: WorldState,
+    ) -> ActionResult:
+        """Shared wrap for BODY_USE / BODY_REVIEW (ADR-010 §4 S-Vision).
+
+        Both handlers have the same shape — None ⇒ ``skipped``; raise ⇒
+        ``failed``; ``BodyDriverOutcome.succeeded=False`` ⇒ ``failed``;
+        otherwise ``executed`` — so the wrap is shared instead of
+        duplicated across two handlers.
+        """
+        if driver is None:
+            label = "use" if action is LegalAction.BODY_USE else "review"
+            return ActionResult(
+                action=action,
+                outcome="skipped",
+                summary=f"body {label} driver not wired",
+            )
+        try:
+            outcome = await driver(state, decision)
+        except Exception as exc:
+            _log.warning(
+                "heartbeat_body_driver_raised",
+                extra={"action": action.value, "error": str(exc)},
+            )
+            return ActionResult(
+                action=action,
+                outcome="failed",
+                summary=f"body driver raised: {exc}",
+            )
+        if not outcome.succeeded:
+            return ActionResult(
+                action=action,
+                outcome="failed",
+                summary=outcome.summary or "body driver reported failure",
+                metadata=outcome.metadata,
+            )
+        return ActionResult(
+            action=action,
+            outcome="executed",
+            summary=outcome.summary or "body action executed",
+            metadata=outcome.metadata,
         )
 
 

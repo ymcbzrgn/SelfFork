@@ -16,6 +16,7 @@ import contextlib
 import json
 import os
 from collections.abc import AsyncIterator
+from collections.abc import Set as AbstractSet
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -215,8 +216,18 @@ def build_app(config: DashboardConfig) -> FastAPI:
     from selffork_orchestrator.snappers.codexbar_server import (
         build_default_codexbar_server,
     )
+    from selffork_orchestrator.snappers.runner import (
+        build_default_snapper_runner,
+    )
 
     codexbar_server = build_default_codexbar_server()
+
+    # S-Vision §1 BUG-1 fix — proactive snapper fleet sidecar so the
+    # dashboard's quota gauges (Home, Connections) populate without a
+    # manual ``selffork run`` round. Wave 2 default is **opt-out**
+    # (``SELFFORK_SNAPPER_RUNNER_ENABLED=false`` disables). Returns
+    # ``None`` when disabled; lifespan + teardown are then no-ops.
+    snapper_runner = build_default_snapper_runner()
 
     # S-Auto Faz A — Heartbeat scheduler. Constructed eagerly (no side
     # effects); booted by ``lifespan`` AFTER CodexBar + Telegram so
@@ -265,9 +276,19 @@ def build_app(config: DashboardConfig) -> FastAPI:
     # fallback over the proactive snapper) serves both the heartbeat filter
     # (per-cli) and the router's per-(cli, model) gate; ``gemini-cli`` keys
     # per model (operator 2026-05-24: gemini quota is per-model).
+    # S-Vision §1 — only point the fallback reader at CodexBar HTTP
+    # when a binary was actually resolved; with the sidecar disabled
+    # (``SELFFORK_CODEXBAR_ENABLED=false``) the base_url would still
+    # be set but the port wouldn't be served, and worse, in a test
+    # environment alongside a real operator backend it would silently
+    # leak into the test's data envelope.
     _quota_fallback_reader = build_codexbar_fallback_reader(
         primary=ProactiveUsageReader(),
-        codexbar_base_url=codexbar_server.base_url,
+        codexbar_base_url=(
+            codexbar_server.base_url
+            if codexbar_server.binary is not None
+            else None
+        ),
     )
 
     async def _per_cli_quota(cli_id: str) -> QuotaSnapshot | None:
@@ -338,6 +359,8 @@ def build_app(config: DashboardConfig) -> FastAPI:
         expire_task: asyncio.Task[None] | None = None
         pending_store = getattr(_app.state, "pending_confirmation_store", None)
         codexbar_server = getattr(_app.state, "codexbar_server", None)
+        snapper_runner = getattr(_app.state, "snapper_runner", None)
+        snapper_task: asyncio.Task[None] | None = None
         heartbeat = getattr(_app.state, "heartbeat", None)
         cli_affinity_provider = getattr(
             _app.state, "cli_affinity_provider", None
@@ -356,6 +379,21 @@ def build_app(config: DashboardConfig) -> FastAPI:
                     await codexbar_server.start()
                 except Exception:
                     _log.exception("codexbar_sidecar_start_failed")
+            # S-Vision §1 BUG-1 fix — boot the proactive snapper fleet
+            # right after CodexBar so the on-disk ``cli-state/*.json``
+            # surfaces start refreshing before any HTTP traffic
+            # consults them. Best-effort: a startup raise logs and
+            # leaves the dashboard serving (CodexBar live can carry
+            # provider data until the next snapper tick lands).
+            if snapper_runner is not None:
+                try:
+                    snapper_task = asyncio.create_task(
+                        snapper_runner.serve(),
+                        name="selffork.snapper_runner",
+                    )
+                except Exception:
+                    _log.exception("snapper_runner_start_failed")
+                    snapper_task = None
             if ptb_app is not None:
                 # S3 audit fix #7: don't let a Telegram failure block the
                 # entire dashboard. Best-effort startup; if anything
@@ -443,6 +481,15 @@ def build_app(config: DashboardConfig) -> FastAPI:
                     await ptb_app.stop()
                 with contextlib.suppress(Exception):
                     await ptb_app.shutdown()
+            # Snapper fleet before CodexBar — runner consumers (proactive
+            # reader) may already have torn down their HTTP surfaces, but
+            # the snapper coroutines themselves are CPU + filesystem only
+            # so cancellation is safe. ``stop()`` is anyio-Event based and
+            # idempotent.
+            if snapper_runner is not None and snapper_task is not None:
+                snapper_runner.stop()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await snapper_task
             # CodexBar last — it has the longest tail of in-flight HTTP
             # work, and ``stop`` is idempotent on already-failed sidecars.
             if codexbar_server is not None:
@@ -463,6 +510,8 @@ def build_app(config: DashboardConfig) -> FastAPI:
     app.state.telegram_webhook_secret = app_telegram_cfg.webhook_secret
     app.state.telegram_activity_log = telegram_activity_log
     app.state.codexbar_server = codexbar_server
+    app.state.snapper_runner = snapper_runner
+    app.state.quota_fallback_reader = _quota_fallback_reader
     app.state.heartbeat = heartbeat
 
     # S-Auto Faz G — AutonomyStore + heartbeat router. The router is
@@ -647,10 +696,10 @@ def build_app(config: DashboardConfig) -> FastAPI:
         cli_override_store=cli_override_store,
     )
 
-    # M6 Telegram bridge status + Reflex training surface (ADR-006).
-    from selffork_orchestrator.dashboard.reflex_router import (
-        build_reflex_router,
-    )
+    # M6 Telegram bridge status. Reflex training surface (ADR-006 §7.1)
+    # removed 2026-05-26 — fine-tune is one-shot CLI now (``selffork
+    # train``); the prior dashboard form added cognitive load to a
+    # daily-driver surface for a workflow the operator runs once.
     from selffork_orchestrator.dashboard.telegram_router import (
         build_telegram_router,
     )
@@ -663,8 +712,6 @@ def build_app(config: DashboardConfig) -> FastAPI:
             store=telegram_store,
         ),
     )
-    app.include_router(build_reflex_router())
-
     # M6 Talk Loop — operator ↔ Self Jr conversation (ADR-007 §4 S1).
     # The Speaker model endpoint is operator-managed; S1 reads it from
     # the environment (S4 moves it to a Settings page). No endpoint set
@@ -913,6 +960,72 @@ async def _annotate_proactive_sources(
 
     results = await asyncio.gather(*[_probe(row) for row in rows])
     return list(results)
+
+
+def _window_label_from_seconds(seconds: int) -> str:
+    """Compact human label: ``5h``, ``24h``, ``1m``, ``42s``."""
+    if seconds >= 86400 and seconds % 86400 == 0:
+        return f"{seconds // 86400}d"
+    if seconds >= 3600 and seconds % 3600 == 0:
+        return f"{seconds // 3600}h"
+    if seconds >= 60 and seconds % 60 == 0:
+        return f"{seconds // 60}m"
+    return f"{seconds}s"
+
+
+async def _synthesize_proactive_rows(
+    app: FastAPI, audit_cli_ids: "AbstractSet[str]"
+) -> list[ProviderUsage]:
+    """Add :class:`ProviderUsage` rows for CLIs with proactive signal only.
+
+    S-Vision §1 BUG-1 fix — audit-derived aggregation is still the
+    authoritative source. When a CLI has a quota snapshot (from the
+    snapper fleet or the CodexBar sidecar) but never showed up in
+    audit logs (fresh dev box, new operator), synthesize a row with
+    ``calls_in_window=0`` and the snapshot's primary window so the
+    dashboard's quota gauge has data to render. Audit truth wins on
+    overlap; this layer only fills the no-audit-yet case.
+
+    Requires :attr:`fastapi.FastAPI.state.quota_fallback_reader` to be
+    set (built in ``build_app``); returns an empty list when missing
+    (test boots that skip the dashboard's full lifespan).
+    """
+    from typing import cast, get_args
+
+    from selffork_orchestrator.usage.model import ProviderName
+    from selffork_shared.quota import WindowKind
+
+    reader = getattr(app.state, "quota_fallback_reader", None)
+    if reader is None:
+        return []
+
+    candidates = [
+        name for name in get_args(ProviderName) if name not in audit_cli_ids
+    ]
+
+    async def _maybe_row(cli_id: str) -> ProviderUsage | None:
+        try:
+            snapshot = await reader.read(cli_id)
+        except Exception:
+            return None
+        if snapshot is None or not snapshot.windows:
+            return None
+        window = (
+            snapshot.windows.get(WindowKind.five_hour)
+            or snapshot.windows.get(WindowKind.seven_day)
+            or next(iter(snapshot.windows.values()))
+        )
+        return ProviderUsage(
+            cli_agent=cast("ProviderName", cli_id),
+            window_label=_window_label_from_seconds(window.window_seconds),
+            window_seconds=window.window_seconds,
+            calls_in_window=0,
+            next_reset_at=window.resets_at,
+            last_rate_limited_at=None,
+        )
+
+    results = await asyncio.gather(*[_maybe_row(c) for c in candidates])
+    return [r for r in results if r is not None]
 
 
 def _register_drafts_routes(app: FastAPI) -> None:
@@ -1629,11 +1742,17 @@ def _register_api_routes(app: FastAPI, config: DashboardConfig) -> None:
             return UsageAggregator(cfg).aggregate()
 
         rows = await anyio.to_thread.run_sync(_aggregate)
+        # S-Vision §1 BUG-1 — synthesize rows for CLIs with proactive
+        # signal but no audit history yet (snapper or CodexBar
+        # sidecar). The dashboard gauge needs data to render on a
+        # fresh dev box; audit truth still wins on overlap.
+        audit_cli_ids = {row.cli_agent for row in rows}
+        synthesized = await _synthesize_proactive_rows(app, audit_cli_ids)
         # S-Quota Wave 2 — enrich each row with a proactive_source tag
         # ("snapper" / "codexbar" / "snapper+codexbar" / None) so the
         # Connections card can show where the secondary data comes
         # from without conflating it with the audit-derived columns.
-        return await _annotate_proactive_sources(app, rows)
+        return await _annotate_proactive_sources(app, rows + synthesized)
 
     # ── Mind provenance — Order 5 §8 (ChatGPT Memory Sources pattern) ─────
 

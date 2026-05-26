@@ -173,6 +173,12 @@ class HeartbeatScheduler:
         self._last_action_result: ActionResult | None = None
         self._last_air_alert: AIRAlert | None = None
         self._self_stop_requested: bool = False
+        # ADR-010 §2.2.6 cross-tick resume. ``start()`` reads the last
+        # checkpoint into ``_resumed_from`` (None on a cold first boot); the
+        # first productive deliberation tick consumes it as a one-shot
+        # resume hint (``_resume_consumed`` guards the one-shot).
+        self._resumed_from: Checkpoint | None = None
+        self._resume_consumed: bool = False
 
     # ── public API ────────────────────────────────────────────────────
 
@@ -242,6 +248,18 @@ class HeartbeatScheduler:
         """
         return self._last_air_alert
 
+    @property
+    def resumed_from(self) -> Checkpoint | None:
+        """The checkpoint :meth:`start` resumed from, or ``None``.
+
+        Set at boot from the on-disk checkpoint (ADR-010 §2.2.6) so the
+        dashboard / tests can see what the daemon picked up. The one-shot
+        resume *hint* derived from it is delivered to the first productive
+        deliberation tick and then cleared; this property keeps the raw
+        boot value for introspection.
+        """
+        return self._resumed_from
+
     def submit_event(self, event: HeartbeatEvent) -> None:
         """Non-blocking event submission — the event-driven hot path.
 
@@ -269,6 +287,8 @@ class HeartbeatScheduler:
         if self._state in (HeartbeatState.STARTING, HeartbeatState.RUNNING):
             return
         self._self_stop_requested = False
+        self._resume_consumed = False
+        self._resumed_from = self._read_resume_checkpoint()
         self._state = HeartbeatState.STARTING
         self._tick_count = 0
         self._last_reconciliation_ts = time.monotonic()
@@ -362,10 +382,19 @@ class HeartbeatScheduler:
         self._last_legal_actions = legal_actions
 
         if self._deliberation is not None:
+            resume_hint = self._peek_resume_hint()
             self._last_action_decision = await self._deliberation.select(
                 legal_actions=legal_actions,
                 world_state=world_state,
+                resume_hint=resume_hint,
             )
+            # Consume the one-shot resume hint only once it reached a real
+            # decision — a fallback tick (stalled / unparseable; ADR-011)
+            # never wove it into the prompt, so keep it pending for the next
+            # tick. A cold or gate-rejected boot has ``_resumed_from``/hint
+            # None and is simply marked spent the first time deliberation runs.
+            if not self._last_action_decision.fallback:
+                self._resume_consumed = True
 
         # ACT (Faz D) — only invoked when both deliberation + executor
         # are wired. Without one or the other the daemon stays in a
@@ -491,8 +520,48 @@ class HeartbeatScheduler:
         except Exception:
             _log.exception("heartbeat_air_alert_dispatch_failed")
 
+    def _read_resume_checkpoint(self) -> Checkpoint | None:
+        """Load the last on-disk checkpoint for a cross-tick resume.
+
+        ADR-010 §2.2.6: the checkpoint the daemon writes every tick is only
+        half the loop — without reading it on boot the daemon has no memory
+        of interrupted work across a restart. Returns ``None`` when no
+        writer is wired or no (valid) checkpoint exists (a cold boot).
+        """
+        if self._checkpoint_writer is None:
+            return None
+        checkpoint = self._checkpoint_writer.read()
+        if checkpoint is not None:
+            _log.info(
+                "heartbeat_resumed_from_checkpoint",
+                extra={
+                    "step": checkpoint.step,
+                    "next_action": checkpoint.next_action,
+                    "workspace": checkpoint.workspace,
+                    "progress": checkpoint.progress,
+                },
+            )
+        return checkpoint
+
+    def _peek_resume_hint(self) -> str | None:
+        """The pending one-shot resume hint, WITHOUT consuming it.
+
+        Returns the hint derived from the boot checkpoint until it has been
+        *delivered* to a real (non-fallback) deliberation tick; ``_one_tick``
+        flips ``_resume_consumed`` only after such a delivery, so a degraded
+        first tick (stalled / unparseable → fallback ``WAIT``; ADR-011) keeps
+        the hint pending for the next tick instead of silently dropping it
+        (ADR-010 §2.2.6). ``None`` when the boot was cold, the hint was
+        already delivered, or the resumed checkpoint isn't worth resuming (a
+        quiet ``bekle`` tick or a deliberate ``kendini_durdur`` halt — see
+        :func:`_build_resume_hint`).
+        """
+        if self._resumed_from is None or self._resume_consumed:
+            return None
+        return _build_resume_hint(self._resumed_from)
+
     def _update_checkpoint(self, world_state: WorldState) -> None:
-        """Write the latest ``{step, progress, next_action}`` snapshot."""
+        """Write the latest ``{step, progress, next_action, workspace}`` snapshot."""
         if self._checkpoint_writer is None:
             return
         if self._self_stop_requested:
@@ -522,6 +591,7 @@ class HeartbeatScheduler:
             step=step,
             progress=progress,
             next_action=next_action,
+            workspace=world_state.last_active_workspace,
         )
         try:
             self._checkpoint_writer.write(checkpoint)
@@ -562,6 +632,38 @@ class HeartbeatScheduler:
         return compute_within_active_hours(
             self._config.active_hours, self._config.timezone
         )
+
+
+_RESUME_EXCLUDED_ACTIONS: Final[frozenset[str]] = frozenset(
+    {LegalAction.WAIT.value, LegalAction.SELF_STOP.value},
+)
+"""Checkpoint ``next_action`` values that are NOT worth auto-resuming.
+
+A quiet ``bekle`` tick or a deliberate ``kendini_durdur`` halt is not
+interrupted work; surfacing a "continue this" hint for them would push the
+daemon to re-engage something it intentionally left alone.
+"""
+
+
+def _build_resume_hint(checkpoint: Checkpoint) -> str | None:
+    """Render a one-line resume hint from a boot checkpoint, or ``None``.
+
+    ADR-010 §2.2.6 "the next tick continues": only a checkpoint captured
+    mid-action (``step == "act"``) whose intended ``next_action`` was
+    productive surfaces a hint; a halt or a quiet wait does not. The hint is
+    continuity context for the deliberation prompt, not a command — the
+    model still decides whether the work still serves the operator.
+    """
+    if checkpoint.step != "act":
+        return None
+    if checkpoint.next_action in _RESUME_EXCLUDED_ACTIONS:
+        return None
+    workspace = checkpoint.workspace or "—"
+    return (
+        f"Resuming after a restart — your last recorded tick intended "
+        f"'{checkpoint.next_action}' on workspace '{workspace}'. Continue "
+        "that work if it still serves the operator, or reassess."
+    )
 
 
 def compute_within_active_hours(active_hours: str, timezone: str) -> bool:

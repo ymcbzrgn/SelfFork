@@ -374,3 +374,31 @@ def test_parse_decision_reasoning_optional() -> None:
     )
     assert action is LegalAction.WAIT
     assert reasoning == ""
+
+
+# ── ADR-010 §2.2.6 — resume hint in the user prompt ──────────────────
+
+
+@pytest.mark.asyncio
+async def test_user_prompt_includes_resume_hint_when_present() -> None:
+    speaker = _StubSpeaker(reply_text='{"action": "bekle", "reasoning": "ok"}')
+    layer = DeliberationLayer(speaker=speaker)
+    await layer.select(
+        legal_actions=_FULL_LEGAL,
+        world_state=_state(),
+        resume_hint="Resuming after a restart — continue work on 'beta'.",
+    )
+    user_msg = speaker.calls[0][1]["content"]
+    assert "Resuming after a restart" in user_msg
+    assert "continue work on 'beta'" in user_msg
+    # The hint precedes the current-state block.
+    assert user_msg.index("Resuming") < user_msg.index("Current state")
+
+
+@pytest.mark.asyncio
+async def test_user_prompt_omits_resume_section_by_default() -> None:
+    speaker = _StubSpeaker(reply_text='{"action": "bekle", "reasoning": "ok"}')
+    layer = DeliberationLayer(speaker=speaker)
+    await layer.select(legal_actions=_FULL_LEGAL, world_state=_state())
+    user_msg = speaker.calls[0][1]["content"]
+    assert "Resuming" not in user_msg

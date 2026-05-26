@@ -422,3 +422,119 @@ class TestProjectResponseShape:
         assert len(rows) == 1
         assert rows[0]["archived_at"] is None
         assert rows[0]["autopilot_paused"] is False
+
+
+# ── /api/usage/providers proactive synthesis (S-Vision §1 BUG-1 fix) ─────────
+
+
+class TestUsageSynthesisFromProactive:
+    """Endpoint synthesizes rows when audit is empty but proactive has signal."""
+
+    @staticmethod
+    def _stage_codex_snapper_file(tmp_path: Path) -> None:
+        """Write a fake codex QuotaSnapshot at the isolated CLI-state path.
+
+        The dashboard conftest points ``SELFFORK_CLI_STATE_DIR`` at
+        ``tmp_path / "_isolated-cli-state"``; the snapper file lives
+        there so the endpoint's fallback reader picks it up.
+        """
+        state_dir = tmp_path / "_isolated-cli-state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        resets_at = (datetime.now(UTC) + timedelta(hours=4)).isoformat()
+        captured = datetime.now(UTC).isoformat()
+        (state_dir / "codex.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "1",
+                    "cli_id": "codex",
+                    "account_id": None,
+                    "windows": {
+                        "five_hour": {
+                            "used_pct": 1.5,
+                            "resets_at": resets_at,
+                            "window_seconds": 18000,
+                        },
+                    },
+                    "context": None,
+                    "captured_at": captured,
+                    "source": "test",
+                },
+            ),
+            encoding="utf-8",
+        )
+
+    def test_synthesize_when_audit_empty(self, tmp_path: Path) -> None:
+        self._stage_codex_snapper_file(tmp_path)
+        client, _ = _client(tmp_path)
+        r = client.get("/api/usage/providers")
+        assert r.status_code == 200
+        rows = r.json()
+        codex_rows = [row for row in rows if row["cli_agent"] == "codex"]
+        assert len(codex_rows) == 1
+        codex = codex_rows[0]
+        assert codex["calls_in_window"] == 0
+        assert codex["window_seconds"] == 18000
+        assert codex["window_label"] == "5h"
+        assert codex["next_reset_at"] is not None
+        # Synthesis source for snapper-only signal.
+        assert codex["proactive_source"] == "snapper"
+
+    def test_audit_truth_wins_over_synthesis(self, tmp_path: Path) -> None:
+        """When audit has a row, synthesis MUST NOT shadow it."""
+        client, config = _client(tmp_path)
+        (config.audit_dir / "01HJ_codex.jsonl").write_text(
+            json.dumps(
+                {
+                    "ts": datetime.now(UTC).isoformat(),
+                    "correlation_id": "x",
+                    "session_id": "01HJ_codex",
+                    "category": "agent.invoke",
+                    "level": "INFO",
+                    "event": "test",
+                    "payload": {
+                        "round": 0,
+                        "binary": "/Users/x/.local/bin/codex",
+                        "args_count": 1,
+                    },
+                },
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        self._stage_codex_snapper_file(tmp_path)
+        r = client.get("/api/usage/providers")
+        assert r.status_code == 200
+        rows = r.json()
+        codex_rows = [row for row in rows if row["cli_agent"] == "codex"]
+        # Single row, audit-truth (calls_in_window > 0), proactive annotation.
+        assert len(codex_rows) == 1
+        assert codex_rows[0]["calls_in_window"] >= 1
+        assert codex_rows[0]["proactive_source"] == "snapper"
+
+    def test_no_synthesis_for_windowless_snapshot(self, tmp_path: Path) -> None:
+        """opencode snapshots carry only ContextState → no synthesized row."""
+        state_dir = tmp_path / "_isolated-cli-state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        captured = datetime.now(UTC).isoformat()
+        (state_dir / "opencode.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "1",
+                    "cli_id": "opencode",
+                    "account_id": None,
+                    "windows": {},
+                    "context": {
+                        "used_tokens": 1234,
+                        "total_tokens": 200000,
+                        "used_pct": 0.617,
+                    },
+                    "captured_at": captured,
+                    "source": "test",
+                },
+            ),
+            encoding="utf-8",
+        )
+        client, _ = _client(tmp_path)
+        r = client.get("/api/usage/providers")
+        assert r.status_code == 200
+        assert r.json() == []

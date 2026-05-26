@@ -267,12 +267,24 @@ Bu, "hür irade ≠ kontrolsüzlük"ün mimari karşılığıdır: kurallar
 | `kanban_task_öner(project, card)` | Self Jr bir kart önerir (inisiyatif) |
 | `operatöre_sor(mesaj)` | Telegram'dan bildirim/soru |
 | `fikirleş()` | Yaratma modu (§5.2) — yalnızca idle + toggle açıkken yasal |
+| `uzvunu_kullan(intent)` | Body pillar'ı kullan: yaz/tıkla/screenshot (S-Vision §4) |
+| `uzvunu_incele(intent)` | Body pillar'ını oku-only vision-parse (S-Vision §4) |
 | `bekle(reason)` | Bilinçli olarak bu nabızda hiçbir şey yapma |
 | `kendini_durdur()` | Operatör `/pause` veya kritik hata sonrası |
 
 `bekle` **birinci sınıf bir karardır** — kota bittiyse, her şey blokeyse,
 doğru davranış hiçbir şey yapmamaktır. Boş nabız sıfıra yakın maliyetlidir;
 busy-loop yoktur.
+
+> **S-Vision güncelleme (ADR-010 §4):** sözlük **8'den 10'a** çıktı —
+> `uzvunu_kullan` + `uzvunu_incele` Body pillar'a granular hook verir
+> (write/click/screenshot vs. read-only vision parse). Heartbeat filter
+> Rule 6 (`body_daemon_alive` gate, **fail-CLOSED**) bu iki eylemi
+> yalnızca Body daemon ayaktayken yasal kılar; `ActionExecutor`'a
+> injectable `BodyUseDriver` / `BodyReviewDriver` callable'ları
+> ``None=skipped`` pattern'iyle bağlanır (mevcut `TaskStarter` /
+> `KanbanCardCreator` / `CliSelector` konvansiyonu). S-ToolFleet'in fat
+> per-platform tool surface'ı (~250-380 araç) bu seam'in üstüne biner.
 
 ---
 

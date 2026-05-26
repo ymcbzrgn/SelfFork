@@ -6,13 +6,16 @@ unhandled error) the latest state lands on disk so the *next* boot can
 resume from a meaningful place instead of replaying the whole audit
 log.
 
-The schema is intentionally tiny (3 keys + timestamp):
+The schema is intentionally tiny (4 keys + timestamp):
 
 * ``step`` — what phase we were in (``"perceive"``, ``"decide"``,
   ``"act"``, ``"record"``, ``"idle"``).
 * ``progress`` — short status string for the operator's morning report.
 * ``next_action`` — what to attempt first on resume (a
   :class:`LegalAction` value when known).
+* ``workspace`` — the project slug the interrupted work targeted, so a
+  cross-tick resume (ADR-010 §2.2.6) can name it without parsing
+  ``progress``. ``None`` when no workspace was active.
 
 Wire format: single JSON file at
 ``~/.selffork/heartbeat/checkpoint.json``. The writer **never
@@ -40,13 +43,17 @@ _log = logging.getLogger(__name__)
 
 
 class Checkpoint(BaseModel):
-    """Daemon resume state — exactly the 4 fields Hexis writes."""
+    """Daemon resume state — the Hexis fields plus the resume workspace."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     step: str
     progress: str
     next_action: str
+    # ADR-010 §2.2.6 cross-tick resume payload — the project the
+    # interrupted work targeted. Optional + defaulted so a pre-S-Vision
+    # checkpoint already on disk still validates on read.
+    workspace: str | None = None
     updated_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
 
 

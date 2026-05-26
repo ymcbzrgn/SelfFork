@@ -23,6 +23,7 @@ from selffork_orchestrator.heartbeat.scheduler import (
     HeartbeatEvent,
     HeartbeatScheduler,
     HeartbeatState,
+    _build_resume_hint,
     _parse_hhmm,
 )
 from selffork_orchestrator.telegram.inbound_router import PauseSignal
@@ -782,3 +783,232 @@ async def test_air_alert_dispatches_to_emergency_bridge(tmp_path: Path) -> None:
     assert msg.level == "crit"
     assert "AIR Alert" in msg.text
     assert msg.session_id == "heartbeat-air"
+
+
+# ── S-Vision §2.2.6 — cross-tick checkpoint resume ────────────────
+
+
+def test_build_resume_hint_productive_action() -> None:
+    from selffork_orchestrator.heartbeat.checkpoint import Checkpoint
+
+    hint = _build_resume_hint(
+        Checkpoint(
+            step="act",
+            progress="p",
+            next_action=LegalAction.TASK_START.value,
+            workspace="beta",
+        )
+    )
+    assert hint is not None
+    assert LegalAction.TASK_START.value in hint
+    assert "beta" in hint
+
+
+def test_build_resume_hint_none_for_wait() -> None:
+    from selffork_orchestrator.heartbeat.checkpoint import Checkpoint
+
+    assert (
+        _build_resume_hint(
+            Checkpoint(
+                step="act",
+                progress="p",
+                next_action=LegalAction.WAIT.value,
+                workspace="beta",
+            )
+        )
+        is None
+    )
+
+
+def test_build_resume_hint_none_for_halt() -> None:
+    from selffork_orchestrator.heartbeat.checkpoint import Checkpoint
+
+    assert (
+        _build_resume_hint(
+            Checkpoint(
+                step="halted",
+                progress="p",
+                next_action=LegalAction.SELF_STOP.value,
+            )
+        )
+        is None
+    )
+
+
+def test_build_resume_hint_none_for_perceive() -> None:
+    from selffork_orchestrator.heartbeat.checkpoint import Checkpoint
+
+    assert (
+        _build_resume_hint(
+            Checkpoint(
+                step="perceive",
+                progress="p",
+                next_action=LegalAction.WAIT.value,
+            )
+        )
+        is None
+    )
+
+
+def test_build_resume_hint_workspace_placeholder_when_none() -> None:
+    from selffork_orchestrator.heartbeat.checkpoint import Checkpoint
+
+    hint = _build_resume_hint(
+        Checkpoint(
+            step="act",
+            progress="p",
+            next_action=LegalAction.TASK_START.value,
+            workspace=None,
+        )
+    )
+    assert hint is not None
+    assert "—" in hint
+
+
+@pytest.mark.asyncio
+async def test_start_resumes_from_checkpoint_and_hints_once(
+    tmp_path: Path,
+) -> None:
+    """A productive on-disk checkpoint surfaces a one-shot resume hint on
+    the first deliberation tick after boot (ADR-010 §2.2.6)."""
+    from collections.abc import Mapping, Sequence
+
+    from selffork_orchestrator.heartbeat.checkpoint import (
+        Checkpoint,
+        CheckpointWriter,
+    )
+    from selffork_orchestrator.heartbeat.deliberation import DeliberationLayer
+    from selffork_orchestrator.heartbeat.executor import ActionExecutor
+
+    class _RecordingSpeaker:
+        def __init__(self) -> None:
+            self.prompts: list[str] = []
+
+        async def reply(self, messages: Sequence[Mapping[str, str]]) -> str:
+            self.prompts.append(messages[1]["content"])
+            return '{"action": "bekle", "reasoning": "ok"}'
+
+    ck_path = tmp_path / "checkpoint.json"
+    CheckpointWriter(path=ck_path).write(
+        Checkpoint(
+            step="act",
+            progress="tick=9 workspace=beta failures=0",
+            next_action=LegalAction.TASK_START.value,
+            workspace="beta",
+        )
+    )
+    speaker = _RecordingSpeaker()
+    pause = PauseSignal(flag_path=tmp_path / "pause.flag")
+    sched = HeartbeatScheduler(
+        config=_enabled_config(),
+        pause_signal=pause,
+        deliberation_layer=DeliberationLayer(speaker=speaker),
+        action_executor=ActionExecutor(),
+        checkpoint_writer=CheckpointWriter(path=ck_path),
+    )
+    await sched.start()
+    assert sched.resumed_from is not None
+    assert sched.resumed_from.workspace == "beta"
+    sched.submit_event(HeartbeatEvent.KANBAN_CHANGED)
+    sched.submit_event(HeartbeatEvent.KANBAN_CHANGED)
+    await asyncio.sleep(0.2)
+    await sched.stop()
+    assert len(speaker.prompts) >= 2
+    # First tick carries the resume hint; later ticks do not (one-shot).
+    assert "Resuming after a restart" in speaker.prompts[0]
+    assert "beta" in speaker.prompts[0]
+    assert "Resuming after a restart" not in speaker.prompts[1]
+
+
+@pytest.mark.asyncio
+async def test_cold_boot_has_no_resume(tmp_path: Path) -> None:
+    """No on-disk checkpoint ⇒ ``resumed_from`` is None and no hint fires."""
+    from collections.abc import Mapping, Sequence
+
+    from selffork_orchestrator.heartbeat.checkpoint import CheckpointWriter
+    from selffork_orchestrator.heartbeat.deliberation import DeliberationLayer
+    from selffork_orchestrator.heartbeat.executor import ActionExecutor
+
+    class _RecordingSpeaker:
+        def __init__(self) -> None:
+            self.prompts: list[str] = []
+
+        async def reply(self, messages: Sequence[Mapping[str, str]]) -> str:
+            self.prompts.append(messages[1]["content"])
+            return '{"action": "bekle", "reasoning": "ok"}'
+
+    speaker = _RecordingSpeaker()
+    pause = PauseSignal(flag_path=tmp_path / "pause.flag")
+    sched = HeartbeatScheduler(
+        config=_enabled_config(),
+        pause_signal=pause,
+        deliberation_layer=DeliberationLayer(speaker=speaker),
+        action_executor=ActionExecutor(),
+        checkpoint_writer=CheckpointWriter(path=tmp_path / "absent.json"),
+    )
+    await sched.start()
+    assert sched.resumed_from is None
+    sched.submit_event(HeartbeatEvent.KANBAN_CHANGED)
+    await asyncio.sleep(0.1)
+    await sched.stop()
+    assert speaker.prompts
+    assert "Resuming" not in speaker.prompts[0]
+
+
+@pytest.mark.asyncio
+async def test_resume_hint_survives_a_stalled_first_tick(tmp_path: Path) -> None:
+    """A degraded (stalled) first deliberation tick must NOT consume the
+    one-shot resume hint — it stays pending and is re-offered until a real
+    (non-fallback) decision sees it (ADR-010 §2.2.6 / audit fix)."""
+    from collections.abc import Mapping, Sequence
+
+    from selffork_orchestrator.heartbeat.checkpoint import (
+        Checkpoint,
+        CheckpointWriter,
+    )
+    from selffork_orchestrator.heartbeat.deliberation import DeliberationLayer
+    from selffork_orchestrator.heartbeat.executor import ActionExecutor
+    from selffork_shared.errors import SpeakerStalledError
+
+    class _StallThenReplySpeaker:
+        def __init__(self) -> None:
+            self.prompts: list[str] = []
+            self.calls = 0
+
+        async def reply(self, messages: Sequence[Mapping[str, str]]) -> str:
+            self.calls += 1
+            self.prompts.append(messages[1]["content"])
+            if self.calls == 1:
+                raise SpeakerStalledError("cold-boot stall")
+            return '{"action": "bekle", "reasoning": "ok"}'
+
+    ck_path = tmp_path / "checkpoint.json"
+    CheckpointWriter(path=ck_path).write(
+        Checkpoint(
+            step="act",
+            progress="tick=9 workspace=beta failures=0",
+            next_action=LegalAction.TASK_START.value,
+            workspace="beta",
+        )
+    )
+    speaker = _StallThenReplySpeaker()
+    pause = PauseSignal(flag_path=tmp_path / "pause.flag")
+    sched = HeartbeatScheduler(
+        config=_enabled_config(),
+        pause_signal=pause,
+        deliberation_layer=DeliberationLayer(speaker=speaker),
+        action_executor=ActionExecutor(),
+        checkpoint_writer=CheckpointWriter(path=ck_path),
+    )
+    await sched.start()
+    sched.submit_event(HeartbeatEvent.KANBAN_CHANGED)
+    sched.submit_event(HeartbeatEvent.KANBAN_CHANGED)
+    sched.submit_event(HeartbeatEvent.KANBAN_CHANGED)
+    await asyncio.sleep(0.25)
+    await sched.stop()
+    assert len(speaker.prompts) >= 3
+    # Tick 1 stalled (fallback) -> hint NOT consumed -> re-offered on tick 2.
+    assert "Resuming after a restart" in speaker.prompts[0]
+    assert "Resuming after a restart" in speaker.prompts[1]
+    # Tick 2 was a real decision -> hint consumed -> gone by tick 3.
+    assert "Resuming after a restart" not in speaker.prompts[2]

@@ -81,7 +81,10 @@ live progress and operator/budget cancellation. Concretely:
 ## 5. Won't-have (explicit)
 
 - **No short hard generation cap.** Capping at e.g. 60s would fail valid CPU generations — the
-  exact thing the operator forbade. The idle-token watchdog replaces the wall-clock cap.
+  exact thing the operator forbade. The idle-token watchdog replaces the wall-clock cap. *(The
+  agentic-loop hard caps in ADR-010 §2.2.3 stay consistent with this: the action-count cap is the
+  always-on backstop, and the optional `wall_clock_cap_seconds` ships **default-OFF** precisely so
+  it never kills a slow CPU generation — it exists only as a knob for fast-cloud deployments.)*
 - **No fabricated/placeholder reply** on slowness (no-mock — [[no-mvp-full-quality-first-time]]).
 - **No speculative multi-model fallback** (e.g. auto-swap to a tiny model) in this ADR — it is a
   separate vision decision; here we make the chosen model's slowness *survivable*, not hidden.

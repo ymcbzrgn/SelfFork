@@ -35,7 +35,11 @@ from selffork_orchestrator.snappers.factory import (
 from selffork_orchestrator.snappers.gemini import GeminiSnapper
 from selffork_orchestrator.snappers.minimax import MinimaxSnapper
 from selffork_orchestrator.snappers.opencode import OpenCodeSnapper
-from selffork_orchestrator.snappers.runner import SnapperRunner, SnapperRunnerConfig
+from selffork_orchestrator.snappers.runner import (
+    SnapperRunner,
+    SnapperRunnerConfig,
+    build_default_snapper_runner,
+)
 from selffork_orchestrator.snappers.zai import ZaiSnapper
 
 __all__ = [
@@ -49,6 +53,7 @@ __all__ = [
     "SnapperRunnerConfig",
     "ZaiSnapper",
     "atomic_write_json",
+    "build_default_snapper_runner",
     "build_default_snappers",
     "build_snapper",
     "default_state_dir",

@@ -96,7 +96,11 @@ class CLIAgentConfig(_StrictModel):
     """CLI coding agent adapter configuration."""
 
     agent: Literal[
-        "opencode", "claude-code", "codex", "gemini-cli", "minimax-cli",
+        "opencode",
+        "claude-code",
+        "codex",
+        "gemini-cli",
+        "minimax-cli",
     ] = "opencode"
     # S6 (ADR-006 §4.6): per-invocation model + reasoning-effort selection,
     # applied by the CLIAgent via its capability descriptor. Self-Jr-mutable
@@ -126,6 +130,15 @@ class LifecycleConfig(_StrictModel):
     # (``sandbox.timeout_seconds``, default 1h) acts as the hard upper
     # bound either way.
     max_rounds: int | None = Field(default=None, ge=1)
+    # ADR-010 §2.2 agentic-loop hard safety caps (S-Vision). The
+    # action-count cap is an always-on backstop alongside the
+    # ``StuckDetector`` + ADR-011 idle-token watchdog. The wall-clock cap
+    # is OPT-IN (default None/off, operator decision 2026-05-26): a hard
+    # wall-clock would kill a legitimate slow CPU generation, which
+    # ADR-011 §5 explicitly forbids — so it stays a knob fast-cloud
+    # deployments may enable.
+    hard_action_cap: int | None = Field(default=50, ge=1)
+    wall_clock_cap_seconds: float | None = Field(default=None, gt=0)
 
 
 class LoggingConfig(_StrictModel):

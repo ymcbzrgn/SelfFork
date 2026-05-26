@@ -23,9 +23,11 @@ Or use as a daemon entry point: ``await runner.serve()`` blocks forever
 from __future__ import annotations
 
 import contextlib
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Final
 
 import anyio
 
@@ -34,9 +36,25 @@ from selffork_orchestrator.snappers.base import (
     atomic_write_json,
     snapshot_path,
 )
+from selffork_orchestrator.snappers.factory import build_default_snappers
 from selffork_shared.logging import get_logger
 
-__all__ = ["SnapperRunner", "SnapperRunnerConfig"]
+__all__ = [
+    "DEFAULT_SIDECAR_INTERVAL_SECONDS",
+    "SnapperRunner",
+    "SnapperRunnerConfig",
+    "build_default_snapper_runner",
+]
+
+DEFAULT_SIDECAR_INTERVAL_SECONDS: Final[float] = 5.0
+"""Dashboard sidecar tick cadence (override:
+``SELFFORK_SNAPPER_RUNNER_DEFAULT_INTERVAL_SECONDS``).
+
+Slower than the per-session 1 Hz default because dashboard consumers
+(Connections, Home quota gauges) only refresh on tab switch / poll;
+hammering each on-disk source at 1 Hz for hours is wasteful when the
+proactive reader's staleness gate is 300 s anyway.
+"""
 
 _LOG = get_logger("selffork.snappers.runner")
 
@@ -84,6 +102,10 @@ class SnapperRunner:
     @property
     def snappers(self) -> tuple[Snapper, ...]:
         return tuple(self._snappers)
+
+    @property
+    def config(self) -> SnapperRunnerConfig:
+        return self._config
 
     def stop(self) -> None:
         """Signal :meth:`serve` to exit. Safe to call from any task."""
@@ -141,3 +163,58 @@ class SnapperRunner:
             return
         with anyio.move_on_after(seconds):
             await self._stop_event.wait()
+
+
+# ── factory ────────────────────────────────────────────────────────────
+
+
+def _resolve_default_interval() -> float:
+    raw = os.environ.get(
+        "SELFFORK_SNAPPER_RUNNER_DEFAULT_INTERVAL_SECONDS", ""
+    ).strip()
+    if not raw:
+        return DEFAULT_SIDECAR_INTERVAL_SECONDS
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_SIDECAR_INTERVAL_SECONDS
+    return max(0.25, value)
+
+
+def _resolve_state_dir() -> Path | None:
+    raw = os.environ.get("SELFFORK_SNAPPER_RUNNER_STATE_DIR", "").strip()
+    if not raw:
+        return None
+    return Path(raw).expanduser()
+
+
+def build_default_snapper_runner() -> SnapperRunner | None:
+    """Build the dashboard-side :class:`SnapperRunner` from env.
+
+    Returns ``None`` when explicitly disabled via
+    ``SELFFORK_SNAPPER_RUNNER_ENABLED=false`` (or ``"0"`` / ``"no"``);
+    the dashboard lifespan skips boot in that case so a host without
+    the per-CLI on-disk surfaces (CI container, fresh dev box) does
+    not waste cycles probing missing paths every interval.
+
+    Wave 2 default is **opt-out** — auto-boot whenever the dashboard
+    is up so the Connections + Home quota gauges populate without
+    a manual snapper invocation. Mirrors the CodexBar sidecar policy
+    (`build_default_codexbar_server`).
+
+    Cadence is governed by
+    ``SELFFORK_SNAPPER_RUNNER_DEFAULT_INTERVAL_SECONDS`` (default 5 s);
+    state dir by ``SELFFORK_SNAPPER_RUNNER_STATE_DIR`` (default
+    ``~/.selffork/cli-state/``).
+    """
+    enabled_raw = os.environ.get(
+        "SELFFORK_SNAPPER_RUNNER_ENABLED", ""
+    ).strip().lower()
+    if enabled_raw in {"false", "0", "no"}:
+        return None
+    snappers = build_default_snappers()
+    config = SnapperRunnerConfig(
+        default_interval_seconds=_resolve_default_interval(),
+        state_dir=_resolve_state_dir(),
+    )
+    return SnapperRunner(snappers=snappers, config=config)

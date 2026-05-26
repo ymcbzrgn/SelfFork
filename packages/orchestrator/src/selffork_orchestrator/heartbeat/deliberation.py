@@ -156,8 +156,13 @@ class DeliberationLayer:
         *,
         legal_actions: frozenset[LegalAction],
         world_state: WorldState,
+        resume_hint: str | None = None,
     ) -> ActionDecision:
         """Ask Self Jr to pick one action from ``legal_actions``.
+
+        ``resume_hint`` (ADR-010 §2.2.6), when set, prepends one line of
+        cross-tick continuity context to the user prompt — it never widens
+        the legal set or alters the degradation rules below.
 
         Degradation rules (deterministic; never bypass-able by prompt):
 
@@ -175,7 +180,9 @@ class DeliberationLayer:
                 fallback=True,
             )
 
-        user_prompt = self._render_user_prompt(legal_actions, world_state)
+        user_prompt = self._render_user_prompt(
+            legal_actions, world_state, resume_hint
+        )
         messages: Sequence[dict[str, str]] = [
             {"role": "system", "content": self._system_prompt},
             {"role": "user", "content": user_prompt},
@@ -252,6 +259,7 @@ class DeliberationLayer:
         self,
         legal_actions: frozenset[LegalAction],
         state: WorldState,
+        resume_hint: str | None = None,
     ) -> str:
         """Build the per-tick user message — small + structured."""
         legal_list = ", ".join(sorted(a.value for a in legal_actions))
@@ -267,8 +275,14 @@ class DeliberationLayer:
             f"{state.active_concurrent_sessions} / "
             f"{state.max_concurrent_sessions}"
         )
+        prefix = (
+            f"== Resuming after a restart ==\n{resume_hint}\n\n"
+            if resume_hint
+            else ""
+        )
         return (
-            "== Current state ==\n"
+            prefix
+            + "== Current state ==\n"
             f"- Active workspace (last operator activity): {workspace}\n"
             f"- Pause flag: {'set' if state.pause_active else 'clear'}\n"
             f"- Active concurrent sessions: {concurrency}\n"

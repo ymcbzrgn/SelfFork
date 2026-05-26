@@ -17,6 +17,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import time
 from typing import Protocol
 
 from selffork_body.sandbox.destructive_whitelist import DestructiveWhitelist
@@ -38,6 +39,13 @@ from selffork_orchestrator.lifecycle.destructive_guard import (
 from selffork_orchestrator.lifecycle.states import (
     SessionState,
     is_legal_transition,
+)
+from selffork_orchestrator.lifecycle.stuck_detector import (
+    RecoveryAction,
+    StepObservation,
+    StuckDetector,
+    hash_observation,
+    normalize_tool_key,
 )
 from selffork_orchestrator.limits.base import (
     AuthRequired,
@@ -160,6 +168,7 @@ class Session:
         theater_producer: TheaterProducer | None = None,
         destructive_whitelist: DestructiveWhitelist | None = None,
         pending_store: PendingConfirmationStore | None = None,
+        stuck_detector: StuckDetector | None = None,
     ) -> None:
         self._session_id = session_id
         self._prd_text = prd_text
@@ -193,14 +202,16 @@ class Session:
         self._cli_runtime_store = cli_runtime_store
         # Theater producer — best-effort Live Run surface (ADR-007 §4 S2).
         # Null Object default so the round loop never branches on None.
-        self._theater: TheaterProducer = (
-            theater_producer or NullTheaterProducer()
-        )
+        self._theater: TheaterProducer = theater_producer or NullTheaterProducer()
         # Destructive guard — ADR-006 §4.5 + ADR-007 §4 S3. Both pieces
         # are optional: when either is None the warden hook becomes a
         # no-op (no whitelist loaded → orphan/test runs still execute).
         self._destructive_whitelist = destructive_whitelist
         self._pending_store = pending_store
+        # S-Vision (ADR-010 §2.2) — deterministic agentic-loop stuck-detector.
+        # ``None`` disables detection (existing tests / orphan runs); cli.py
+        # injects a live detector so production runs are guarded.
+        self._stuck_detector = stuck_detector
         self._state: SessionState = SessionState.IDLE
         self._failure_reason: str | None = None
         # Rounds the agent loop completed — read after :meth:`run` for the
@@ -341,12 +352,18 @@ class Session:
         # the loop, used by tests / safety drills.
         # See ``LifecycleConfig.max_rounds`` for the rationale.
         max_rounds = self._lifecycle_config.max_rounds
+        # ADR-010 §2.2 agentic-loop hard caps. ``action_count`` counts each
+        # completed round (an "action"); the wall-clock guard is opt-in
+        # (default off — ADR-011 §5 forbids killing a slow CPU generation).
+        loop_started_at = time.monotonic()
+        action_count = 0
 
         while max_rounds is None or rounds_completed < max_rounds:
             # Snapshot progress so the post-run affinity write (ADR-006
             # §4.6 turn-to-complete metric, S6) reflects completed rounds
             # on every exit path (DONE sentinel, error, max-rounds).
             self._rounds_completed = rounds_completed
+            self._enforce_loop_caps(action_count, loop_started_at)
             # Greedy decoding for the small SelfFork Jr model. Stochastic
             # sampling on a 2B Q4 model produces wildly variable replies
             # — including pathological ones (immediate sentinel, empty
@@ -364,9 +381,7 @@ class Session:
                     "chars": len(yamac_reply),
                 },
             )
-            await self._theater.thought(
-                yamac_reply, turn=rounds_completed
-            )
+            await self._theater.thought(yamac_reply, turn=rounds_completed)
 
             if self._cli_agent.is_selffork_jr_done(yamac_reply):
                 self._audit.emit(
@@ -393,7 +408,14 @@ class Session:
                     sentinels=["[SELFFORK:SPAWN:"],
                 )
                 rounds_completed += 1
+                action_count += 1
                 is_first_round = False
+                self._observe_round(
+                    tool_key="spawn",
+                    observation_text=aggregated,
+                    succeeded=True,
+                    history=history,
+                )
                 continue
 
             # Tool calls (e.g. <selffork-tool-call> ... kanban_card_done ...)
@@ -417,6 +439,7 @@ class Session:
                     tool_results=raw_results,
                 )
                 rounds_completed += 1
+                action_count += 1
                 is_first_round = False
                 # Jr autopilot session-end propagation. ``mark_done`` returns
                 # the literal DONE sentinel in its payload; the tool branch
@@ -433,6 +456,12 @@ class Session:
                         },
                     )
                     return
+                self._observe_round(
+                    tool_key=_tool_calls_key(raw_calls),
+                    observation_text=rendered_text,
+                    succeeded=all(r.status == "ok" for r in raw_results),
+                    history=history,
+                )
                 continue
 
             cmd = [
@@ -453,9 +482,7 @@ class Session:
                 },
             )
 
-            await self._theater.cli_output(
-                yamac_reply, kind="jr-prompt"
-            )
+            await self._theater.cli_output(yamac_reply, kind="jr-prompt")
 
             # Destructive guard — ADR-006 §4.5 / ADR-007 §4 S3. Pause the
             # round-loop until the operator approves or the per-category
@@ -463,10 +490,7 @@ class Session:
             # collaborators must be wired for the guard to engage;
             # orphan/test runs without a whitelist or store proceed
             # unchanged.
-            if (
-                self._destructive_whitelist is not None
-                and self._pending_store is not None
-            ):
+            if self._destructive_whitelist is not None and self._pending_store is not None:
                 guard = await check_destructive_action(
                     cmd=cmd,
                     env=env,
@@ -536,10 +560,107 @@ class Session:
                 cli_response=output_text,
             )
             rounds_completed += 1
+            action_count += 1
+            # The cli-path action identity hashes Jr's PROMPT (greedy decoding
+            # repeats it when stuck, so SAME_TOOL_REPEAT fires on a genuinely
+            # stuck loop); the no-observable-change axis (``observation_text``)
+            # is the backstop when the prompt varies but the output does not
+            # (ADR-010 §2.2.4).
+            self._observe_round(
+                tool_key=(f"cli:{self._cli_agent_name or binary}|{hash_observation(yamac_reply)}"),
+                observation_text=output_text,
+                succeeded=exit_code == 0,
+                history=history,
+            )
 
         raise SelfForkError(
             f"max_rounds ({max_rounds}) reached without [SELFFORK:DONE] sentinel from SelfFork Jr",
         )
+
+    def _enforce_loop_caps(self, action_count: int, started_at: float) -> None:
+        """ADR-010 §2.2 hard safety caps. Raise :class:`SelfForkError` on breach.
+
+        The action-count cap is an always-on backstop; the wall-clock cap is
+        opt-in (``None`` disables it — ADR-011 §5 forbids killing a slow CPU
+        generation, so a wall-clock guard must never be a silent default).
+        """
+        cap = self._lifecycle_config.hard_action_cap
+        if cap is not None and action_count >= cap:
+            self._audit.emit(
+                "loop.cap_reached",
+                level="WARNING",
+                payload={"kind": "action_count", "count": action_count, "cap": cap},
+            )
+            raise SelfForkError(
+                f"agentic loop hit the hard action cap ({cap}) without [SELFFORK:DONE]",
+            )
+        wall = self._lifecycle_config.wall_clock_cap_seconds
+        if wall is not None:
+            elapsed = time.monotonic() - started_at
+            if elapsed > wall:
+                self._audit.emit(
+                    "loop.cap_reached",
+                    level="WARNING",
+                    payload={
+                        "kind": "wall_clock",
+                        "elapsed_seconds": round(elapsed, 1),
+                        "cap_seconds": wall,
+                    },
+                )
+                raise SelfForkError(
+                    f"agentic loop exceeded the wall-clock cap ({wall}s) without [SELFFORK:DONE]",
+                )
+
+    def _observe_round(
+        self,
+        *,
+        tool_key: str | None,
+        observation_text: str,
+        succeeded: bool,
+        history: list[ChatMessage],
+    ) -> None:
+        """Feed one completed round to the stuck-detector (ADR-010 §2.2).
+
+        No-op when no detector is wired. A soft NUDGE injects the corrective
+        into Jr's next user message so it can self-correct; a hard ABORT raises
+        :class:`SelfForkError` (the loop is genuinely stuck — fail, never spin).
+        """
+        if self._stuck_detector is None:
+            return
+        verdict = self._stuck_detector.record(
+            StepObservation(
+                tool_key=tool_key,
+                observation_hash=hash_observation(observation_text),
+                succeeded=succeeded,
+            ),
+        )
+        if not verdict.tripped:
+            return
+        reason = verdict.reason.value if verdict.reason is not None else None
+        if verdict.recovery is RecoveryAction.ABORT:
+            self._audit.emit(
+                "loop.stuck",
+                level="WARNING",
+                payload={"reason": reason, "detail": verdict.detail},
+            )
+            raise SelfForkError(
+                f"agentic loop stuck ({reason}): {verdict.corrective_message}",
+            )
+        self._audit.emit(
+            "loop.stuck_warning",
+            payload={"reason": reason, "detail": verdict.detail},
+        )
+        # Fold the soft-nudge corrective into the round's existing user
+        # message (the tool/cli/spawn result just appended above) instead of
+        # a second consecutive ``user`` turn — Gemma's chat template requires
+        # alternating roles, so a back-to-back user pair would break real
+        # inference (the test fake tolerates it; the model would not).
+        corrective = f"[orchestrator] {verdict.corrective_message}"
+        if history and history[-1]["role"] == "user":
+            merged = history[-1]["content"] + "\n\n" + corrective
+            history[-1]["content"] = merged
+        else:
+            history.append({"role": "user", "content": corrective})
 
     async def _handle_tool_calls(
         self,
@@ -582,9 +703,7 @@ class Session:
                 # distinct category so the activity feed + S-Train can
                 # surface them. ``call_id`` (session+round+order) pairs the
                 # question with its answer event below.
-                "tool.structured_question"
-                if is_structured_question(call.tool)
-                else "tool.call",
+                "tool.structured_question" if is_structured_question(call.tool) else "tool.call",
                 payload={
                     "round": rounds_completed,
                     "tool": call.tool,
@@ -602,9 +721,7 @@ class Session:
                 # S8 — the answer to a structured question lands in the
                 # paired category. ``order`` mirrors the question's
                 # ``order`` so the activity feed groups the Q/A pair.
-                "tool.structured_answer"
-                if is_structured_question(result.tool)
-                else "tool.result",
+                "tool.structured_answer" if is_structured_question(result.tool) else "tool.result",
                 payload={
                     "round": rounds_completed,
                     "tool": result.tool,
@@ -802,6 +919,17 @@ class Session:
         # else: we're already in COMPLETED or TORN_DOWN — nothing to do.
 
 
+def _tool_calls_key(calls: list[ToolCall]) -> str | None:
+    """Combined normalized identity of a round's tool calls (or ``None``).
+
+    A reply that re-issues the same tool call(s) collapses to the same key so
+    the stuck-detector's same-tool / oscillation checks fire (ADR-010 §2.2).
+    """
+    if not calls:
+        return None
+    return "+".join(normalize_tool_key(call.tool, call.args) for call in calls)
+
+
 def _convert_tool_calls(
     calls: list[ToolCall],
     results: list[ToolResult],
@@ -946,7 +1074,7 @@ def _redact_preview(payload: object) -> object:
     return {
         "preview_truncated": True,
         "original_chars": len(wire),
-        "head": wire[: _RESULT_PREVIEW_MAX_CHARS],
+        "head": wire[:_RESULT_PREVIEW_MAX_CHARS],
     }
 
 
@@ -961,11 +1089,7 @@ def _redact_recursive(value: object, *, depth: int) -> object:
         return "<depth-capped>"
     if isinstance(value, dict):
         return {
-            k: (
-                "<redacted>"
-                if _is_secret_key(str(k))
-                else _redact_recursive(v, depth=depth + 1)
-            )
+            k: ("<redacted>" if _is_secret_key(str(k)) else _redact_recursive(v, depth=depth + 1))
             for k, v in value.items()
         }
     if isinstance(value, list | tuple):

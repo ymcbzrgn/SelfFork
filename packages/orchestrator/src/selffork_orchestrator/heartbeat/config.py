@@ -190,6 +190,9 @@ def build_default_heartbeat(
     cli_selector: object | None = None,
     quota_reader: object | None = None,
     projects_root: Path | None = None,
+    body_daemon_alive_probe: object | None = None,
+    body_use_driver: object | None = None,
+    body_review_driver: object | None = None,
 ) -> HeartbeatScheduler:
     """Construct the daemon from env (dashboard lifespan helper).
 
@@ -277,6 +280,8 @@ def build_default_heartbeat(
         task_starter=task_starter,  # type: ignore[arg-type]
         kanban_card_creator=kanban_card_creator,  # type: ignore[arg-type]
         cli_selector=cli_selector,  # type: ignore[arg-type]
+        body_use_driver=body_use_driver,  # type: ignore[arg-type]
+        body_review_driver=body_review_driver,  # type: ignore[arg-type]
     )
 
     # Settings UI wins when a YAML file exists; env is bootstrap only
@@ -343,6 +348,7 @@ def build_default_heartbeat(
         supervised_mode_provider=supervised_mode_provider,
         quota_reader=quota_reader,  # type: ignore[arg-type]
         workspace_eligible_probe=workspace_eligible_probe,
+        body_daemon_alive_probe=body_daemon_alive_probe,  # type: ignore[arg-type]
     )
 
     return HeartbeatScheduler(

@@ -52,6 +52,11 @@ AuditCategory = Literal[
     "tool.structured_question",
     "tool.structured_answer",
     "selffork_jr.reply",  # SelfFork Jr's chat completion output for one round
+    # S-Vision (ADR-010 §2.2) — agentic round-loop deterministic stuck-detector
+    # + hard caps. The round-loop owns these emits; the detector itself is pure.
+    "loop.stuck",  # deterministic hard stuck-detector tripped -> loop aborted
+    "loop.stuck_warning",  # soft early-warning nudge injected; loop continues
+    "loop.cap_reached",  # hard action-count / wall-clock cap hit -> loop aborted
     "mind.note.write",  # Mind T2 EpisodicWriter or `selffork mind` CLI wrote a Note
     "mind.note.supersede",  # Mind decision superseded (bi-temporal validity stamped)
     "mind.recall.query",  # Mind HybridRetriever ran a query
