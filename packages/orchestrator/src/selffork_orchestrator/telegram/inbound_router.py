@@ -26,6 +26,12 @@ from selffork_orchestrator.cli_agent.capabilities import (
     CAPABILITIES,
     capability_for,
 )
+
+if TYPE_CHECKING:
+    from selffork_orchestrator.heartbeat.audit import AuditWriter
+    from selffork_orchestrator.tools.structured_question import (
+        PendingStructuredQuestionStore,
+    )
 from selffork_orchestrator.talk.models import Conversation
 from selffork_orchestrator.talk.store import TalkStore
 from selffork_orchestrator.telegram.allowlist import AllowList
@@ -34,6 +40,12 @@ from selffork_orchestrator.telegram.destructive_notify import (
     parse_callback_data,
 )
 from selffork_orchestrator.telegram.drafts import TelegramDraftStore
+from selffork_orchestrator.voice import (
+    NullVoiceBackend,
+    VoiceBackend,
+    VoiceTranscriptionError,
+    VoiceUnavailableError,
+)
 
 if TYPE_CHECKING:
     from selffork_orchestrator.router.override import CliOverrideStore
@@ -154,6 +166,9 @@ class InboundRouter:
         extend_hours: int = DEFAULT_EXTEND_HOURS,
         conversation_factory: _ConversationFactory | None = None,
         cli_override_store: CliOverrideStore | None = None,
+        voice_backend: VoiceBackend | None = None,
+        audit_writer: AuditWriter | None = None,
+        structured_question_store: PendingStructuredQuestionStore | None = None,
     ) -> None:
         self._allowlist = allowlist
         self._pending = pending_store
@@ -165,6 +180,21 @@ class InboundRouter:
             conversation_factory or self._default_conversation_factory
         )
         self._cli_override = cli_override_store
+        # S-Bridge: voice inbound STT backend. ``None`` ⇒ NullVoiceBackend
+        # (Telegram voice messages reply with a friendly "not configured"
+        # hint instead of silently dropping). Real STT plugs in here.
+        self._voice = (
+            voice_backend if voice_backend is not None else NullVoiceBackend()
+        )
+        # S-Bridge: ``/correct`` Telegram command writes a
+        # :class:`Correction` row next to the heartbeat audit log. ``None``
+        # disables the command cleanly (test contexts that don't need
+        # coaching). Production wires :meth:`AuditWriter.default`.
+        self._audit_writer = audit_writer
+        # S-Bridge CORE: the pending structured-question store the
+        # ``/answer`` and ``/cancel`` commands resolve into. ``None``
+        # disables those commands cleanly.
+        self._structured_question_store = structured_question_store
 
     # ── auth ──────────────────────────────────────────────────────────
 
@@ -302,6 +332,12 @@ class InboundRouter:
             )
         if norm == "cli":
             return await self._handle_cli_override(args)
+        if norm == "correct":
+            return self._handle_correct(args)
+        if norm == "answer":
+            return await self._handle_answer(args)
+        if norm == "cancelq":
+            return await self._handle_cancel_question(args)
         if norm in {"approve", "cancel"}:
             if not args:
                 return CommandOutcome(
@@ -354,6 +390,180 @@ class InboundRouter:
             reply=f"unknown command: /{norm} — try /help",
             command=norm,
             handled=False,
+        )
+
+    def _handle_correct(self, args: list[str]) -> CommandOutcome:
+        """Append a :class:`Correction` row for a prior audit entry.
+
+        Grammar: ``/correct <audit_idempotency_key> <correction text…>``.
+        Operator coaching loop (ADR-010 §coaching) — the Heartbeat
+        re-reads corrections next tick and surfaces them as high-weight
+        reflex examples; Mind T2 ingest tails the same file. Append-only:
+        a correction never rewrites the original entry.
+        """
+        # Lazy import to avoid the heartbeat.audit → telegram cycle.
+        from selffork_orchestrator.heartbeat.audit import Correction
+
+        if self._audit_writer is None:
+            return CommandOutcome(
+                reply=(
+                    "📝 /correct: audit writer not wired — coaching "
+                    "trail is disabled on this dashboard boot."
+                ),
+                command="correct",
+                handled=False,
+            )
+        if len(args) < 2:
+            return CommandOutcome(
+                reply=(
+                    "Usage: /correct <audit_idempotency_key> "
+                    "<correction text>"
+                ),
+                command="correct",
+                handled=False,
+            )
+        key = args[0].strip()
+        text = " ".join(args[1:]).strip()
+        if not key:
+            return CommandOutcome(
+                reply="audit_idempotency_key cannot be empty",
+                command="correct",
+                handled=False,
+            )
+        if not text:
+            return CommandOutcome(
+                reply="correction text cannot be empty",
+                command="correct",
+                handled=False,
+            )
+        correction = Correction(
+            audit_idempotency_key=key,
+            correction_text=text,
+            source="operator-telegram",
+        )
+        try:
+            self._audit_writer.write_correction(correction)
+        except OSError as exc:
+            _log.warning(
+                "telegram_correct_write_failed",
+                extra={"key": key, "reason": str(exc)},
+            )
+            return CommandOutcome(
+                reply=(
+                    "📝 /correct: write failed — check disk space "
+                    "and audit log permissions."
+                ),
+                command="correct",
+                handled=False,
+            )
+        return CommandOutcome(
+            reply=(
+                f"✓ Correction recorded for {key}. "
+                "Self Jr will weight this in the next learning pass."
+            ),
+            command="correct",
+            handled=True,
+        )
+
+    async def _handle_answer(self, args: list[str]) -> CommandOutcome:
+        """Submit an operator answer to a pending structured question.
+
+        Grammar: ``/answer <correlation_id> <option label or text>``.
+        S-Bridge CORE — Self Jr emits ``AskUserQuestion`` →
+        ``PendingStructuredQuestionStore`` registers + blocks; this
+        command resolves it.
+        """
+        store = self._structured_question_store
+        if store is None:
+            return CommandOutcome(
+                reply=(
+                    "📝 /answer: structured-question store not wired — "
+                    "Self Jr's AskUserQuestion isn't routed through "
+                    "this dashboard."
+                ),
+                command="answer",
+                handled=False,
+            )
+        if len(args) < 2:
+            return CommandOutcome(
+                reply="Usage: /answer <correlation_id> <option label or text>",
+                command="answer",
+                handled=False,
+            )
+        correlation_id = args[0].strip()
+        text = " ".join(args[1:]).strip()
+        if not correlation_id:
+            return CommandOutcome(
+                reply="correlation_id cannot be empty",
+                command="answer",
+                handled=False,
+            )
+        if not text:
+            return CommandOutcome(
+                reply="answer text cannot be empty",
+                command="answer",
+                handled=False,
+            )
+        submitted = await store.submit_answer(correlation_id, text)
+        if not submitted:
+            return CommandOutcome(
+                reply=(
+                    f"📝 /answer: no pending question {correlation_id!r} "
+                    "(already answered, cancelled, or expired)."
+                ),
+                command="answer",
+                handled=False,
+            )
+        return CommandOutcome(
+            reply=(
+                f"✓ Answer recorded for {correlation_id}. Self Jr will "
+                "resume on its next round."
+            ),
+            command="answer",
+            handled=True,
+        )
+
+    async def _handle_cancel_question(
+        self, args: list[str],
+    ) -> CommandOutcome:
+        """Cancel a pending structured question (Self Jr unblocks with no answer).
+
+        Grammar: ``/cancelq <correlation_id>``. Distinct from the
+        ``/cancel`` destructive-confirmation command so the two
+        cancellation flows don't share a slug (PTB rejects hyphens in
+        command names — hence the run-on spelling).
+        """
+        store = self._structured_question_store
+        if store is None:
+            return CommandOutcome(
+                reply="📝 /cancelq: structured-question store not wired.",
+                command="cancelq",
+                handled=False,
+            )
+        if not args:
+            return CommandOutcome(
+                reply="Usage: /cancelq <correlation_id>",
+                command="cancelq",
+                handled=False,
+            )
+        correlation_id = args[0].strip()
+        cancelled = await store.cancel(correlation_id)
+        if not cancelled:
+            return CommandOutcome(
+                reply=(
+                    f"📝 /cancelq: no pending question {correlation_id!r} "
+                    "(already resolved or expired)."
+                ),
+                command="cancelq",
+                handled=False,
+            )
+        return CommandOutcome(
+            reply=(
+                f"✓ Cancelled {correlation_id}. Self Jr will proceed "
+                "without an operator answer."
+            ),
+            command="cancelq",
+            handled=True,
         )
 
     async def _handle_cli_override(self, args: list[str]) -> CommandOutcome:
@@ -478,6 +688,89 @@ class InboundRouter:
             workspace_slug=workspace_slug, title=title
         )
 
+    # ── voice messages (S-Bridge — Telegram-voice-only modality) ──────
+
+    async def handle_voice(
+        self,
+        *,
+        chat_id: int,
+        sender: str | None,
+        audio: bytes,
+        mime: str = "audio/ogg",
+    ) -> MessageOutcome:
+        """Transcribe Telegram voice and route the text through the chat path.
+
+        Telegram voice attachments arrive as Opus-in-OGG (``audio/ogg``)
+        by default; the PTB ``_on_voice`` handler downloads the file
+        bytes and forwards them here. We delegate the actual STT to the
+        injected :class:`VoiceBackend` so the test seam stays clean.
+
+        Outcomes:
+
+        * Not authorised → ``target="dropped"`` with a refusal reply.
+        * Backend unavailable (e.g. whisper not installed,
+          ``NullVoiceBackend``) → ``target="dropped"`` with a friendly
+          hint; nothing is appended to Talk.
+        * Backend ran but failed → ``target="dropped"`` with a generic
+          error reply; the underlying exception is logged but not
+          surfaced to the operator chat.
+        * Successful transcription → forwarded to
+          :meth:`handle_message` with the transcript as ``text``; the
+          operator sees the same UX as if they had typed it.
+        """
+        if not self.is_allowed(chat_id):
+            return MessageOutcome(
+                target="dropped",
+                workspace_slug=None,
+                reply="⛔ not authorised",
+            )
+        try:
+            transcript = await self._voice.transcribe(audio, mime=mime)
+        except VoiceUnavailableError as exc:
+            _log.info(
+                "telegram_voice_unavailable",
+                extra={"chat_id": chat_id, "reason": str(exc)},
+            )
+            return MessageOutcome(
+                target="dropped",
+                workspace_slug=None,
+                reply=(
+                    "🎙️ Voice transcription not configured. Install "
+                    "openai-whisper on PATH or wire a VoiceBackend, "
+                    "then resend the message."
+                ),
+            )
+        except VoiceTranscriptionError as exc:
+            _log.warning(
+                "telegram_voice_failed",
+                extra={"chat_id": chat_id, "reason": str(exc)},
+            )
+            return MessageOutcome(
+                target="dropped",
+                workspace_slug=None,
+                reply=(
+                    "🎙️ Couldn't transcribe that — try sending the "
+                    "voice clip again, or type the message."
+                ),
+            )
+        transcript = transcript.strip()
+        if not transcript:
+            return MessageOutcome(
+                target="dropped",
+                workspace_slug=None,
+                reply=(
+                    "🎙️ Empty transcription — the clip might be "
+                    "silent. Try again."
+                ),
+            )
+        # Delegate to the existing text path; same workspace routing +
+        # Talk-store ingest + drafts fallback come along for free.
+        return await self.handle_message(
+            chat_id=chat_id,
+            sender=sender,
+            text=transcript,
+        )
+
     # ── plain text messages ───────────────────────────────────────────
 
     async def handle_message(
@@ -551,5 +844,11 @@ _HELP_TEXT = (
     "/approve <id> — approve a pending destructive action\n"
     "/cancel <id> — cancel a pending destructive action\n"
     "/extend <id> [hours] — extend the soft-confirm window\n"
+    "/correct <audit_idempotency_key> <text> — record an operator "
+    "correction for a prior decision\n"
+    "/answer <correlation_id> <text> — answer a pending structured "
+    "question from Self Jr\n"
+    "/cancelq <correlation_id> — cancel a pending structured question "
+    "(Self Jr resumes without an answer)\n"
     "/help — this list"
 )

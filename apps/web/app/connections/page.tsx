@@ -285,13 +285,21 @@ export default function ConnectionsPage() {
                     </p>
                   )}
                   {!hasUsage && !expired && (
-                    <p className="text-caption text-on-surface-variant italic">
-                      No recent activity. Run{" "}
-                      <code className="font-mono text-on-surface bg-surface-container-low px-1.5 rounded">
-                        {row.loginCommand}
-                      </code>{" "}
-                      in your terminal to sign in.
-                    </p>
+                    row.canonical === "minimax" || row.canonical === "glm" ? (
+                      <p className="text-caption text-on-surface-variant italic">
+                        Routed via OpenCode — Self Jr reaches this
+                        provider through the OpenCode CLI, so its quota
+                        rolls up under OpenCode above.
+                      </p>
+                    ) : (
+                      <p className="text-caption text-on-surface-variant italic">
+                        No recent activity. Run{" "}
+                        <code className="font-mono text-on-surface bg-surface-container-low px-1.5 rounded">
+                          {row.loginCommand}
+                        </code>{" "}
+                        in your terminal to sign in.
+                      </p>
+                    )
                   )}
                   {expired && (
                     <p className="text-caption text-error">
@@ -315,7 +323,11 @@ export default function ConnectionsPage() {
                 </div>
                 <div className="flex items-center gap-2 text-caption text-on-surface-variant">
                   <Terminal className="h-3.5 w-3.5" strokeWidth={1.75} />
-                  <span className="font-mono">{row.loginCommand}</span>
+                  <span className="font-mono">
+                    {row.canonical === "minimax" || row.canonical === "glm"
+                      ? "via opencode"
+                      : row.loginCommand}
+                  </span>
                 </div>
               </div>
             );

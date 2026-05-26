@@ -116,6 +116,9 @@ def register_inbound_handlers(application: Application) -> None:  # type: ignore
         "approve",
         "cancel",
         "extend",
+        "correct",
+        "answer",
+        "cancelq",
         "help",
         "start",  # Telegram clients send /start on first contact
     ):
@@ -124,6 +127,16 @@ def register_inbound_handlers(application: Application) -> None:  # type: ignore
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
             _on_message,
+        )
+    )
+    # S-Bridge — Telegram voice attachments. The handler downloads
+    # the audio bytes via PTB and forwards them to the router's voice
+    # path; the router transcribes + routes through the same workspace
+    # / Talk / drafts logic as a plain text message.
+    application.add_handler(
+        MessageHandler(
+            filters.VOICE,
+            _on_voice,
         )
     )
 
@@ -203,6 +216,49 @@ async def _on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     )
     outcome = await router.handle_message(
         chat_id=chat_id, sender=sender, text=message.text
+    )
+    if outcome.reply:
+        await message.reply_text(outcome.reply)
+
+
+async def _on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Download a Telegram voice clip and forward to the router.
+
+    S-Bridge — Telegram-voice-only modality (ADR-010 §3). The audio
+    bytes round-trip through :class:`VoiceBackend`; the transcript
+    re-enters the chat path as if the operator had typed it. Download
+    failures never raise — they surface as a chat reply so the
+    operator sees what happened.
+    """
+    message = update.effective_message
+    if message is None or message.voice is None:
+        return
+    router = _resolve_router(context)
+    if router is None:
+        await message.reply_text("⚠️ bridge unwired")
+        return
+    chat = message.chat
+    chat_id = chat.id if chat is not None else 0
+    sender = (
+        message.from_user.username
+        if message.from_user and message.from_user.username
+        else None
+    )
+    try:
+        voice_file = await message.voice.get_file()
+        audio = bytes(await voice_file.download_as_bytearray())
+    except Exception as exc:
+        _log.warning(
+            "telegram_voice_download_failed",
+            extra={"chat_id": chat_id, "reason": str(exc)},
+        )
+        await message.reply_text(
+            "🎙️ Couldn't download the voice clip from Telegram. Try again?",
+        )
+        return
+    mime = message.voice.mime_type or "audio/ogg"
+    outcome = await router.handle_voice(
+        chat_id=chat_id, sender=sender, audio=audio, mime=mime,
     )
     if outcome.reply:
         await message.reply_text(outcome.reply)

@@ -169,6 +169,7 @@ class Session:
         destructive_whitelist: DestructiveWhitelist | None = None,
         pending_store: PendingConfirmationStore | None = None,
         stuck_detector: StuckDetector | None = None,
+        structured_question_store: object | None = None,
     ) -> None:
         self._session_id = session_id
         self._prd_text = prd_text
@@ -200,6 +201,12 @@ class Session:
         # S6 (ADR-006 §4.6) — Self-Jr-mutable CLI-router control stores.
         self._cli_override_store = cli_override_store
         self._cli_runtime_store = cli_runtime_store
+        # S-Bridge CORE — pending structured-question store handed to
+        # the ``AskUserQuestion`` tool. ``None`` ⇒ tool reports
+        # ``status="unwired"`` and Self Jr proceeds without operator
+        # input. Producer side awaits, consumer side (Telegram
+        # ``/answer`` or REST POST) fires the asyncio.Event.
+        self._structured_question_store = structured_question_store
         # Theater producer — best-effort Live Run surface (ADR-007 §4 S2).
         # Null Object default so the round loop never branches on None.
         self._theater: TheaterProducer = theater_producer or NullTheaterProducer()
@@ -695,6 +702,8 @@ class Session:
             resume_store=self._resume_store,
             cli_override_store=self._cli_override_store,
             cli_runtime_store=self._cli_runtime_store,
+            audit_logger=self._audit,
+            structured_question_store=self._structured_question_store,
         )
         results: list[ToolResult] = []
         for call in calls:

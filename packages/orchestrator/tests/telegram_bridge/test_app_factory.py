@@ -61,9 +61,10 @@ def test_factory_registers_all_handler_classes(tmp_path: Path) -> None:
     assert CallbackQueryHandler in kinds
     assert CommandHandler in kinds
     assert MessageHandler in kinds
-    # One callback + 9 commands (workspace/cli/pause/resume/approve/cancel/extend/help/start)
-    # + one message handler = 11.
-    assert total == 11
+    # One callback + 12 commands
+    # (workspace/cli/pause/resume/approve/cancel/extend/correct/answer/
+    # cancelq/help/start) + text MessageHandler + voice MessageHandler = 15.
+    assert total == 15
 
 
 def test_factory_stows_router_in_bot_data(tmp_path: Path) -> None:

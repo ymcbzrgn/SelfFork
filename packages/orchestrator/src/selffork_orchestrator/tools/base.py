@@ -109,6 +109,13 @@ class ToolContext:
     # them return an "unauthorized" :class:`ToolResult` rather than raise.
     cli_override_store: object | None = None  # selffork_orchestrator.router.CliOverrideStore
     cli_runtime_store: object | None = None  # selffork_orchestrator.router.CliRuntimeStore
+    # S-Bridge CORE — pending structured question store for the
+    # ``AskUserQuestion`` tool. Optional, ``None`` when the orchestrator
+    # didn't wire one (tests, legacy code paths); the tool returns
+    # ``{"status": "unwired"}`` in that case so Self Jr learns the
+    # capability is absent rather than crashing.
+    # selffork_orchestrator.tools.structured_question.PendingStructuredQuestionStore
+    structured_question_store: object | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -21,9 +21,17 @@ version = "v0.27.0"
 url_template = "https://github.com/steipete/CodexBar/releases/download/{version}/CodexBarCLI-{version}-{platform}.tar.gz"
 
 # Layout inside the tarball — the binary lives at this relative path.
-# Verified against the v0.27.0 tarball layout; bump only when CodexBar
-# changes its release packaging.
-archive_member = "codexbar"
+#
+# v0.27.0 release tarballs (CodexBarCLI-v0.27.0-<platform>.tar.gz) carry
+# the real Swift binary as ``CodexBarCLI`` at the tarball root, with a
+# convenience ``codexbar`` symlink pointing at it. We extract the **real
+# binary** by name — extracting the symlink directly fails on tar(1)
+# because the target is not pulled along (BUG-2, 2026-05-26).
+#
+# install-codexbar.sh also has a fallback that scans the extracted tree
+# by basename, so older / future tarballs that wrap the binary in a
+# subdirectory still work without a manifest bump.
+archive_member = "CodexBarCLI"
 
 # Optional companion checksum file in the release assets (some releases
 # include one; install-codexbar.sh prefers explicit per-platform sha256

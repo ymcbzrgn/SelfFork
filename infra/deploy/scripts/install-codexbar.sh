@@ -164,13 +164,52 @@ if [[ "$VERIFY" -eq 1 ]]; then
 fi
 
 mkdir -p "$PREFIX"
-tar -xzf "$TARBALL" -C "$TMP_DIR" "$ARCHIVE_MEMBER" || {
-  # Some release layouts wrap binaries in a top-level directory; try
-  # the common shape ``CodexBarCLI-v<ver>-<platform>/codexbar``.
-  WRAPPED="CodexBarCLI-${VERSION}-${PLATFORM}/${ARCHIVE_MEMBER}"
-  tar -xzf "$TARBALL" -C "$TMP_DIR" "$WRAPPED"
-  mv "$TMP_DIR/$WRAPPED" "$TMP_DIR/$ARCHIVE_MEMBER"
-}
-install -m 0755 "$TMP_DIR/$ARCHIVE_MEMBER" "$PREFIX/codexbar"
+
+# Extraction strategy (BUG-2 fix, 2026-05-26):
+#
+# Older versions of this script tried to extract a single tarball
+# member by name, which fails when the manifest names a *symlink*
+# (the v0.27.0 tarball ships ``codexbar`` as a symlink to the real
+# ``CodexBarCLI`` Swift binary). tar(1) extracts the symlink without
+# its target, leaving us with a dangling installed file.
+#
+# Robust path:
+#   1. Try the direct member extract. Works when ``archive_member``
+#      names the real binary at the tarball root (e.g. CodexBarCLI).
+#   2. If that fails OR the extracted entry isn't an executable
+#      regular file, extract the whole tarball into a scratch dir
+#      and locate the binary by basename — handles subdir-wrapped
+#      layouts and symlink-only manifests without a manifest bump.
+EXTRACTED=""
+if tar -xzf "$TARBALL" -C "$TMP_DIR" "$ARCHIVE_MEMBER" 2>/dev/null; then
+  candidate="$TMP_DIR/$ARCHIVE_MEMBER"
+  if [[ -f "$candidate" && ! -L "$candidate" ]]; then
+    EXTRACTED="$candidate"
+  fi
+fi
+if [[ -z "$EXTRACTED" ]]; then
+  EXTRACT_DIR="$TMP_DIR/extract"
+  mkdir -p "$EXTRACT_DIR"
+  tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
+  # Prefer the manifest-named binary; fall back to known Swift-binary
+  # alternatives so an upstream rename doesn't blow up the install
+  # path mid-flight (operator can still run, file an issue, refresh
+  # the manifest at leisure).
+  for candidate in "$ARCHIVE_MEMBER" "CodexBarCLI" "codexbar"; do
+    found="$(find "$EXTRACT_DIR" -type f -name "$candidate" -perm -u+x -print | head -n 1 || true)"
+    if [[ -n "$found" ]]; then
+      EXTRACTED="$found"
+      break
+    fi
+  done
+fi
+if [[ -z "$EXTRACTED" || ! -f "$EXTRACTED" ]]; then
+  echo "install-codexbar: could not locate codexbar binary inside ${TARBALL}" >&2
+  echo "install-codexbar: archive contents:" >&2
+  tar -tzf "$TARBALL" >&2 | head -50
+  exit 3
+fi
+
+install -m 0755 "$EXTRACTED" "$PREFIX/codexbar"
 
 echo "install-codexbar: installed CodexBar ${VERSION} → ${PREFIX}/codexbar"

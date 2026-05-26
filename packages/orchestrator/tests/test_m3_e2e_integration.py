@@ -103,7 +103,8 @@ def test_every_autopilot_tool_has_json_schema() -> None:
 # ── Snapper fleet ─────────────────────────────────────────────────────────────
 
 
-def test_default_snappers_cover_six_clis() -> None:
+def test_default_snappers_cover_active_fleet() -> None:
+    """Default fleet = 4 wired CLI agents (minimax + zai via opencode)."""
     snappers = build_default_snappers()
     cli_ids = {s.cli_id for s in snappers}
     assert cli_ids == {
@@ -111,8 +112,6 @@ def test_default_snappers_cover_six_clis() -> None:
         "codex",
         "gemini-cli",
         "opencode",
-        "minimax-cli",
-        "zai",
     }
 
 
@@ -225,9 +224,13 @@ def test_available_clis_tool_marks_exhausted_above_threshold(tmp_path: Path) -> 
     assert rows["claude-code"]["status"] == "exhausted"
     assert rows["claude-code"]["exhausted"] is True
     # Other CLIs without snapshots → "unknown" (not exhausted).
+    # minimax-cli + zai are routed via opencode (operator 2026-05-26)
+    # so they no longer appear in the default snapper fleet's clis list.
     assert rows["codex"]["status"] == "unknown"
-    assert rows["minimax-cli"]["status"] == "unknown"
-    assert rows["zai"]["status"] == "unknown"
+    assert rows["gemini-cli"]["status"] == "unknown"
+    assert rows["opencode"]["status"] == "unknown"
+    assert "minimax-cli" not in rows
+    assert "zai" not in rows
 
 
 def test_rotate_to_validates_against_snapper_registry() -> None:

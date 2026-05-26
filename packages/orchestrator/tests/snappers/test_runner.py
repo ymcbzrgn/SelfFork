@@ -163,15 +163,15 @@ def test_build_default_snapper_runner_constructs_full_fleet(
     runner = build_default_snapper_runner()
     assert runner is not None
     cli_ids = {s.cli_id for s in runner.snappers}
-    # All registered CLI snappers wired today (6 entries).
-    assert {
+    # Active default fleet = 4 wired CLI agents. minimax-cli + zai are
+    # routed via opencode (operator 2026-05-26) so they don't get a
+    # standalone snapper here.
+    assert cli_ids == {
         "claude-code",
         "codex",
         "gemini-cli",
         "opencode",
-        "minimax-cli",
-        "zai",
-    } <= cli_ids
+    }
     # Default cadence is the dashboard sidecar constant (slower than the
     # per-session 1 Hz default — see DEFAULT_SIDECAR_INTERVAL_SECONDS).
     assert (

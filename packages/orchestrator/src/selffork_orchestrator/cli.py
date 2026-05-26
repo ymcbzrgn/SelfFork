@@ -59,6 +59,9 @@ from selffork_orchestrator.theater.producer import (
 )
 from selffork_orchestrator.theater.store import TheaterStore, theater_db_path
 from selffork_orchestrator.tmux.factory import build_tmux_driver
+from selffork_orchestrator.tools.structured_question import (
+    PendingStructuredQuestionStore,
+)
 from selffork_shared.audit import AuditLogger
 from selffork_shared.config import SelfForkSettings, load_settings
 from selffork_shared.errors import ConfigError, SelfForkError
@@ -690,6 +693,11 @@ async def _amain(
             telegram_bridge=telegram_bridge_for_tools,
         ),
         stuck_detector=StuckDetector(),
+        # S-Bridge CORE — Self Jr can now block on AskUserQuestion and
+        # resume via Telegram ``/answer``. Construct the store eagerly
+        # so the tool registry's handler has somewhere to register
+        # pending entries.
+        structured_question_store=_build_structured_question_store(),
     )
     # Run the snapper fleet in parallel with the session; tear it down
     # when the session returns (regardless of outcome).
@@ -1308,6 +1316,141 @@ def _resolve_static_dir() -> Path | None:
 # ── selffork resume sub-app ───────────────────────────────────────────────────
 
 
+skills_app = typer.Typer(
+    name="skills",
+    help=(
+        "Skill marketplace fan-out — symlink canonical skills into "
+        "each wired CLI agent's skills dir."
+    ),
+    no_args_is_help=True,
+)
+app.add_typer(skills_app, name="skills")
+
+
+@skills_app.command("sync")
+def skills_sync(
+    canonical: Annotated[
+        Path | None,
+        typer.Option(
+            "--canonical",
+            help=(
+                "Canonical skills source dir (default: "
+                "~/.selffork/skills/)."
+            ),
+        ),
+    ] = None,
+    target: Annotated[
+        list[Path] | None,
+        typer.Option(
+            "--target",
+            help=(
+                "Target CLI skills dir (repeatable). Default: the four "
+                "wired CLI agents' skills dirs (claude/codex/gemini/opencode)."
+            ),
+        ),
+    ] = None,
+) -> None:
+    """Symlink every skill under the canonical dir into each target dir.
+
+    Idempotent — re-running is safe. Conflicts (an existing non-skill
+    file or symlink to a different source) are reported but never
+    overwritten; the operator inspects the conflict list and resolves
+    manually.
+    """
+    from selffork_orchestrator.skills import (
+        SkillInstaller,
+        default_canonical_skills_dir,
+        default_target_cli_dirs,
+    )
+
+    installer = SkillInstaller(
+        canonical_dir=canonical or default_canonical_skills_dir(),
+        target_dirs=target if target else default_target_cli_dirs(),
+    )
+    if not installer.canonical_dir.is_dir():
+        typer.echo(
+            f"selffork skills: canonical dir {installer.canonical_dir} "
+            "does not exist yet. Create it (or `git clone` your skills "
+            "repo into it) and re-run.",
+        )
+        raise typer.Exit(code=0)
+
+    report = installer.sync_all()
+
+    total_links = sum(len(v) for v in report.installed.values())
+    total_skipped = sum(len(v) for v in report.skipped.values())
+    total_conflicts = sum(len(v) for v in report.conflicts.values())
+
+    if not (report.installed or report.skipped or report.conflicts):
+        typer.echo(
+            f"selffork skills: no skills found in {installer.canonical_dir}; "
+            "nothing to do.",
+        )
+        raise typer.Exit(code=0)
+
+    if report.installed:
+        typer.echo(f"Installed ({total_links} link{'s' if total_links != 1 else ''}):")
+        for name, entries in sorted(report.installed.items()):
+            for _target_root, target_link in entries:
+                typer.echo(f"  installed  {name:<24}  →  {target_link}")
+    if report.skipped:
+        suffix = "y" if total_skipped == 1 else "ies"
+        typer.echo(
+            f"Skipped (already linked) ({total_skipped} entr{suffix}):",
+        )
+        for name, targets in sorted(report.skipped.items()):
+            for target_root in targets:
+                typer.echo(f"  skipped    {name:<24}  in  {target_root}")
+    if report.conflicts:
+        suffix = "y" if total_conflicts == 1 else "ies"
+        typer.echo(
+            f"Conflicts ({total_conflicts} entr{suffix}):",
+            err=True,
+        )
+        for name, conflict_entries in sorted(report.conflicts.items()):
+            for target_root, reason in conflict_entries:
+                typer.echo(
+                    f"  conflict   {name:<24}  in  {target_root}  ({reason})",
+                    err=True,
+                )
+        raise typer.Exit(code=1)
+    raise typer.Exit(code=0)
+
+
+@skills_app.command("list")
+def skills_list(
+    canonical: Annotated[
+        Path | None,
+        typer.Option(
+            "--canonical",
+            help="Canonical skills source dir (default: ~/.selffork/skills/).",
+        ),
+    ] = None,
+) -> None:
+    """Print the skills present in the canonical source dir."""
+    from selffork_orchestrator.skills import (
+        SkillInstaller,
+        default_canonical_skills_dir,
+        default_target_cli_dirs,
+    )
+
+    installer = SkillInstaller(
+        canonical_dir=canonical or default_canonical_skills_dir(),
+        target_dirs=default_target_cli_dirs(),
+    )
+    skills = installer.list_skills()
+    if not skills:
+        typer.echo(
+            f"selffork skills: no skills found in {installer.canonical_dir}",
+        )
+        raise typer.Exit(code=0)
+    typer.echo(f"Canonical source: {installer.canonical_dir}")
+    typer.echo(f"Skills ({len(skills)}):")
+    for path in skills:
+        typer.echo(f"  • {path.name}")
+    raise typer.Exit(code=0)
+
+
 resume_app = typer.Typer(
     name="resume",
     help="List, force, or watch scheduled resumes for paused sessions.",
@@ -1444,6 +1587,22 @@ def _humanize_delta(total_seconds: float) -> str:
         parts.append(f"{minutes}m")
     parts.append(f"{sec}s")
     return " ".join(parts)
+
+
+def _build_structured_question_store() -> PendingStructuredQuestionStore:
+    """Build the S-Bridge pending structured-question store for a run.
+
+    Lives in-memory for the session's lifetime. The Telegram inbound
+    side (``/answer`` command) resolves entries via the same instance
+    stashed on ``app.state`` in the dashboard; the CLI ``selffork run``
+    path has its own instance because each ``run`` is a separate
+    process.
+    """
+    from selffork_orchestrator.tools.structured_question import (
+        PendingStructuredQuestionStore,
+    )
+
+    return PendingStructuredQuestionStore()
 
 
 def main() -> None:

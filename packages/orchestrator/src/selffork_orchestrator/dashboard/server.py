@@ -864,6 +864,25 @@ def _wire_telegram_inbound(
         app.state.telegram_talk_store = talk_store
 
     allowlist = AllowList.load()
+    # S-Bridge — voice backend resolved at boot. ``default_voice_backend``
+    # returns WhisperCliVoiceBackend when the ``whisper`` binary is on
+    # PATH, NullVoiceBackend otherwise; either way the InboundRouter
+    # has a non-None VoiceBackend reference and operator-facing replies
+    # stay friendly.
+    from selffork_orchestrator.heartbeat.audit import AuditWriter
+    from selffork_orchestrator.tools.structured_question import (
+        PendingStructuredQuestionStore,
+    )
+    from selffork_orchestrator.voice import default_voice_backend
+
+    # S-Bridge CORE — dashboard-local pending structured-question store.
+    # Resolves Telegram ``/answer`` for any pending question registered
+    # in THIS dashboard process. Cross-process resolution (CLI session
+    # in a separate ``selffork run`` process) requires disk-backed
+    # persistence — deferred to S-Bridge follow-up.
+    structured_question_store = PendingStructuredQuestionStore()
+    app.state.structured_question_store = structured_question_store
+
     inbound_router = InboundRouter(
         allowlist=allowlist,
         pending_store=pending_store,
@@ -871,6 +890,13 @@ def _wire_telegram_inbound(
         drafts_store=drafts_store,
         pause_signal=pause_signal,
         cli_override_store=cli_override_store,
+        voice_backend=default_voice_backend(),
+        # S-Bridge ``/correct`` command writes Correction rows next to
+        # the heartbeat audit log. AuditWriter.default() resolves to the
+        # canonical ``~/.selffork/audit/<latest>.jsonl`` and its
+        # ``corrections.jsonl`` sibling.
+        audit_writer=AuditWriter.default(),
+        structured_question_store=structured_question_store,
     )
     app.state.telegram_inbound_router = inbound_router
 
@@ -974,7 +1000,7 @@ def _window_label_from_seconds(seconds: int) -> str:
 
 
 async def _synthesize_proactive_rows(
-    app: FastAPI, audit_cli_ids: "AbstractSet[str]"
+    app: FastAPI, audit_cli_ids: AbstractSet[str],
 ) -> list[ProviderUsage]:
     """Add :class:`ProviderUsage` rows for CLIs with proactive signal only.
 

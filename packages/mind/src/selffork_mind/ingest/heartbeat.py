@@ -1,9 +1,10 @@
 """Heartbeat audit.jsonl → T2 Episodic ingest pipeline (ADR-009 §5).
 
-Connects S-Auto Faz E's ``~/.selffork/heartbeat/audit.jsonl`` to the Mind
-pillar's T2 Episodic tier. Each heartbeat tick becomes one ``observation``
-Note (the canonical record) plus an optional ``decision`` Note when the
-tick produced an explicit action.
+Connects S-Auto Faz E's ``~/.selffork/heartbeat/audit.jsonl`` (and its
+sibling ``corrections.jsonl``, S-Bridge) to the Mind pillar's T2
+Episodic tier. Each heartbeat tick becomes one ``observation`` Note
+(the canonical record); each operator correction becomes one
+``decision`` Note with high importance (operator coaching).
 
 Design:
 
@@ -52,10 +53,12 @@ from selffork_mind.store.base import (
 )
 
 __all__ = [
+    "CorrectionIngester",
     "HeartbeatIngestReport",
     "HeartbeatIngester",
     "IngestCheckpoint",
     "audit_entry_to_note",
+    "correction_entry_to_note",
 ]
 
 
@@ -437,3 +440,245 @@ def collect_entries(lines: Iterable[str]) -> list[dict[str, object]]:
         if isinstance(payload, dict):
             out.append(payload)
     return out
+
+
+# ── corrections.jsonl → T2 ingest (S-Bridge coaching loop) ─────────────
+
+
+def correction_entry_to_note(entry: dict[str, object]) -> Note | None:
+    """Project one :class:`Correction` JSONL row into a T2 Episodic Note.
+
+    Returns ``None`` for malformed rows (caller bumps ``skipped_malformed``;
+    we never raise from the ingest hot path).
+
+    Identity:
+
+    * ``content_hash = "correction:<idempotency_key>:<corrected_at>"`` —
+      unique per write. The operator may correct the same audit entry
+      twice with different reasoning; both rows MUST survive in T2 so
+      S-Train sees the full coaching trajectory.
+
+    Routing:
+
+    * Corrections route to the GLOBAL pool by default (operator-level
+      coaching is cross-project signal). A wrapping ingester can pass
+      ``project_slug`` and route to that PROJECT pool instead — see
+      :class:`CorrectionIngester`.
+
+    Weighting:
+
+    * ``importance=2.0`` (heartbeat observations are 1.0, AIR alerts 1.5).
+      Operator corrections outrank routine ticks during retrieval and
+      get high weight in the future S-Train fine-tune corpus.
+    """
+    key = entry.get("audit_idempotency_key")
+    if not isinstance(key, str) or not key:
+        return None
+    text = entry.get("correction_text")
+    if not isinstance(text, str) or not text.strip():
+        return None
+    suggested = entry.get("suggested_action")
+    suggested_s = (
+        suggested if isinstance(suggested, str) and suggested else None
+    )
+    source = entry.get("source")
+    source_s = source if isinstance(source, str) and source else "operator"
+    corrected_at_raw = entry.get("corrected_at")
+    when: datetime
+    if isinstance(corrected_at_raw, str):
+        try:
+            when = datetime.fromisoformat(corrected_at_raw)
+        except ValueError:
+            when = datetime.now(UTC)
+    else:
+        when = datetime.now(UTC)
+
+    content_parts = [f"correction[{key}]", f"text={text}"]
+    if suggested_s:
+        content_parts.append(f"suggested={suggested_s}")
+    content_parts.append(f"source={source_s}")
+    content = " | ".join(content_parts)
+    content_hash = f"correction:{key}:{when.isoformat()}"
+
+    try:
+        return Note(
+            tier="episodic",
+            kind="decision",
+            content=content,
+            intent=f"operator correction for {key}",
+            content_hash=content_hash,
+            valid_from=when,
+            project_slug=None,
+            group_id=GLOBAL_GROUP_ID,
+            session_id=f"correction-{key}",
+            source_pointer=f"correction:{key}",
+            importance=2.0,
+        )
+    except ValueError:
+        return None
+
+
+@dataclass
+class CorrectionIngester:
+    """Tail-follows ``corrections.jsonl`` and feeds T2 as ``decision`` Notes.
+
+    Mirrors :class:`HeartbeatIngester`'s lifecycle (run / stop /
+    ingest_pending / checkpoint) but reads the sibling corrections file
+    written by :meth:`AuditWriter.write_correction` (S-Vision Faz D +
+    S-Bridge ``/correct`` Telegram command).
+
+    Default routing is GLOBAL pool (operator coaching is cross-project
+    signal). Pass ``project_slug`` to route into a PROJECT pool instead.
+
+    Wire (typical):
+
+        ingester = CorrectionIngester(
+            corrections_path=default_corrections_path(),
+            store=global_mind_store,
+        )
+        task = asyncio.create_task(ingester.run())
+        ...
+        ingester.stop()
+        await task
+    """
+
+    corrections_path: Path
+    store: MindStore
+    project_slug: str | None = None
+    checkpoint_path: Path | None = None
+    poll_seconds: float = 1.0
+    _stop_event: asyncio.Event = field(
+        default_factory=asyncio.Event, init=False, repr=False,
+    )
+    _ingest_lock: asyncio.Lock = field(
+        default_factory=asyncio.Lock, init=False, repr=False,
+    )
+
+    def __post_init__(self) -> None:
+        if self.poll_seconds <= 0:
+            raise ValueError("poll_seconds must be positive")
+        if self.checkpoint_path is None:
+            self.checkpoint_path = (
+                self.corrections_path.parent
+                / f"{self.corrections_path.stem}.ingest-checkpoint.json"
+            )
+
+    def stop(self) -> None:
+        """Signal :meth:`run` to exit on its next iteration."""
+        self._stop_event.set()
+
+    async def run(self) -> None:
+        """Tail-follow loop. Returns when :meth:`stop` is called."""
+        self._stop_event.clear()
+        while not self._stop_event.is_set():
+            try:
+                await self.ingest_pending()
+            except Exception:
+                _log.exception(
+                    "correction_ingest_loop_error path=%s",
+                    self.corrections_path,
+                )
+            try:
+                await asyncio.wait_for(
+                    self._stop_event.wait(),
+                    timeout=self.poll_seconds,
+                )
+            except TimeoutError:
+                continue
+
+    async def ingest_pending(self) -> HeartbeatIngestReport:
+        """Read new lines since the checkpoint and write T2 Notes."""
+        async with self._ingest_lock:
+            return await self._ingest_pending_locked()
+
+    async def _ingest_pending_locked(self) -> HeartbeatIngestReport:
+        report = HeartbeatIngestReport()
+        assert self.checkpoint_path is not None  # noqa: S101
+        checkpoint = await asyncio.to_thread(
+            _load_checkpoint, self.checkpoint_path,
+        )
+        report.new_offset = checkpoint.last_byte_offset
+        report.last_tick = checkpoint.last_tick
+
+        if not self.corrections_path.is_file():
+            return report
+
+        def _read_new_lines() -> list[tuple[int, str]]:
+            results: list[tuple[int, str]] = []
+            with self.corrections_path.open("rb") as fp:
+                fp.seek(checkpoint.last_byte_offset)
+                while True:
+                    raw = fp.readline()
+                    if not raw:
+                        break
+                    try:
+                        decoded = raw.decode("utf-8")
+                    except UnicodeDecodeError:
+                        continue
+                    new_offset = fp.tell()
+                    results.append((new_offset, decoded))
+            return results
+
+        new_lines = await asyncio.to_thread(_read_new_lines)
+        if not new_lines:
+            return report
+
+        notes_to_write: list[Note] = []
+        latest_offset = checkpoint.last_byte_offset
+        latest_tick = checkpoint.last_tick
+
+        for new_offset, raw in new_lines:
+            report.lines_scanned += 1
+            stripped = raw.strip()
+            if not stripped:
+                latest_offset = new_offset
+                continue
+            try:
+                payload = json.loads(stripped)
+            except json.JSONDecodeError:
+                report.skipped_malformed += 1
+                latest_offset = new_offset
+                continue
+            if not isinstance(payload, dict):
+                report.skipped_malformed += 1
+                latest_offset = new_offset
+                continue
+            note = correction_entry_to_note(payload)
+            if note is None:
+                report.skipped_malformed += 1
+                latest_offset = new_offset
+                continue
+            if self.project_slug is not None:
+                note = Note(
+                    tier=note.tier,
+                    kind=note.kind,
+                    content=note.content,
+                    intent=note.intent,
+                    content_hash=note.content_hash,
+                    valid_from=note.valid_from,
+                    project_slug=self.project_slug,
+                    group_id=derive_group_id(
+                        group_id=None,
+                        project_slug=self.project_slug,
+                    ),
+                    session_id=note.session_id,
+                    source_pointer=note.source_pointer,
+                    importance=note.importance,
+                )
+            notes_to_write.append(note)
+            latest_offset = new_offset
+
+        if notes_to_write:
+            written = await self.store.upsert_notes(notes_to_write)
+            report.notes_written = len(written)
+
+        new_checkpoint = IngestCheckpoint(
+            last_byte_offset=latest_offset,
+            last_tick=latest_tick,
+            last_ingested_at=datetime.now(UTC),
+        )
+        await asyncio.to_thread(
+            _save_checkpoint, self.checkpoint_path, new_checkpoint,
+        )
+        report.new_offset = latest_offset
+        return report

@@ -441,3 +441,710 @@ async def test_message_unauthorised_dropped(
     )
     assert outcome.target == "dropped"
     assert drafts_store.count_unclaimed() == 0
+
+
+# ── voice (S-Bridge) ─────────────────────────────────────────────────────
+
+
+from selffork_orchestrator.voice import (  # noqa: E402
+    NullVoiceBackend,
+    VoiceBackend,
+    VoiceTranscriptionError,
+    VoiceUnavailableError,
+)
+
+
+class _FakeVoiceBackend:
+    """STT test double — returns a canned transcript or raises."""
+
+    def __init__(
+        self,
+        *,
+        transcript: str | None = None,
+        exc: Exception | None = None,
+    ) -> None:
+        self._transcript = transcript
+        self._exc = exc
+
+    async def transcribe(
+        self, audio: bytes, *, mime: str = "audio/ogg"
+    ) -> str:
+        del audio, mime
+        if self._exc is not None:
+            raise self._exc
+        assert self._transcript is not None
+        return self._transcript
+
+
+def _voice_router(
+    voice_backend: VoiceBackend,
+    *,
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+) -> InboundRouter:
+    return InboundRouter(
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+        voice_backend=voice_backend,
+    )
+
+
+@pytest.mark.asyncio
+async def test_voice_unauthorised_dropped(
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+) -> None:
+    router = _voice_router(
+        _FakeVoiceBackend(transcript="should not be reached"),
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    outcome = await router.handle_voice(
+        chat_id=DENIED_CHAT,
+        sender="ghost",
+        audio=b"<ogg-bytes>",
+        mime="audio/ogg",
+    )
+    assert outcome.target == "dropped"
+    assert "not authorised" in (outcome.reply or "")
+
+
+@pytest.mark.asyncio
+async def test_voice_null_backend_replies_with_hint(
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+) -> None:
+    router = _voice_router(
+        _FakeVoiceBackend(exc=VoiceUnavailableError("no backend")),
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    outcome = await router.handle_voice(
+        chat_id=ALLOWED_CHAT,
+        sender="yamac",
+        audio=b"<ogg-bytes>",
+        mime="audio/ogg",
+    )
+    assert outcome.target == "dropped"
+    assert "not configured" in (outcome.reply or "")
+
+
+@pytest.mark.asyncio
+async def test_voice_transcription_error_replies_with_retry_hint(
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+) -> None:
+    router = _voice_router(
+        _FakeVoiceBackend(
+            exc=VoiceTranscriptionError("whisper exited 1"),
+        ),
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    outcome = await router.handle_voice(
+        chat_id=ALLOWED_CHAT,
+        sender="yamac",
+        audio=b"<ogg-bytes>",
+        mime="audio/ogg",
+    )
+    assert outcome.target == "dropped"
+    assert "Couldn't transcribe" in (outcome.reply or "")
+
+
+@pytest.mark.asyncio
+async def test_voice_empty_transcript_dropped(
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+) -> None:
+    router = _voice_router(
+        _FakeVoiceBackend(transcript="   "),
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    outcome = await router.handle_voice(
+        chat_id=ALLOWED_CHAT,
+        sender="yamac",
+        audio=b"<ogg-bytes>",
+        mime="audio/ogg",
+    )
+    assert outcome.target == "dropped"
+    assert "Empty" in (outcome.reply or "")
+
+
+@pytest.mark.asyncio
+async def test_voice_success_routes_through_handle_message(
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+) -> None:
+    router = _voice_router(
+        _FakeVoiceBackend(transcript="continue the build"),
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    await router.handle_command(
+        chat_id=ALLOWED_CHAT, command="workspace", args=["gamma"],
+    )
+    outcome = await router.handle_voice(
+        chat_id=ALLOWED_CHAT,
+        sender="yamac",
+        audio=b"<ogg-bytes>",
+        mime="audio/ogg",
+    )
+    assert outcome.target == "talk"
+    assert outcome.workspace_slug == "gamma"
+    assert outcome.conversation_id is not None
+    messages = await talk_store.list_messages(
+        conversation_id=outcome.conversation_id,
+    )
+    assert any(m.content == "continue the build" for m in messages)
+
+
+def test_inbound_router_voice_backend_defaults_to_null(
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+) -> None:
+    """Constructing without ``voice_backend`` MUST install NullVoiceBackend."""
+    router = InboundRouter(
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    assert isinstance(router._voice, NullVoiceBackend)
+
+
+# ── /correct (S-Bridge coaching loop) ────────────────────────────────────
+
+
+import json as _json  # noqa: E402
+
+from selffork_orchestrator.heartbeat.audit import (  # noqa: E402
+    AuditWriter,
+)
+
+
+@pytest.fixture
+def audit_writer(tmp_path: Path) -> AuditWriter:
+    return AuditWriter(path=tmp_path / "audit" / "heartbeat.jsonl")
+
+
+def _coaching_router(
+    audit_writer: AuditWriter | None,
+    *,
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+) -> InboundRouter:
+    return InboundRouter(
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+        audit_writer=audit_writer,
+    )
+
+
+@pytest.mark.asyncio
+async def test_correct_unauthorised(
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+    audit_writer: AuditWriter,
+) -> None:
+    router = _coaching_router(
+        audit_writer,
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    outcome = await router.handle_command(
+        chat_id=DENIED_CHAT,
+        command="correct",
+        args=["KEY123", "wrong call"],
+    )
+    assert "not authorised" in outcome.reply
+    assert outcome.handled is False
+    assert not audit_writer.corrections_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_correct_without_audit_writer_replies_clean(
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+) -> None:
+    router = _coaching_router(
+        None,
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    outcome = await router.handle_command(
+        chat_id=ALLOWED_CHAT,
+        command="correct",
+        args=["KEY123", "should not write"],
+    )
+    assert outcome.handled is False
+    assert "audit writer not wired" in outcome.reply
+
+
+@pytest.mark.asyncio
+async def test_correct_missing_args(
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+    audit_writer: AuditWriter,
+) -> None:
+    router = _coaching_router(
+        audit_writer,
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    outcome = await router.handle_command(
+        chat_id=ALLOWED_CHAT, command="correct", args=[],
+    )
+    assert outcome.handled is False
+    assert "Usage" in outcome.reply
+
+    outcome = await router.handle_command(
+        chat_id=ALLOWED_CHAT, command="correct", args=["KEY-only"],
+    )
+    assert outcome.handled is False
+    assert "Usage" in outcome.reply
+
+
+@pytest.mark.asyncio
+async def test_correct_appends_jsonl_row(
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+    audit_writer: AuditWriter,
+) -> None:
+    router = _coaching_router(
+        audit_writer,
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    outcome = await router.handle_command(
+        chat_id=ALLOWED_CHAT,
+        command="correct",
+        args=[
+            "AUDIT-KEY-001",
+            "should",
+            "have",
+            "rolled",
+            "back",
+            "instead",
+        ],
+    )
+    assert outcome.handled is True
+    assert "Correction recorded for AUDIT-KEY-001" in outcome.reply
+    # Read the JSONL row back.
+    raw = audit_writer.corrections_path.read_text(encoding="utf-8").strip()
+    rows = [_json.loads(line) for line in raw.splitlines() if line.strip()]
+    assert len(rows) == 1
+    assert rows[0]["audit_idempotency_key"] == "AUDIT-KEY-001"
+    assert rows[0]["correction_text"] == "should have rolled back instead"
+    assert rows[0]["source"] == "operator-telegram"
+
+
+@pytest.mark.asyncio
+async def test_correct_appends_multiple_rows(
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+    audit_writer: AuditWriter,
+) -> None:
+    router = _coaching_router(
+        audit_writer,
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    for idx in range(3):
+        await router.handle_command(
+            chat_id=ALLOWED_CHAT,
+            command="correct",
+            args=[f"KEY-{idx}", f"correction-{idx}"],
+        )
+    rows = audit_writer.corrections_path.read_text(encoding="utf-8")
+    lines = [line for line in rows.splitlines() if line.strip()]
+    assert len(lines) == 3
+
+
+@pytest.mark.asyncio
+async def test_correct_listed_in_help(
+    audit_writer: AuditWriter,
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+) -> None:
+    router = _coaching_router(
+        audit_writer,
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    outcome = await router.handle_command(
+        chat_id=ALLOWED_CHAT, command="help", args=[],
+    )
+    assert outcome.handled is True
+    assert "/correct" in outcome.reply
+
+
+# ── /answer + /cancelq (S-Bridge CORE) ───────────────────────────────────
+
+
+from selffork_orchestrator.tools.structured_question import (  # noqa: E402
+    PendingStructuredQuestionStore,
+)
+
+
+@pytest.fixture
+def structured_question_store() -> PendingStructuredQuestionStore:
+    return PendingStructuredQuestionStore()
+
+
+def _question_router(
+    store: PendingStructuredQuestionStore | None,
+    *,
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+) -> InboundRouter:
+    return InboundRouter(
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+        structured_question_store=store,
+    )
+
+
+@pytest.mark.asyncio
+async def test_answer_unauthorised(
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+    structured_question_store: PendingStructuredQuestionStore,
+) -> None:
+    router = _question_router(
+        structured_question_store,
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    outcome = await router.handle_command(
+        chat_id=DENIED_CHAT, command="answer", args=["abc", "yes"],
+    )
+    assert outcome.handled is False
+    assert "not authorised" in outcome.reply
+
+
+@pytest.mark.asyncio
+async def test_answer_without_store_replies_clean(
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+) -> None:
+    router = _question_router(
+        None,
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    outcome = await router.handle_command(
+        chat_id=ALLOWED_CHAT, command="answer", args=["abc", "yes"],
+    )
+    assert outcome.handled is False
+    assert "not wired" in outcome.reply
+
+
+@pytest.mark.asyncio
+async def test_answer_missing_args(
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+    structured_question_store: PendingStructuredQuestionStore,
+) -> None:
+    router = _question_router(
+        structured_question_store,
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    outcome = await router.handle_command(
+        chat_id=ALLOWED_CHAT, command="answer", args=[],
+    )
+    assert outcome.handled is False
+    assert "Usage" in outcome.reply
+    outcome2 = await router.handle_command(
+        chat_id=ALLOWED_CHAT, command="answer", args=["onlykey"],
+    )
+    assert outcome2.handled is False
+    assert "Usage" in outcome2.reply
+
+
+@pytest.mark.asyncio
+async def test_answer_unknown_correlation(
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+    structured_question_store: PendingStructuredQuestionStore,
+) -> None:
+    router = _question_router(
+        structured_question_store,
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    outcome = await router.handle_command(
+        chat_id=ALLOWED_CHAT,
+        command="answer",
+        args=["nosuch", "Yes"],
+    )
+    assert outcome.handled is False
+    assert "no pending question" in outcome.reply
+
+
+@pytest.mark.asyncio
+async def test_answer_resolves_pending_question(
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+    structured_question_store: PendingStructuredQuestionStore,
+) -> None:
+    router = _question_router(
+        structured_question_store,
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    entry = await structured_question_store.register(
+        payload={"questions": [{"q": "Q"}]},
+    )
+    outcome = await router.handle_command(
+        chat_id=ALLOWED_CHAT,
+        command="answer",
+        args=[entry.correlation_id, "ship", "it"],
+    )
+    assert outcome.handled is True
+    assert entry.correlation_id in outcome.reply
+    stored = structured_question_store.get(entry.correlation_id)
+    assert stored is not None
+    assert stored.answer == "ship it"
+
+
+@pytest.mark.asyncio
+async def test_cancelq_resolves_pending_question(
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+    structured_question_store: PendingStructuredQuestionStore,
+) -> None:
+    router = _question_router(
+        structured_question_store,
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    entry = await structured_question_store.register(payload={"q": "x"})
+    outcome = await router.handle_command(
+        chat_id=ALLOWED_CHAT,
+        command="cancelq",
+        args=[entry.correlation_id],
+    )
+    assert outcome.handled is True
+    assert entry.correlation_id in outcome.reply
+    stored = structured_question_store.get(entry.correlation_id)
+    assert stored is not None and stored.cancelled is True
+
+
+@pytest.mark.asyncio
+async def test_cancelq_without_store_replies_clean(
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+) -> None:
+    router = _question_router(
+        None,
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    outcome = await router.handle_command(
+        chat_id=ALLOWED_CHAT, command="cancelq", args=["abc"],
+    )
+    assert outcome.handled is False
+    assert "not wired" in outcome.reply
+
+
+@pytest.mark.asyncio
+async def test_answer_listed_in_help(
+    structured_question_store: PendingStructuredQuestionStore,
+    allowlist: AllowList,
+    pending_store: PendingConfirmationStore,
+    talk_store: TalkStore,
+    drafts_store: TelegramDraftStore,
+    pause_signal: PauseSignal,
+    cli_override_store: CliOverrideStore,
+) -> None:
+    router = _question_router(
+        structured_question_store,
+        allowlist=allowlist,
+        pending_store=pending_store,
+        talk_store=talk_store,
+        drafts_store=drafts_store,
+        pause_signal=pause_signal,
+        cli_override_store=cli_override_store,
+    )
+    outcome = await router.handle_command(
+        chat_id=ALLOWED_CHAT, command="help", args=[],
+    )
+    assert outcome.handled is True
+    assert "/answer" in outcome.reply
+    assert "/cancelq" in outcome.reply
