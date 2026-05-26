@@ -7,7 +7,7 @@ once Apple Developer Program enrollment is in place.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from selffork_body.drivers.ios.appium_xcuitest_adapter import AppiumXcuitestAdapter
 from selffork_body.drivers.ios.simulator_runtime import (
@@ -25,6 +25,8 @@ __all__ = [
 
 class IosDriver:
     """Unified iOS driver. Simulator runtime + Appium XCUITest adapter."""
+
+    platform: str = "ios"
 
     def __init__(
         self,
@@ -137,3 +139,141 @@ class IosDriver:
 
     async def storage_state_load(self, provider: str, project_slug: str | None = None):  # type: ignore[no-untyped-def]
         raise NotImplementedError("iOS storage_state load not supported in M5")
+
+    # ---- S-ToolFleet Faz 1 — interaction extensions ------------------
+
+    def _ready_appium(self) -> AppiumXcuitestAdapter:
+        if self._appium is None:
+            raise RuntimeError("driver not started")
+        return self._appium
+
+    async def double_click(self, x: int, y: int) -> None:
+        await self._ready_appium().double_tap(x, y)
+
+    async def long_press(self, x: int, y: int, duration_ms: int = 800) -> None:
+        await self._ready_appium().long_press(x, y, duration_ms=duration_ms)
+
+    async def clear_text(self) -> None:
+        await self._ready_appium().clear_text()
+
+    async def pinch(self, scale: float, velocity: float = 1.0) -> None:
+        await self._ready_appium().pinch(scale, velocity=velocity)
+
+    async def press_button(self, name: str) -> None:
+        await self._ready_appium().press_button(name)
+
+    # ---- lifecycle extensions ----------------------------------------
+
+    async def app_terminate(self, bundle_id: str) -> bool:
+        return await self._ready_appium().app_terminate(bundle_id)
+
+    async def app_activate(self, bundle_id: str) -> None:
+        await self._ready_appium().app_activate(bundle_id)
+
+    async def app_state(self, bundle_id: str) -> int:
+        return await self._ready_appium().app_state(bundle_id)
+
+    async def install_app(self, app_path: str) -> None:
+        await self._ready_appium().install_app(app_path)
+
+    async def uninstall_app(self, bundle_id: str) -> None:
+        await self._ready_appium().uninstall_app(bundle_id)
+
+    async def is_app_installed(self, bundle_id: str) -> bool:
+        return await self._ready_appium().is_app_installed(bundle_id)
+
+    async def app_background(self, seconds: float = -1) -> None:
+        await self._ready_appium().app_background(seconds=seconds)
+
+    async def list_apps(self) -> list[dict[str, Any]]:
+        return await self._ready_appium().list_installed_apps()
+
+    # ---- system extensions -------------------------------------------
+
+    async def get_orientation(self) -> str:
+        return await self._ready_appium().get_orientation()
+
+    async def set_orientation(self, orientation: str) -> None:
+        await self._ready_appium().set_orientation(orientation)
+
+    async def get_clipboard(self) -> str:
+        return await self._ready_appium().get_clipboard()
+
+    async def set_clipboard(self, text: str) -> None:
+        await self._ready_appium().set_clipboard(text)
+
+    async def terminate_keyboard(self) -> None:
+        await self._ready_appium().terminate_keyboard()
+
+    # ---- network / deeplink / location -------------------------------
+
+    async def open_url(self, url: str) -> None:
+        # Prefer Appium deepLink; simctl openurl as fallback when no driver.
+        try:
+            await self._ready_appium().open_url(url)
+        except RuntimeError:
+            await self.simulator.open_url(url)
+
+    async def set_geolocation(
+        self, latitude: float, longitude: float, altitude: float = 0.0,
+    ) -> None:
+        try:
+            await self._ready_appium().set_geolocation(latitude, longitude, altitude=altitude)
+        except RuntimeError:
+            await self.simulator.set_geolocation(latitude, longitude)
+
+    async def get_geolocation(self) -> dict[str, float]:
+        return await self._ready_appium().get_geolocation()
+
+    # ---- simulator-level (simctl) ------------------------------------
+
+    async def simulator_list(self) -> list[dict[str, str]]:
+        return await self.simulator.list_devices()
+
+    async def simulator_boot(self, udid: str) -> str:
+        return await self.simulator.boot_specific(udid)
+
+    async def simulator_shutdown(self, udid: str) -> None:
+        await self.simulator.shutdown_specific(udid)
+
+    async def simulator_erase(self, udid: str) -> None:
+        await self.simulator.erase_specific(udid)
+
+    async def get_logs(
+        self, predicate: str | None = None, last: str | None = None,
+    ) -> str:
+        return await self.simulator.get_logs(predicate=predicate, last=last)
+
+    async def send_push_notification(self, payload_path: Path, bundle_id: str) -> None:
+        await self.simulator.push_notification(payload_path, bundle_id)
+
+    async def record_video_start(self, output_path: Path) -> None:
+        await self.simulator.record_video_start(output_path)
+
+    async def record_video_stop(self) -> Path | None:
+        return await self.simulator.record_video_stop()
+
+    async def status_bar_override(
+        self,
+        time: str | None = None,
+        battery_state: str | None = None,
+        cellular_bars: int | None = None,
+        wifi_bars: int | None = None,
+    ) -> None:
+        await self.simulator.status_bar_override(
+            time=time,
+            battery_state=battery_state,
+            cellular_bars=cellular_bars,
+            wifi_bars=wifi_bars,
+        )
+
+    async def set_appearance(self, appearance: str) -> None:
+        await self.simulator.set_appearance(appearance)
+
+    # ---- element queries ---------------------------------------------
+
+    async def find_element(self, by: str, value: str) -> dict[str, Any]:
+        return await self._ready_appium().find_element(by, value)
+
+    async def get_active_element(self) -> dict[str, Any]:
+        return await self._ready_appium().get_active_element()

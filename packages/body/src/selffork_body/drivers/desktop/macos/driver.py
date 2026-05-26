@@ -26,6 +26,9 @@ __all__ = ["MacOSDesktopDriver"]
 
 
 class MacOSDesktopDriver:
+
+    platform: str = "macos"
+
     def __init__(
         self,
         *,
@@ -177,3 +180,135 @@ class MacOSDesktopDriver:
 
     async def storage_state_load(self, provider: str, project_slug: str | None = None):  # type: ignore[no-untyped-def]
         raise NotImplementedError("desktop driver storage_state not supported")
+
+    # ---- S-ToolFleet Faz 3 — macOS extensions -----------------------
+
+    async def double_click(self, x: int, y: int) -> None:
+        await self._post_mouse_click(x, y, "left")
+        await self._post_mouse_click(x, y, "left")
+
+    async def right_click(self, x: int, y: int) -> None:
+        await self._post_mouse_click(x, y, "right")
+
+    async def screenshot_region(
+        self, x: int, y: int, w: int, h: int,
+    ) -> bytes:
+        return await self._screencapture.capture(rect=(x, y, w, h))
+
+    async def get_active_app(self) -> dict[str, str]:
+        script = (
+            'var app = Application("System Events").processes.whose({frontmost: true})[0];'
+            'JSON.stringify({name: app.name(), bundleId: app.bundleIdentifier()});'
+        )
+        out = await self._applescript.run(script)
+        import json
+        try:
+            data = json.loads(out.strip())
+        except json.JSONDecodeError:
+            return {"name": "", "bundleId": ""}
+        return {
+            "name": str(data.get("name", "")),
+            "bundleId": str(data.get("bundleId", "")),
+        }
+
+    async def list_apps(self) -> list[dict[str, str]]:
+        script = (
+            'var procs = Application("System Events").processes.whose({backgroundOnly: false});'
+            'var out = [];'
+            'for (var i = 0; i < procs.length; i++) {'
+            '  out.push({name: procs[i].name(), bundleId: procs[i].bundleIdentifier()});'
+            '}'
+            'JSON.stringify(out);'
+        )
+        out = await self._applescript.run(script)
+        import json
+        try:
+            data = json.loads(out.strip())
+            return [
+                {"name": str(d.get("name", "")), "bundleId": str(d.get("bundleId", ""))}
+                for d in data
+            ]
+        except json.JSONDecodeError:
+            return []
+
+    async def list_windows(self, app_name: str | None = None) -> list[dict[str, str]]:
+        target = app_name or ""
+        script = (
+            f'var name = "{target}";'
+            'var procs = Application("System Events").processes;'
+            'var out = [];'
+            'for (var i = 0; i < procs.length; i++) {'
+            '  if (name && procs[i].name() !== name) continue;'
+            '  var wins = procs[i].windows;'
+            '  for (var j = 0; j < wins.length; j++) {'
+            '    out.push({app: procs[i].name(), title: wins[j].name()});'
+            '  }'
+            '}'
+            'JSON.stringify(out);'
+        )
+        out = await self._applescript.run(script)
+        import json
+        try:
+            data = json.loads(out.strip())
+            return [
+                {"app": str(d.get("app", "")), "title": str(d.get("title", ""))}
+                for d in data
+            ]
+        except json.JSONDecodeError:
+            return []
+
+    async def focus_window(self, app_name: str, window_title: str | None = None) -> None:
+        """Bring app's window to front — but without focus-theft modal flag."""
+        if window_title is None:
+            script = f'Application("{app_name}").activate();'
+        else:
+            script = (
+                f'var app = Application("{app_name}");'
+                'app.activate();'
+                f'var wins = Application("System Events").processes.byName("{app_name}").windows;'
+                'for (var i = 0; i < wins.length; i++) {'
+                f'  if (wins[i].name() === "{window_title}") {{ wins[i].perform("AXRaise"); break; }}'
+                '}'
+            )
+        await self._applescript.run(script)
+
+    async def get_clipboard(self) -> str:
+        proc = await asyncio.create_subprocess_exec(
+            "pbpaste",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await proc.communicate()
+        return stdout.decode(errors="replace")
+
+    async def set_clipboard(self, text: str) -> None:
+        proc = await asyncio.create_subprocess_exec(
+            "pbcopy",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await proc.communicate(text.encode())
+
+    async def notification(
+        self, title: str, body: str, subtitle: str | None = None,
+    ) -> None:
+        subtitle_clause = f' subtitle "{subtitle}"' if subtitle else ""
+        script = (
+            'tell application "System Events" to '
+            f'display notification "{body}" with title "{title}"{subtitle_clause}'
+        )
+        # Use AppleScript (not JXA) for notifications — clearer syntax.
+        await self._applescript.run(script, language="AppleScript")
+
+    async def say(self, text: str, voice: str | None = None, rate: int | None = None) -> None:
+        cmd = ["say"]
+        if voice:
+            cmd += ["-v", voice]
+        if rate is not None:
+            cmd += ["-r", str(rate)]
+        cmd.append(text)
+        proc = await asyncio.create_subprocess_exec(
+            *cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+        )
+        await proc.wait()

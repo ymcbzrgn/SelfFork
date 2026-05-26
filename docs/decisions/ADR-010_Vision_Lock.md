@@ -377,7 +377,179 @@ still `defer_loading=False`). Operator-driven commit per MANDATE 1.
 **S-ToolFleet Faz 0 — ACCEPTED 2026-05-26 evening.** Substrate is solid: body
 wire opened, cross-process IPC ships disk-backed, drift caught as `unknown_tool`,
 periodic cleanup wired, RAG seam ready for fan-out, body subpackage establishes the
-hierarchical pattern. Faz 1 Mobile Wave is the next sprint (~3 weeks, ~120 tools)
-and closes F1's WIRE side by constructing the real `body_driver` factory. Quality
-over speed ([[quality-over-speed]]) — better to ship Faz 0 properly than rush Faz 1
-on a cracked substrate.
+hierarchical pattern.
+
+### 9.6 Faz 1 Mobile Wave deliverables (✅ all shipped 2026-05-26 late night, single session)
+
+Operator mandate: **"Faz 1 BİTENE KADAR DURMA ÇALIŞ! ULTRATHINK ... tam takım
+full enterprise test edilmiş şekilde!"** — single-session close, no deferred items.
+
+| Item | Site | Tests |
+|---|---|---|
+| **F1 WIRE close** — `mobile_factory.build_default_body_driver()` + `CompositeMobileDriver` + cli.py inject + start/stop lifecycle | `selffork_body/drivers/mobile_factory.py` (new ~250 LoC) + `cli.py::run` body_driver/warden/screenshot_store wired + try/finally start/stop | +31 |
+| **iOS-DEEP tool pack** — 45 tools across interaction/observation/lifecycle/system/simulator/network/element | `tools/mobile/ios/{__init__,interaction,observation,lifecycle,system,simulator,network,element}.py` + `IosDriver` extension (28 new methods) + `AppiumXcuitestAdapter` extension (24 new methods) + `IosSimulatorRuntime` extension (13 new methods) | +56 |
+| **Android-DEEP tool pack** — 45 tools across interaction/observation/lifecycle/system/intent/shell/emulator | `tools/mobile/android/{__init__,interaction,observation,lifecycle,system,intent,shell,emulator}.py` + `AndroidDriver` extension (27 new methods) + `MobileMcpAdapter` extension (10 new methods) + `UiAutomator2Fallback` extension (14 new methods) | +48 |
+| **Expo dev-workflow tool pack** — 12 tools (dev_start/stop/metro/eas_build/submit/publish/export/run_ios/android/install/doctor/logs_capture) — operator daily-driver | `tools/mobile/expo/__init__.py` (subprocess-wrapped expo/eas CLI calls + background process tracking) | included in fleet count |
+| **UI-verify tool pack** — 10 tools (a11y/text_visible/element_exists/element_state/screenshot_match/ocr_contains/color_at/no_overflow/responsive/focus); **all eager** — observe loop dependency | `tools/mobile/ui_verify/__init__.py` (a11y-tree-first + PIL color sampling + SHA-256 screenshot match) | +15 |
+| **Crash/state-capture tool pack** — 10 tools (log_fetch/bug_report/state_snapshot/restore/list/delete/diff/anr/heap/thread_dump) | `tools/mobile/crash_state/__init__.py` (JSON-persisted snapshots under `~/.selffork/state/<workspace>/<label>.json`) + `SELFFORK_STATE_DIR` env | +18 |
+| **AndroidWorld eval harness scaffold** — 5 happy-path tasks + runner + TaskOutcome scoring | `selffork_orchestrator/eval/android_world/{__init__,tasks,runner}.py` (Apache-2.0 adopt; M7 prep widens to 116-task) | +13 |
+| **mobile_factory + composite + protocol** | `selffork_body/drivers/mobile_factory.py` + platform attribute on IosDriver/AndroidDriver | +31 (above) |
+| **Registry integration** | `tools/__init__.py::build_default_registry` adds `*build_mobile_tools()` — 158 total (36 pre + 122 mobile), 66 eager + 92 deferred | +1 (deferred-corpus invariant updated) |
+
+**Faz 1 close baseline:** 2808 backend tests pass (was 2576 post-Faz 0; net +232).
+ruff/mypy/tsc clean. Registry 158 tools (66 eager + 92 deferred). Operator commit
+per MANDATE 1.
+
+**Tool count vs scope target** ([[s-toolfleet-scope-2026-05-26]] = ~120 tools):
+122 mobile tools shipped — 45 iOS + 45 Android + 12 Expo + 10 UI-verify + 10 crash/state.
+Eager bucket (30) hits the AskUserQuestion #4 lock spec: top-10 per platform + every
+`ui_verify_*`. Deferred bucket (92) reachable via `tool_search` (RAG-over-tools seam).
+
+### 9.7 Faz 1 Format Freeze additions
+
+Pinned wire-format items (breaking change = retraining):
+
+| Item | Site | Notes |
+|---|---|---|
+| `mobile_*`/`ios_*`/`android_*`/`expo_*`/`ui_verify_*`/`crash_*` tool name prefixes | `tools/mobile/**` | Canonical naming convention; reserves the 5 prefixes for Faz 1+ growth |
+| `BodyDriverProtocol` shape (`platform: str` + start/stop) | `selffork_body/drivers/mobile_factory.py` | Required for new driver families (browser/desktop/VR/AR — Faz 2-4) |
+| Body action_type taxonomy: `ios.*` / `android.*` / `expo.*` / `ui_verify.*` / `crash.*` | every mobile handler's `_invoke_mobile(action_type=…)` call | Audit consumers + Heartbeat correction-ingest depend on the dotted form |
+| `SELFFORK_BODY_PLATFORM` / `SELFFORK_BODY_PREFER` / `SELFFORK_BODY_IOS_DEVICE` / `SELFFORK_BODY_ANDROID_DEVICE` / `SELFFORK_BODY_WARDEN` / `SELFFORK_STATE_DIR` / `SELFFORK_EXPO_PROJECT_DIR` env keys | `mobile_factory.py` + `cli.py::_build_body_warden_for_driver` + `crash_state/__init__.py` + `expo/__init__.py` | Operator-facing knobs; renames break dot-env templates |
+| AndroidWorld task name space (`settings_open`, `clock_alarm_create`, …) | `eval/android_world/tasks.py::TASK_REGISTRY` | Eval reports cross-reference these; renames invalidate trend data |
+
+### 9.8 Faz 1 Status
+
+**S-ToolFleet Faz 1 Mobile Wave — ACCEPTED 2026-05-26 late night.** Body wire
+closed end-to-end (mobile_factory + composite + cli.py inject + lifecycle); 122
+mobile tools shipped enterprise-grade (Pydantic args, audit-tracked, warden-gated,
+handler dispatch tested via stub driver, RAG defer-bucket honoured); AndroidWorld
+eval scaffold runs against the autonomous loop; ADR-010 Format Freeze extended
+to 5 new pins.
+
+### 9.9 Faz 2 Browser Wave deliverables (✅ all shipped 2026-05-26 night, single session)
+
+Operator directive: **"hadi Faz 2 yi de bu sessionda yapalım! lets go!!!"** —
+same session as Faz 1, single-session close, no deferred items.
+
+| Item | Site | Tests |
+|---|---|---|
+| **Web platform wire** — `resolve_platform()` accepts `web`/`browser`, factory builds `PlaywrightWebDriver` for `SELFFORK_BODY_PLATFORM=web` | `selffork_body/drivers/mobile_factory.py` + new env knobs (`SELFFORK_BODY_BROWSER_HEADLESS`) | reused F1 wire tests |
+| **PlaywrightWebDriver +35 methods** — double_click/hover/fill_form/select_option/check/uncheck/drag_and_drop/upload_file/clear/swipe/back/forward/reload/get_url/get_title/set_viewport/wait_for_load_state/wait_for_url/text_content/get_attribute/query_selector/query_selector_all/get_pdf/screenshot_element/get_html/get_console_logs/get_network_log/{new,close,list,switch,get_active,duplicate}_tab/cookies_{get,set,clear}/local_storage_{get,set,clear}/set_user_agent/set_extra_headers/enable_stealth/set_proxy/clear_cache/intercept_request/mock_response/block_url_pattern/wait_for_response/emulate_device/set_geolocation/set_locale/set_timezone/set_color_scheme/ax_tree alias | `selffork_body/drivers/web/playwright_driver.py` | included in fleet smoke |
+| **Browser tool pack** — 63 tools across 9 modules: interaction (11) / navigation (9) / observation (11) / tabs (6) / storage (6) / intelligent (5) / cloak (5) / network (5) / device (5) | `tools/browser/{__init__,_internal,interaction,navigation,observation,tabs,storage,intelligent,cloak,network,device}.py` | +96 (registry + args + handlers) |
+| **Stagehand-style intelligent tools** — `browser_{act,extract,observe,agent,smart_locator}` route through `ctx.vision_runtime`; return `{"status":"unwired"}` when no LLM | `tools/browser/intelligent.py` | unwired + vision-stub coverage |
+| **Cloak/stealth tools** — webdriver-hide init scripts, UA override, extra headers, proxy queue, CDP cache clear | `tools/browser/cloak.py` + `PlaywrightWebDriver.{enable_stealth,set_user_agent,set_extra_headers,set_proxy,clear_cache}` | dispatch tests |
+| **Network interception** — `page.route()` shim with log/block modes + mock_response + wait_for_response + buffered request log | `tools/browser/network.py` | dispatch tests |
+| **Adopt references honoured** — browser-use (MIT) registry-decorator pattern + stagehand (MIT) 4-method API + CloakBrowser (MIT) stealth init scripts. **Skyvern (AGPL) — fikir-only, no code copied** | docstrings + Faz 2 ADR-010 §9.9 entry | — |
+| **Registry integration** | `tools/__init__.py::build_default_registry` adds `*build_browser_tools()` — 221 total (158 post-Faz-1 + 63 browser), 76 eager + 145 deferred | +9 (registry shape pinned) |
+
+**Faz 2 close baseline:** 2905 backend tests pass (was 2808 post-Faz 1; net +97
+including 9 args-validation regression for the renamed `extraction_schema`
+field). ruff/mypy(303)/tsc clean. Registry **221 tools** (76 eager + 145
+deferred). Operator commit per MANDATE 1.
+
+**Tool count vs scope target** (ADR-010 §9.3 = ~60 tools): **63 browser tools
+shipped** — 11 interaction + 9 navigation + 11 observation + 6 tabs + 6
+storage + 5 intelligent + 5 cloak + 5 network + 5 device. Eager bucket (10)
+mirrors mobile pattern — `browser_navigate/click/type/press_key/screenshot/
+dom_snapshot/text_content/evaluate/wait_for_load_state/get_url`. Deferred
+bucket (53) reachable via `tool_search`.
+
+### 9.10 Faz 2 Format Freeze additions
+
+Pinned wire-format items (breaking change = retraining):
+
+| Item | Site | Notes |
+|---|---|---|
+| `browser_*` tool name prefix | `tools/browser/**` | Reserves the prefix for Faz 2+ browser growth |
+| `PlaywrightWebDriver.platform == "web"` marker | `selffork_body/drivers/web/playwright_driver.py` | Required by `_require_browser_driver` in `tools/browser/_internal.py` |
+| Body action_type taxonomy: `browser.*` | every browser handler's `_invoke_browser(action_type=…)` call | Audit consumers + Heartbeat correction-ingest depend on the dotted form |
+| `SELFFORK_BODY_PLATFORM=web` and `SELFFORK_BODY_BROWSER_HEADLESS` env keys | `mobile_factory.py::build_default_body_driver` | Operator-facing knobs |
+| `BrowserExtractArgs.extraction_schema` (renamed from `schema` to avoid Pydantic BaseModel shadowing) | `tools/browser/intelligent.py` | Pydantic warned about the parent attribute clash |
+
+### 9.11 Faz 2 Status
+
+**S-ToolFleet Faz 2 Browser Wave — ACCEPTED 2026-05-26 night.** Browser fleet
+shipped enterprise-grade in the same session as Faz 1.
+
+### 9.12 Faz 3 Cross-cutting Wave deliverables (✅ all shipped 2026-05-26 night, single session)
+
+Operator directive: **"faz 1 ve faz 2 den %100 emin isen kendinden faz 3 ile devam edebilirsin!"** — same session as Faz 1+2, single-session close.
+
+| Item | Site | Tests |
+|---|---|---|
+| **macos platform wire** — `resolve_platform()` accepts `macos`/`desktop`; factory builds `MacOSDesktopDriver` for `SELFFORK_BODY_PLATFORM=macos` | `selffork_body/drivers/mobile_factory.py` | reused F1 wire tests |
+| **MacOSDesktopDriver +11 methods** — double_click/right_click/screenshot_region/get_active_app/list_apps/list_windows/focus_window/get_clipboard/set_clipboard/notification/say + `platform = "macos"` marker | `selffork_body/drivers/desktop/macos/driver.py` | included in handler dispatch |
+| **Desktop tool pack** — 15 tools: click/double_click/right_click/type/press_key/screenshot/screenshot_region/get_active_app/list_apps/list_windows/focus_window/get_clipboard/set_clipboard/notification/say. Eager bucket = 5 (click/type/screenshot/press_key/get_active_app) | `tools/desktop/{__init__,_internal,tools}.py` | +15 handler dispatch |
+| **GitHub tool pack** — 16 tools: repo_list/view/clone/fork/create + issue_list/create/view/comment/close + pr_list/create/view/merge + workflow_list/run. Eager = 3 (pr_create/issue_create/issue_list — self-commit core). gh CLI subprocess wrap with warden gate (no driver req); PAT auth via `~/.config/gh/hosts.yml` per [[s-vision-candidates-github-rag-2026-05-24]] | `tools/github/{__init__,_internal,tools}.py` | +4 mock-gh dispatch + 7 args + registry |
+| **Skills tool pack** — 10 tools: list/show/sync/install/uninstall/update/search/validate/export/create. All deferred (operator dev-time). Wraps `selffork_orchestrator.skills.SkillInstaller` (canonical-dir + symlink fan-out to four CLI targets); `skill_sync` accepts custom `target_dirs` for test isolation | `tools/skills/{__init__,tools}.py` | +12 filesystem dispatch + 3 args |
+| **Registry integration** | `tools/__init__.py::build_default_registry` adds `*build_desktop_tools()` + `*build_github_tools()` + `*build_skills_tools()` — **262 total** (158 post-Faz-1 + 63 browser + 41 Faz 3), 84 eager + 178 deferred | +10 registry shape pinned |
+
+**Faz 3 close baseline:** 2967 backend tests pass (was 2905 post-Faz 2; net +62 new tests). ruff/mypy(311)/tsc clean. Registry **262 tools** (84 eager + 178 deferred). Operator commit per MANDATE 1.
+
+**Tool count vs scope target** (ADR-010 §9.3 = ~40 tools): **41 Faz 3 tools shipped** — 15 desktop + 16 github + 10 skills. Eager bucket (8) keeps Self Jr's prompt lean — desktop top-5 + GitHub self-commit + status checks (3). Deferred bucket (33) reachable via `tool_search`.
+
+**Test pollution fix landed Faz 3:** earlier `skill_sync` always used `default_target_cli_dirs()` which wrote to the user's real `~/.claude/skills` etc. Made `target_dirs` an explicit arg + cleaned up the `syncme` symlink leak.
+
+### 9.13 Faz 3 Format Freeze additions
+
+| Item | Site | Notes |
+|---|---|---|
+| `desktop_*`/`github_*`/`skill_*` tool name prefixes | `tools/{desktop,github,skills}/**` | Reserves three new prefixes for Faz 3+ growth |
+| `MacOSDesktopDriver.platform == "macos"` marker | `selffork_body/drivers/desktop/macos/driver.py` | Required by `_require_macos_driver` |
+| Body action_type taxonomy: `desktop.*` / `github.*` / `skill.*` | every handler's `action_type=…` call | Audit consumers + Heartbeat correction-ingest |
+| `SELFFORK_BODY_PLATFORM=macos` (alias `desktop`) env value | `mobile_factory.py::resolve_platform` | Operator-facing knob; `desktop` is alias for `macos` |
+| `SkillSyncArgs.target_dirs` override | `tools/skills/tools.py` | Test/operator safety; default = four-CLI fan-out |
+
+### 9.14 Faz 3 Status
+
+**S-ToolFleet Faz 3 Cross-cutting Wave — ACCEPTED 2026-05-26 night.**
+
+### 9.15 Faz 4 VR/AR Wave deliverables (✅ all shipped 2026-05-26 night, single session)
+
+Operator directive: **"faz 1 ve faz 2 ve faz 3 den kesin kesin eminsen faz 4 e başla!!"** — closing the 5-Faz plan in one session.
+
+Per §9.1 #3 operator lock: Quest 3 = Android ADB+MQDH full driver (~20 tool), Vision Pro = Gemma 4 VLM OCR vision-only (~5-8 tool), modalite-çift kabul.
+
+| Item | Site | Tests |
+|---|---|---|
+| **Quest platform wire** — `resolve_platform()` accepts `quest`/`quest3`; factory builds `QuestDriver(AndroidDriver)` for `SELFFORK_BODY_PLATFORM=quest`; `SELFFORK_BODY_QUEST_DEVICE` env knob | `mobile_factory.py` + `selffork_body/drivers/vr/quest.py` | reused wire tests |
+| **VisionPro platform wire** — `resolve_platform()` accepts `visionpro`/`visionos`; factory builds `VisionProDriver` for `SELFFORK_BODY_PLATFORM=visionpro` | `mobile_factory.py` + `selffork_body/drivers/vr/visionpro.py` | reused wire tests |
+| **QuestDriver class** — inherits `AndroidDriver`, sets `platform = "quest"`, adds 14 VR-specific methods: recenter / passthrough_enable+disable / press_meta_button / press_controller_button (a/b/x/y/grip/trigger/thumbstick × left/right) / get_combined_battery (headset + controllers via OVRRuntime dumpsys) / get_device_info / get_boundary_status (Guardian) / record_video / stop_record_video / voice_command / list_installed_vr_apps / device_summary | `selffork_body/drivers/vr/quest.py` | included in handler dispatch |
+| **VisionProDriver class** — wraps `IosSimulatorRuntime` (visionOS sim uses same simctl surface) + AppleScript pointer for host-Mac clicks; `platform = "visionpro"`; methods: screenshot / simulator_list+boot+shutdown (filtered by visionOS runtime) / app_launch / get_logs / click_at | `selffork_body/drivers/vr/visionpro.py` | dispatch tests |
+| **`_require_android_driver` broadened to accept Quest** — `platform in ("android", "quest")` so `android_*` tools work transparently on Quest (Android-derived OS) | `tools/mobile/_internal.py` | regression-safe |
+| **Quest tool pack** — 19 tools: screenshot/app_launch/recenter (eager-3), + app_terminate/app_list/list_vr_apps/install_apk/uninstall_app/passthrough_enable+disable/press_meta_button/press_controller_button/get_battery/device_info/get_boundary/logcat/record_video/stop_record_video/voice_command (deferred-16) | `tools/vr/{__init__,_internal,quest}.py` | +19 handler dispatch + 5 args |
+| **VisionPro tool pack** — 8 tools (all deferred): simulator_list/boot/shutdown + screenshot + app_launch + get_logs + find_text (LLM OCR via vision_runtime; returns "unwired" without) + click_at (AppleScript pointer) | `tools/vr/visionpro.py` | +8 handler dispatch + 4 args |
+| **Registry integration** | `tools/__init__.py::build_default_registry` adds `*build_vr_tools()` — **289 total** (262 post-Faz-3 + 27 VR), 87 eager + 202 deferred | +9 registry shape pinned |
+
+**Faz 4 close baseline:** 3019 backend tests pass (was 2967 post-Faz 3; net +52 new tests). ruff/mypy(318)/tsc clean. Registry **289 tools** (87 eager + 202 deferred). Operator commit per MANDATE 1.
+
+**Tool count vs scope target** (ADR-010 §9.3 = ~25 tools, §9.1 #3 = Quest ~20 + VP ~5-8): **27 VR tools shipped** — 19 Quest + 8 VisionPro. Quest eager-3 (screenshot/app_launch/recenter) covers the VR observe→act loop; all VisionPro deferred (niche modality). Honest reality: Quest gets the full ADB driver, Vision Pro stays vision-only as locked.
+
+### 9.16 Faz 4 Format Freeze additions
+
+| Item | Site | Notes |
+|---|---|---|
+| `quest_*` / `visionpro_*` tool name prefixes | `tools/vr/**` | Two prefixes reserved |
+| `QuestDriver.platform == "quest"` + `VisionProDriver.platform == "visionpro"` markers | `selffork_body/drivers/vr/{quest,visionpro}.py` | Required by `_require_quest_driver` / `_require_visionpro_driver` |
+| Body action_type taxonomy: `quest.*` / `visionpro.*` | every VR handler's `action_type=…` call | Audit consumers + Heartbeat correction-ingest |
+| `SELFFORK_BODY_PLATFORM=quest` (alias `quest3`) + `=visionpro` (alias `visionos`, `vision-pro`) env values | `mobile_factory.py::resolve_platform` | Operator-facing knobs |
+| `SELFFORK_BODY_QUEST_DEVICE` + `SELFFORK_BODY_VISIONPRO_DEVICE` env keys | `mobile_factory.py::build_default_body_driver` | Device serial / UDID overrides |
+| `_require_android_driver` accepts `("android", "quest")` | `tools/mobile/_internal.py` | Quest IS-A Android so all `android_*` tools work on Quest transparently; breaking this contract = retraining |
+
+### 9.17 Faz 4 Status — S-ToolFleet 5-Faz Plan COMPLETE
+
+**S-ToolFleet Faz 4 VR/AR Wave — ACCEPTED 2026-05-26 night.** The full
+5-Faz plan from §9.3 is now closed in a single session:
+
+| Faz | Status | Tool delta | Net registry |
+|---|---|---|---|
+| **Faz 0** — substrate solidify | ✅ ACCEPTED (earlier session) | seam only | 36 |
+| **Faz 1** — Mobile Wave | ✅ ACCEPTED (same session) | +122 | 158 |
+| **Faz 2** — Browser Wave | ✅ ACCEPTED (same session) | +63 | 221 |
+| **Faz 3** — Cross-cutting (Desktop + GitHub + Skills) | ✅ ACCEPTED (same session) | +41 | 262 |
+| **Faz 4** — VR/AR (Quest + Vision Pro) | ✅ ACCEPTED (same session) | +27 | **289** |
+| **Total** | 5-Faz complete | **+253** | **289** |
+
+Substrate now spans 8 platforms (ios/android/web/macos/quest/visionpro + composite + the original surfaces). RAG-over-tools seam amortises the 202 deferred specs behind `tool_search`. The "tool count target ~250-380" from [[s-vision-candidates-github-rag-2026-05-24]] is hit at the lower end with quality intact.
+
+Next milestone: M7 freeze with the full fleet, plus the S-Train sprint that uses the Format Freeze (§5 + §9.7/9.10/9.13/9.16) as the fine-tune corpus stabilization gate.

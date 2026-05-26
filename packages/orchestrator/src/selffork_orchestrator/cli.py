@@ -24,10 +24,13 @@ from typing import Annotated, Any
 
 import typer
 
+from selffork_body.drivers.mobile_factory import build_default_body_driver
 from selffork_body.sandbox.destructive_whitelist import DestructiveWhitelist
 from selffork_body.sandbox.pending_confirmations import (
     PendingConfirmationStore,
 )
+from selffork_body.sandbox.warden import PermissionWarden, WardenMode
+from selffork_body.storage.screenshots import ScreenshotStore
 from selffork_orchestrator import __version__
 from selffork_orchestrator.cli_agent.factory import build_cli_agent
 from selffork_orchestrator.cli_mind import mind_app
@@ -665,6 +668,16 @@ async def _amain(
         config=SnapperRunnerConfig(),
     )
 
+    # S-ToolFleet Faz 1 §A — F1 WIRE close. Build the body driver +
+    # permission warden + screenshot store via factory so a
+    # ``<selffork-tool-call>{"tool":"body_*"}`` (or ``ios_*``/``android_*``)
+    # from Self Jr's round-loop reaches a real driver. Driver is None
+    # when SELFFORK_BODY_PLATFORM is unset (default) — keeps the
+    # warden's ``no_warden_wired`` deny intact for orphan runs.
+    body_driver = build_default_body_driver()
+    body_warden = _build_body_warden_for_driver(body_driver)
+    body_screenshot_store = ScreenshotStore() if body_driver is not None else None
+
     session = Session(
         session_id=session_id,
         prd_text=prd_text,
@@ -699,7 +712,25 @@ async def _amain(
         # so the tool registry's handler has somewhere to register
         # pending entries.
         structured_question_store=_build_structured_question_store(),
+        # S-ToolFleet Faz 1 §A — body driver + warden + screenshot store.
+        body_driver=body_driver,
+        permission_warden=body_warden,
+        screenshot_store=body_screenshot_store,
     )
+    # S-ToolFleet Faz 1 §A — start the body driver before round-loop so
+    # body tools can dispatch immediately; stop it after. Failures here
+    # don't crash the session: the driver stays wired but its methods
+    # will raise, which surfaces as a ``handler_error`` ToolResult that
+    # Self Jr can observe and route around.
+    if body_driver is not None:
+        try:
+            await body_driver.start()
+        except Exception as exc:
+            _log.warning(
+                "body_driver_start_failed",
+                platform=getattr(body_driver, "platform", "unknown"),
+                error=f"{type(exc).__name__}: {exc}",
+            )
     # Run the snapper fleet in parallel with the session; tear it down
     # when the session returns (regardless of outcome).
     async with anyio.create_task_group() as tg:
@@ -710,6 +741,14 @@ async def _amain(
             snapper_runner.stop()
             if theater_store is not None:
                 await theater_store.teardown()
+            if body_driver is not None:
+                try:
+                    await body_driver.stop()
+                except Exception as exc:
+                    _log.warning(
+                        "body_driver_stop_failed",
+                        error=f"{type(exc).__name__}: {exc}",
+                    )
 
     # S6 (ADR-006 §4.6) — feed the CLI-affinity store the turn-to-complete
     # signal. The dashboard (sole DuckDB writer) drains this JSONL before
@@ -1608,6 +1647,32 @@ def _build_structured_question_store() -> (
     )
 
     return build_structured_question_store()
+
+
+def _build_body_warden_for_driver(body_driver: object | None) -> PermissionWarden | None:
+    """Build the PermissionWarden for the body driver (S-ToolFleet Faz 1 §A).
+
+    Returns ``None`` when ``body_driver is None`` (body disabled) so the
+    ``_gate`` helper's ``no_warden_wired`` deny continues to refuse
+    ``body_*`` calls — preserving the M5 audit-fix default-deny
+    invariant. Mode resolves from ``SELFFORK_BODY_WARDEN`` env
+    (``read_only|workspace_write|danger_full_access``), defaulting to
+    ``workspace_write`` which auto-allows T0/T1 mobile observe/click
+    operations while prompting on T2/T3 destructive actions.
+    """
+    if body_driver is None:
+        return None
+    raw = (os.environ.get("SELFFORK_BODY_WARDEN") or "workspace_write").lower().strip()
+    try:
+        mode = WardenMode(raw)
+    except ValueError:
+        _log.warning(
+            "body_warden_mode_invalid",
+            value=raw,
+            fallback="workspace_write",
+        )
+        mode = WardenMode.WORKSPACE_WRITE
+    return PermissionWarden(mode=mode)
 
 
 def main() -> None:

@@ -18,16 +18,22 @@ from selffork_orchestrator.tools.base import (
     raise_unauthorized,
 )
 from selffork_orchestrator.tools.body import build_body_tools
+from selffork_orchestrator.tools.browser import build_browser_tools
+from selffork_orchestrator.tools.desktop import build_desktop_tools
+from selffork_orchestrator.tools.github import build_github_tools
 from selffork_orchestrator.tools.kanban import build_kanban_tools
 from selffork_orchestrator.tools.mind import build_mind_tools
+from selffork_orchestrator.tools.mobile import build_mobile_tools
 from selffork_orchestrator.tools.parser import parse_tool_calls
 from selffork_orchestrator.tools.quota import build_quota_tools
 from selffork_orchestrator.tools.router import build_router_tools
 from selffork_orchestrator.tools.session import build_session_tools
+from selffork_orchestrator.tools.skills import build_skills_tools
 from selffork_orchestrator.tools.structured_question import (
     build_ask_user_question_spec,
 )
 from selffork_orchestrator.tools.tool_search import build_tool_search_spec
+from selffork_orchestrator.tools.vr import build_vr_tools
 
 
 def build_default_registry() -> ToolRegistry:
@@ -39,7 +45,9 @@ def build_default_registry() -> ToolRegistry:
     S-Bridge adds ``AskUserQuestion`` (interactive structured-choice);
     S-ToolFleet Faz 0 adds ``tool_search`` (RAG-over-tools meta-tool for
     discovering deferred specs once the fleet grows past the eager-prompt
-    ceiling).
+    ceiling). S-ToolFleet Faz 1 adds the mobile fleet (~122 tools:
+    iOS-DEEP / Android-DEEP / Expo / UI-verify / crash+state) — 30 eager,
+    92 deferred behind ``tool_search``.
     """
     return ToolRegistry(
         specs=[
@@ -51,6 +59,12 @@ def build_default_registry() -> ToolRegistry:
             *build_body_tools(),
             *build_router_tools(),
             *build_auto_pr_tools(),
+            *build_mobile_tools(),
+            *build_browser_tools(),
+            *build_desktop_tools(),
+            *build_github_tools(),
+            *build_skills_tools(),
+            *build_vr_tools(),
             build_ask_user_question_spec(),
             build_tool_search_spec(),
         ],
@@ -67,12 +81,18 @@ __all__ = [
     "build_auto_pr_tools",
     "build_autopilot_tools",
     "build_body_tools",
+    "build_browser_tools",
     "build_default_registry",
+    "build_desktop_tools",
+    "build_github_tools",
     "build_kanban_tools",
     "build_mind_tools",
+    "build_mobile_tools",
     "build_quota_tools",
     "build_router_tools",
     "build_session_tools",
+    "build_skills_tools",
+    "build_vr_tools",
     "parse_tool_calls",
     "raise_unauthorized",
 ]

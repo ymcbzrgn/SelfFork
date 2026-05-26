@@ -36,6 +36,8 @@ __all__ = [
 class AndroidDriver:
     """Unified Android driver. Composes runtime + mobile-mcp + uiautomator2."""
 
+    platform: str = "android"
+
     def __init__(
         self,
         *,
@@ -136,3 +138,176 @@ class AndroidDriver:
         self, provider: str, project_slug: str | None = None
     ) -> None:
         raise NotImplementedError("Android driver storage_state is not applicable")
+
+    # ---- S-ToolFleet Faz 1 — interaction extensions ------------------
+
+    async def double_click(self, x: int, y: int) -> None:
+        await self.mcp.double_tap(x, y)
+
+    async def long_press(self, x: int, y: int, duration_ms: int = 800) -> None:
+        await self.mcp.long_press(x, y, duration_ms=duration_ms)
+
+    async def clear_text(self) -> None:
+        await self.mcp.clear_text()
+
+    async def pinch(self, scale: float, velocity: float = 1.0) -> None:
+        # mobile-mcp doesn't expose pinch directly on Android; emulate with two
+        # opposing swipes from the screen center. Best-effort fallback.
+        cx = 540
+        cy = 1000
+        delta = int(200 * abs(scale - 1.0))
+        if scale < 1.0:  # zoom out — fingers move toward center
+            await self.mcp.swipe(cx - delta, cy, cx, cy)
+            await self.mcp.swipe(cx + delta, cy, cx, cy)
+        else:  # zoom in — fingers move away from center
+            await self.mcp.swipe(cx, cy, cx - delta, cy)
+            await self.mcp.swipe(cx, cy, cx + delta, cy)
+        _ = velocity  # accepted for API parity; unused without true pinch
+
+    async def press_button(self, name: str) -> None:
+        # Map iOS-style names to Android press_key vocabulary
+        mapping = {
+            "back": "back",
+            "home": "home",
+            "menu": "menu",
+            "app_switch": "app_switch",
+            "recent": "app_switch",
+            "power": "power",
+            "lock": "power",
+            "volume_up": "volume_up",
+            "volume_down": "volume_down",
+            "volumeup": "volume_up",
+            "volumedown": "volume_down",
+        }
+        translated = mapping.get(name, name)
+        await self.press_key(translated)
+
+    # ---- lifecycle extensions ----------------------------------------
+
+    async def app_terminate(self, package: str) -> None:
+        await self.mcp.app_terminate(package)
+
+    async def app_force_stop(self, package: str) -> str:
+        return await self.fallback.app_force_stop(package)
+
+    async def app_clear_data(self, package: str) -> str:
+        return await self.fallback.app_clear_data(package)
+
+    async def install_app(self, apk_path: Path) -> None:
+        await self.install_apk(apk_path)
+
+    async def install_multiple_apks(self, apk_paths: list[Path]) -> str:
+        return await self.fallback.install_multiple_apks(apk_paths)
+
+    async def uninstall_app(self, package: str) -> None:
+        try:
+            await self.mcp.uninstall_app(package)
+        except Exception:
+            await self.fallback.uninstall_app(package)
+
+    async def list_apps(self) -> list[dict[str, Any]]:
+        try:
+            return await self.mcp.list_apps()
+        except Exception:
+            packages = await self.fallback.list_packages()
+            return [{"package": p} for p in packages]
+
+    async def app_activate(self, package: str) -> None:
+        # Android has no distinct activate; launch handles both.
+        await self.app_launch(package)
+
+    # ---- system extensions -------------------------------------------
+
+    async def get_clipboard(self) -> str:
+        try:
+            return await self.mcp.get_clipboard()
+        except Exception:
+            return await self.fallback.adb_shell("service call clipboard 1") or ""
+
+    async def set_clipboard(self, text: str) -> None:
+        await self.mcp.set_clipboard(text)
+
+    async def get_orientation(self) -> str:
+        try:
+            return await self.mcp.get_orientation()
+        except Exception:
+            text = await self.fallback.adb_shell(
+                "dumpsys input | grep SurfaceOrientation | head -1",
+            )
+            return text.strip()
+
+    async def set_orientation(self, orientation: str) -> None:
+        # 0=portrait, 1=landscape, 2=upside-down portrait, 3=landscape-rev
+        rotation = {
+            "PORTRAIT": "0", "LANDSCAPE": "1",
+            "UPSIDE_DOWN": "2", "LANDSCAPE_REVERSE": "3",
+            "portrait": "0", "landscape": "1",
+        }.get(orientation, "0")
+        await self.fallback.adb_shell(
+            "settings put system accelerometer_rotation 0",
+        )
+        await self.fallback.adb_shell(
+            f"settings put system user_rotation {rotation}",
+        )
+
+    async def get_property(self, key: str) -> str:
+        return await self.fallback.get_property(key)
+
+    async def set_property(self, key: str, value: str) -> str:
+        return await self.fallback.set_property(key, value)
+
+    async def reboot(self) -> None:
+        await self.fallback.reboot()
+
+    async def get_battery(self) -> dict[str, str]:
+        return await self.fallback.get_battery()
+
+    # ---- intents / shell / files / logs / deeplink -------------------
+
+    async def intent(
+        self, action: str, *, extras: dict[str, str] | None = None,
+        component: str | None = None, data: str | None = None,
+    ) -> str:
+        return await self.fallback.intent(
+            action, extras=extras, component=component, data=data,
+        )
+
+    async def broadcast(
+        self, action: str, *, extras: dict[str, str] | None = None,
+    ) -> str:
+        return await self.fallback.broadcast(action, extras=extras)
+
+    async def deeplink(self, url: str) -> str:
+        return await self.fallback.deeplink(url)
+
+    async def shell(self, command: str) -> str:
+        return await self.fallback.adb_shell(command)
+
+    async def dumpsys(self, service: str) -> str:
+        return await self.fallback.dumpsys(service)
+
+    async def logcat(
+        self, *, tag_filter: str | None = None,
+        max_lines: int = 200, clear: bool = False,
+    ) -> str:
+        return await self.fallback.logcat(
+            tag_filter=tag_filter, max_lines=max_lines, clear=clear,
+        )
+
+    async def push(self, local: Path, remote: str) -> str:
+        return await self.fallback.push(local, remote)
+
+    async def pull(self, remote: str, local: Path) -> str:
+        return await self.fallback.pull(remote, local)
+
+    async def device_list(self) -> list[dict[str, str]]:
+        return await self.fallback.list_devices()
+
+    async def screenrecord_start(self, output_path: Path) -> None:
+        await self.fallback.screenrecord_start(output_path)
+
+    async def screenrecord_stop(self) -> Path | None:
+        return await self.fallback.screenrecord_stop()
+
+    async def set_geolocation(self, latitude: float, longitude: float) -> str:
+        return await self.fallback.set_geolocation(latitude, longitude)

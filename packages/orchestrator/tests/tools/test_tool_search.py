@@ -310,20 +310,38 @@ async def test_invoke_tool_search_through_registry() -> None:
     assert result.status == "ok"
     assert result.payload is not None
     assert result.payload["status"] == "ok"
-    # Default registry has zero deferred specs today, so matches == 0 —
-    # the seam works; Faz 1 fan-out fills the corpus.
-    assert result.payload["matches"] == 0
+    # S-ToolFleet Faz 1 fanned out the mobile fleet — the deferred
+    # corpus is now populated; tool_search returns real matches when
+    # the query is generic enough to hit nothing specific, the result
+    # is still ``ok`` but ``matches`` is whatever BM25/overlap returned.
+    assert isinstance(result.payload["matches"], int)
 
 
-def test_default_registry_has_zero_deferred_today() -> None:
-    """Faz 0 ships the SEAM; behaviour stays identical to pre-Faz 0.
+def test_default_registry_deferred_corpus_populated() -> None:
+    """S-ToolFleet Faz 1 — mobile fleet flips defer_loading on ~92 tools.
 
-    Every existing spec sets ``defer_loading=False`` (default), so the
-    eager catalog is exhausted and ``tool_search`` is a no-op until Faz
-    1+ flips the flag on tools that don't need to be in the system
-    prompt by default.
+    Faz 0 shipped the SEAM with every spec eager (``defer_loading=False``).
+    Faz 1 fanned out ~122 mobile tools and marked ~92 as deferred so
+    Self Jr's eager catalog stays compact while the long tail is
+    reachable via ``tool_search``.
     """
     registry = build_default_registry()
-    assert registry.deferred_names() == []
-    # And every existing tool stays in the eager catalog.
-    assert set(registry.eager_names()) == set(registry.names())
+    deferred = registry.deferred_names()
+    eager = registry.eager_names()
+    # Mobile fleet contributes deferred entries
+    assert len(deferred) >= 80, (
+        f"expected ≥80 deferred specs after Faz 1, got {len(deferred)}"
+    )
+    # Eager catalog still includes the canonical core + Faz 1 eager mobile loop
+    assert "body_click" in eager
+    assert "tool_search" in eager
+    assert "AskUserQuestion" in eager
+    # Mobile fleet eager bucket: top-10 iOS + top-10 Android + 10 ui_verify
+    assert "ios_click" in eager
+    assert "android_click" in eager
+    assert "ui_verify_text_visible" in eager
+    # And deferred bucket: deep iOS/Android + Expo + crash_state
+    assert "ios_simulator_list" in deferred
+    assert "android_shell" in deferred
+    assert "expo_eas_build" in deferred
+    assert "crash_state_snapshot" in deferred

@@ -1,4 +1,4 @@
-"""mobile-mcp HTTP adapter (M5 — ADR-005 §M5-C2).
+"""mobile-mcp HTTP adapter (M5 — ADR-005 §M5-C2, expanded S-ToolFleet Faz 1).
 
 Talks to ``mobile-next/mobile-mcp`` server's REST surface. Tap / swipe /
 type / screenshot / app launch / install APK / press_key / ax tree dump
@@ -44,6 +44,11 @@ class MobileMcpAdapter:
         r = await client.post(f"{self.mcp_url}/tap", json={"x": x, "y": y})
         r.raise_for_status()
 
+    async def double_tap(self, x: int, y: int) -> None:
+        client = self._ensure_client()
+        r = await client.post(f"{self.mcp_url}/double_tap", json={"x": x, "y": y})
+        r.raise_for_status()
+
     async def long_press(self, x: int, y: int, duration_ms: int = 800) -> None:
         client = self._ensure_client()
         r = await client.post(
@@ -76,6 +81,11 @@ class MobileMcpAdapter:
         r = await client.post(f"{self.mcp_url}/type", json={"text": text})
         r.raise_for_status()
 
+    async def clear_text(self) -> None:
+        client = self._ensure_client()
+        r = await client.post(f"{self.mcp_url}/clear_text", json={})
+        r.raise_for_status()
+
     async def screenshot(self) -> bytes:
         client = self._ensure_client()
         r = await client.get(f"{self.mcp_url}/screenshot")
@@ -89,10 +99,30 @@ class MobileMcpAdapter:
             r = await client.post(f"{self.mcp_url}/install_apk", files=files)
         r.raise_for_status()
 
+    async def uninstall_app(self, package: str) -> None:
+        client = self._ensure_client()
+        r = await client.post(
+            f"{self.mcp_url}/uninstall_app", json={"package": package},
+        )
+        r.raise_for_status()
+
     async def app_launch(self, package: str) -> None:
         client = self._ensure_client()
         r = await client.post(f"{self.mcp_url}/launch", json={"package": package})
         r.raise_for_status()
+
+    async def app_terminate(self, package: str) -> None:
+        client = self._ensure_client()
+        r = await client.post(
+            f"{self.mcp_url}/terminate", json={"package": package},
+        )
+        r.raise_for_status()
+
+    async def list_apps(self) -> list[dict[str, Any]]:
+        client = self._ensure_client()
+        r = await client.get(f"{self.mcp_url}/list_apps")
+        r.raise_for_status()
+        return cast("list[dict[str, Any]]", r.json())
 
     async def press_key(
         self,
@@ -107,3 +137,28 @@ class MobileMcpAdapter:
         r = await client.get(f"{self.mcp_url}/a11y_tree")
         r.raise_for_status()
         return cast("dict[str, Any]", r.json())
+
+    async def get_clipboard(self) -> str:
+        client = self._ensure_client()
+        r = await client.get(f"{self.mcp_url}/clipboard")
+        r.raise_for_status()
+        body = r.json()
+        return str(body.get("text", ""))
+
+    async def set_clipboard(self, text: str) -> None:
+        client = self._ensure_client()
+        r = await client.post(f"{self.mcp_url}/clipboard", json={"text": text})
+        r.raise_for_status()
+
+    async def get_orientation(self) -> str:
+        client = self._ensure_client()
+        r = await client.get(f"{self.mcp_url}/orientation")
+        r.raise_for_status()
+        return str(r.json().get("orientation", "portrait"))
+
+    async def set_orientation(self, orientation: str) -> None:
+        client = self._ensure_client()
+        r = await client.post(
+            f"{self.mcp_url}/orientation", json={"orientation": orientation},
+        )
+        r.raise_for_status()
