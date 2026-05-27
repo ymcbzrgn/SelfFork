@@ -152,7 +152,7 @@ export function WorkspaceHeader({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="px-4 py-2 text-on-surface-variant hover:bg-surface-container rounded-lg text-caption font-medium transition-colors flex items-center gap-1"
+              className="px-4 py-2 text-on-surface-variant hover:bg-surface-container rounded-lg text-caption font-medium transition-colors flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Switch
               <ChevronDown className="h-4 w-4" strokeWidth={1.75} />
@@ -213,7 +213,7 @@ export function WorkspaceHeader({
           type="button"
           onClick={onEdit}
           disabled={!onEdit || archived}
-          className="px-4 py-2 text-on-surface-variant hover:bg-surface-container rounded-lg text-caption font-medium transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-4 py-2 text-on-surface-variant hover:bg-surface-container rounded-lg text-caption font-medium transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Edit2 className="h-4 w-4" strokeWidth={1.75} />
           Edit
@@ -223,7 +223,7 @@ export function WorkspaceHeader({
           type="button"
           onClick={onPauseToggle}
           disabled={!onPauseToggle || pausing || archived}
-          className="px-4 py-2 border border-outline-variant text-on-surface hover:bg-surface-container-high rounded-lg text-caption font-medium transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-4 py-2 border border-outline-variant text-on-surface hover:bg-surface-container-high rounded-lg text-caption font-medium transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {autopilotPaused ? (
             <Play className="h-4 w-4" strokeWidth={1.75} />
@@ -237,7 +237,7 @@ export function WorkspaceHeader({
           type="button"
           onClick={onArchiveToggle}
           disabled={!onArchiveToggle || archiving}
-          className="px-4 py-2 text-on-surface-variant hover:bg-surface-container rounded-lg text-caption font-medium transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-4 py-2 text-on-surface-variant hover:bg-surface-container rounded-lg text-caption font-medium transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {archived ? (
             <ArchiveRestore className="h-4 w-4" strokeWidth={1.75} />
