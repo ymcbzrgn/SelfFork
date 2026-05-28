@@ -151,6 +151,10 @@ async def test_start_then_stop_happy_path(
 
     import signal as _signal
 
+    def fake_getpgid(pid: int) -> int:
+        return pid
+
+    monkeypatch.setattr(os, "getpgid", fake_getpgid)
     monkeypatch.setattr(os, "killpg", fake_killpg)
     await server.stop()
     assert server.state is CodexBarServerState.STOPPED
@@ -208,6 +212,10 @@ async def test_start_is_idempotent_when_ready(
         if server._process is not None:  # type: ignore[attr-defined]
             server._process.mark_exited(0)  # type: ignore[attr-defined]
 
+    def fake_getpgid(pid: int) -> int:
+        return pid
+
+    monkeypatch.setattr(os, "getpgid", fake_getpgid)
     monkeypatch.setattr(os, "killpg", fake_killpg)
     await server.stop()
 
