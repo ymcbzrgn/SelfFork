@@ -151,6 +151,10 @@ async def test_start_then_stop_happy_path(
 
     import signal as _signal
 
+    def fake_getpgid(pid: int) -> int:
+        return pid
+
+    monkeypatch.setattr(os, "getpgid", fake_getpgid)
     monkeypatch.setattr(os, "killpg", fake_killpg)
     await server.stop()
     assert server.state is CodexBarServerState.STOPPED
@@ -208,6 +212,10 @@ async def test_start_is_idempotent_when_ready(
         if server._process is not None:  # type: ignore[attr-defined]
             server._process.mark_exited(0)  # type: ignore[attr-defined]
 
+    def fake_getpgid(pid: int) -> int:
+        return pid
+
+    monkeypatch.setattr(os, "getpgid", fake_getpgid)
     monkeypatch.setattr(os, "killpg", fake_killpg)
     await server.stop()
 
@@ -244,9 +252,7 @@ def test_resolver_disabled_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert server.binary is None
 
 
-def test_resolver_picks_explicit_override(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_resolver_picks_explicit_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     fake = tmp_path / "codexbar"
     fake.write_text("#!/bin/sh\nexit 0\n")
     fake.chmod(0o755)

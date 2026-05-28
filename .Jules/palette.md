@@ -1,0 +1,3 @@
+## 2026-05-28 - Custom Links and Buttons Require Manual Focus Rings
+**Learning:** Found that custom layout interactive elements (like the naked `<button>` and `<Link>` components in `topbar.tsx` and `sidebar.tsx`) lack the default shadcn/ui focus rings because they don't use the `Button` component. This renders them invisible to keyboard users when focused via tab.
+**Action:** When creating custom interactive elements or using `<Link>` directly, manually append `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2` (and a small border radius like `rounded-md` if needed) to ensure proper keyboard accessibility.
