@@ -129,7 +129,7 @@ export function Sidebar() {
       <div className="px-6 mb-8">
         <Link
           href="/"
-          className="font-heading text-heading font-semibold text-primary flex items-center gap-2"
+          className="font-heading text-heading font-semibold text-primary flex items-center gap-2 outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded"
         >
           <span className="text-2xl leading-none" aria-hidden>
             ⊕
@@ -142,7 +142,7 @@ export function Sidebar() {
         <Link
           href="/"
           className={cn(
-            "rounded-lg mx-2 px-4 py-2 flex items-center gap-3 transition-all",
+            "rounded-lg mx-2 px-4 py-2 flex items-center gap-3 transition-all outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
             isActive(pathname, "/", true)
               ? "bg-primary/[0.08] text-primary font-semibold"
               : "text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/50",
@@ -158,7 +158,7 @@ export function Sidebar() {
             onClick={() => setOpen((x) => !x)}
             aria-expanded={open}
             className={cn(
-              "w-full rounded-lg px-4 py-2 flex items-center justify-between transition-colors",
+              "w-full rounded-lg px-4 py-2 flex items-center justify-between transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               inWorkspaces
                 ? "bg-primary/[0.08] text-primary font-semibold"
                 : "text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/50",
@@ -191,7 +191,7 @@ export function Sidebar() {
                       key={p.slug}
                       href={`/workspaces/${p.slug}`}
                       className={cn(
-                        "py-1 text-caption flex items-center gap-2 transition-colors",
+                        "py-1 px-1 rounded text-caption flex items-center gap-2 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                         archived && "italic opacity-60",
                         active
                           ? "text-on-surface font-medium"
@@ -214,7 +214,7 @@ export function Sidebar() {
               )}
               <Link
                 href="/talk?intent=new-workspace"
-                className="py-1 text-primary text-caption font-semibold flex items-center gap-1 hover:underline"
+                className="py-1 px-1 rounded text-primary text-caption font-semibold flex items-center gap-1 hover:underline outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background"
               >
                 <Plus className="h-3 w-3" strokeWidth={2} />
                 <span>New project</span>
@@ -245,7 +245,7 @@ export function Sidebar() {
               key={href}
               href={href}
               className={cn(
-                "rounded-lg mx-2 px-4 py-2 flex items-center gap-3 transition-all",
+                "rounded-lg mx-2 px-4 py-2 flex items-center gap-3 transition-all outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                 active
                   ? "bg-primary/[0.08] text-primary font-semibold"
                   : "text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/50",
