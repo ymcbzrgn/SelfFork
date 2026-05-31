@@ -191,7 +191,7 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex items-center gap-2 font-heading text-body font-bold text-on-surface group whitespace-nowrap outline-none"
+              className="flex items-center gap-2 font-heading text-body font-bold text-on-surface group whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded"
               aria-label="Page actions"
             >
               <span className="truncate">{title}</span>
@@ -224,7 +224,7 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
         <button
           type="button"
           onClick={() => fire("selffork:open-palette")}
-          className="relative w-72 max-w-[40vw] hidden md:flex items-center text-left"
+          className="relative w-72 max-w-[40vw] hidden md:flex items-center text-left outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-full"
           aria-label="Open command palette"
         >
           <Search
@@ -241,7 +241,7 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
         <button
           type="button"
           onClick={() => setPendingOpen(true)}
-          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full relative"
+          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full relative outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           aria-label={
             pendingCount
               ? `Notifications, ${pendingCount} pending`
@@ -279,7 +279,7 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
         <button
           type="button"
           onClick={() => setStatusOpen(true)}
-          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full"
+          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           aria-label="System status"
         >
           <ServerCog
@@ -291,7 +291,7 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
         <button
           type="button"
           onClick={() => fire("selffork:show-shortcuts")}
-          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full"
+          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           aria-label="Help and keyboard shortcuts"
         >
           <HelpCircle

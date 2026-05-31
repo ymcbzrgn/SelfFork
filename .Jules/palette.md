@@ -1,0 +1,3 @@
+## 2025-02-18 - Standardized Focus States for Keyboard Accessibility
+**Learning:** Custom interactive elements (like raw `<button>` and `<Link>` tags) often lack clear focus indicators, which is a critical accessibility gap for keyboard navigation. While some components like `DropdownMenuTrigger` or Shadcn UI buttons handle this, raw elements require manual utility classes.
+**Action:** When building or updating custom interactive elements, always ensure they have visible focus states by adding `outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background` to their class names. Use rounded utilities (e.g. `rounded` or `rounded-full`) to ensure the focus ring follows the element's shape.
