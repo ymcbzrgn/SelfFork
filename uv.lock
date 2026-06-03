@@ -3318,9 +3318,10 @@ ios = [
     { name = "appium-python-client" },
 ]
 macos = [
-    { name = "pyobjc-framework-applicationservices" },
-    { name = "pyobjc-framework-cocoa" },
-    { name = "pyobjc-framework-quartz" },
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-applicationservices", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin'" },
 ]
 playwright = [
     { name = "playwright" },
@@ -3333,9 +3334,10 @@ requires-dist = [
     { name = "pillow", specifier = ">=10.0" },
     { name = "playwright", marker = "extra == 'playwright'", specifier = ">=1.47" },
     { name = "pydantic", specifier = ">=2.7" },
-    { name = "pyobjc-framework-applicationservices", marker = "extra == 'macos'", specifier = ">=10.0" },
-    { name = "pyobjc-framework-cocoa", marker = "extra == 'macos'", specifier = ">=10.0" },
-    { name = "pyobjc-framework-quartz", marker = "extra == 'macos'", specifier = ">=10.0" },
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin' and extra == 'macos'", specifier = ">=10.0" },
+    { name = "pyobjc-framework-applicationservices", marker = "sys_platform == 'darwin' and extra == 'macos'", specifier = ">=10.0" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin' and extra == 'macos'", specifier = ">=10.0" },
+    { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin' and extra == 'macos'", specifier = ">=10.0" },
     { name = "uiautomator2", marker = "extra == 'android'", specifier = ">=3.0" },
 ]
 provides-extras = ["playwright", "android", "ios", "macos"]
