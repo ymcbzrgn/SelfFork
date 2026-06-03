@@ -1,3 +1,0 @@
-## 2024-06-03 - Added keyboard focus styles and tooltips to icon-only buttons in TopBar
-**Learning:** Icon-only buttons lacking visual tooltips (`title` attribute) and explicit `focus-visible` states diminish accessibility and user confidence. While `aria-label` supports screen readers, sighted users benefit from clear tooltips and keyboard-only users need robust visual focus rings.
-**Action:** When implementing custom icon-only `<button>`s, ensure they include a standard `title` attribute matching the `aria-label`, and use Tailwind's `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background` to guarantee clear focus state visibility during keyboard navigation.
