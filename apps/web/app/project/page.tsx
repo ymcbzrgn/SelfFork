@@ -507,7 +507,7 @@ function Column({
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="mt-2 inline-flex items-center justify-center gap-1 rounded-md border border-dashed border-border/60 px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+            className="mt-2 inline-flex items-center justify-center gap-1 rounded-md border border-dashed border-border/60 px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <Plus className="h-3 w-3" />
             Add card
@@ -570,7 +570,7 @@ function AddCardForm({
         <button
           type="button"
           onClick={onCancel}
-          className="text-[11px] text-muted-foreground hover:text-foreground"
+          className="rounded-md text-[11px] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background px-2 py-1"
         >
           Cancel
         </button>
@@ -670,8 +670,9 @@ function KanbanCardSurface({
             type="button"
             {...listeners}
             aria-label="Drag card"
+            title="Drag card"
             onClick={(e) => e.stopPropagation()}
-            className="-ml-1 mt-0.5 cursor-grab touch-none rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-foreground active:cursor-grabbing"
+            className="-ml-1 mt-0.5 cursor-grab touch-none rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-foreground active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           >
             <GripVertical className="h-3.5 w-3.5" />
           </button>
@@ -690,8 +691,9 @@ function KanbanCardSurface({
               e.stopPropagation();
               onDelete();
             }}
+            aria-label="Delete card"
             title="Delete card"
-            className="opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive"
+            className="rounded opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           >
             <Trash2 className="h-3 w-3" />
           </button>

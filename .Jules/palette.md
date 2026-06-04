@@ -1,0 +1,3 @@
+## 2024-05-19 - Accessible interactions for hidden hover elements
+**Learning:** In the web app, UI elements hidden behind hover states (e.g., using `opacity-0 group-hover:opacity-100`) become inaccessible to keyboard users unless explicitly handled. Additionally, icon-only buttons need both `aria-label` for screen readers and `title` for sighted users who need tooltips, especially when the icon is not universally understood.
+**Action:** Always combine `opacity-0 group-hover:opacity-100` with `focus-visible:opacity-100` on interactive elements to ensure they appear when focused via keyboard navigation. Always provide standard `focus-visible:outline-none focus-visible:ring-2` focus rings. Ensure icon-only buttons have matching `title` and `aria-label` attributes.
