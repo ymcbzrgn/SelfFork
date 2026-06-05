@@ -152,6 +152,7 @@ async def test_start_then_stop_happy_path(
     import signal as _signal
 
     monkeypatch.setattr(os, "killpg", fake_killpg)
+    monkeypatch.setattr(os, "getpgid", lambda pid: pid)
     await server.stop()
     assert server.state is CodexBarServerState.STOPPED
     assert sent_signals == [_signal.SIGTERM]

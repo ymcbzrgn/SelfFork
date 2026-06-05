@@ -1,0 +1,3 @@
+## 2024-03-20 - Icon-only Button Tooltips and Focus States
+**Learning:** Icon-only buttons with `aria-label`s provide good screen reader accessibility, but visually sighted mouse/keyboard users need tooltips (`title` attribute matching the `aria-label`) to understand their function, and keyboard users require clear visual focus rings to navigate effectively.
+**Action:** Always ensure custom icon-only `<button>` and `<Link>` elements include a standard HTML `title` attribute matching their `aria-label`, and use `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background` to guarantee keyboard accessibility.
