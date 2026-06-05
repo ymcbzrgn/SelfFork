@@ -27,6 +27,7 @@ members = [
     "packages/reflex",
     "packages/body",
     "packages/mind",
+    "temp_env",
 ]
 
 [tool.uv.sources]
