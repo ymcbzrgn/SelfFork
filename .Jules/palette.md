@@ -1,0 +1,3 @@
+## 2024-05-13 - Missing ARIA Labels for Icon-Only Buttons and Inputs
+**Learning:** Found an accessibility pattern specific to this app's components where `<input>`s (specifically title inputs without explicit label text) and icon-only buttons (like `Trash2` for deleting cards) rely on placeholder or title attributes which aren't sufficient for screen reader users. The placeholder text alone doesn't convey context for screen readers consistently.
+**Action:** Always verify that input fields inside simple inline forms (like `AddCardForm`) and interactive icon-only buttons (`Trash2`) have explicit `aria-label` attributes to ensure keyboard and screen reader accessibility, even if a placeholder or native title is already present.

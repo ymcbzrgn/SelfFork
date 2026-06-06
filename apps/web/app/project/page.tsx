@@ -556,12 +556,14 @@ function AddCardForm({
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Card title"
+        aria-label="Card title"
         className="w-full rounded border border-input bg-background px-2 py-1 text-xs focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
       />
       <textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}
         placeholder="Optional details…"
+        aria-label="Card details"
         rows={2}
         className="w-full rounded border border-input bg-background px-2 py-1 text-[11px] focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
       />
@@ -691,6 +693,7 @@ function KanbanCardSurface({
               onDelete();
             }}
             title="Delete card"
+            aria-label="Delete card"
             className="opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive"
           >
             <Trash2 className="h-3 w-3" />
