@@ -1,0 +1,3 @@
+## 2024-03-21 - Custom Icon Buttons Accessibility
+**Learning:** Raw `<button>` elements in this app's topbar navigation (e.g. notifications, system status, shortcuts) lacked native tooltips and explicit keyboard focus rings.
+**Action:** Always append standard focus-visible utilities (`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background`) with proper `rounded-*` attributes on custom unstyled buttons, and ensure icon-only buttons duplicate their `aria-label` as a standard `title` attribute for explicit hover tooltips.
