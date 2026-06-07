@@ -3,7 +3,7 @@ name = "selffork-body"
 version = "0.0.1"
 description = "Body pillar — vision + cross-UI control across Android, iOS, web, desktop. Skeleton only in MVP v0; implementation lands in M5."
 readme = "README.md"
-requires-python = ">=3.12, <3.15"
+requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 authors = [{ name = "SelfFork" }]
 dependencies = [
@@ -19,7 +19,7 @@ dependencies = [
 playwright = ["playwright>=1.47"]
 android = ["uiautomator2>=3.0"]
 ios = ["Appium-Python-Client>=5.0"]
-macos = ["pyobjc-framework-ApplicationServices>=10.0", "pyobjc-framework-Quartz>=10.0", "pyobjc-framework-AppKit>=10.0"]
+macos = ["pyobjc-framework-ApplicationServices>=10.0", "pyobjc-framework-Quartz>=10.0", "pyobjc-framework-Cocoa>=10.0"]
 
 [build-system]
 requires = ["hatchling>=1.25"]
