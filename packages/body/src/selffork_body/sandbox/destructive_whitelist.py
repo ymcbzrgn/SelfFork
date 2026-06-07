@@ -22,9 +22,7 @@ from typing import Any
 
 import yaml
 
-DEFAULT_CONFIG_PATH = (
-    Path(__file__).parent / "data" / "destructive_actions.yaml"
-)
+DEFAULT_CONFIG_PATH = Path(__file__).parent / "data" / "destructive_actions.yaml"
 
 
 @dataclass(frozen=True)

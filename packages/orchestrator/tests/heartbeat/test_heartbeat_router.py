@@ -63,9 +63,7 @@ def test_get_autonomy_returns_persisted_settings(tmp_path: Path) -> None:
 def test_put_autonomy_persists_settings(tmp_path: Path) -> None:
     store = AutonomyStore(path=tmp_path / "autonomy.yaml")
     body = apply_preset(AutonomyPreset.DENETIMLI).model_dump(mode="json")
-    response = _client(store=store).put(
-        "/api/heartbeat/autonomy", json=body
-    )
+    response = _client(store=store).put("/api/heartbeat/autonomy", json=body)
     assert response.status_code == 200
     persisted = store.read()
     assert persisted is not None
@@ -90,13 +88,9 @@ def test_put_autonomy_rejects_unknown_field(tmp_path: Path) -> None:
     "preset",
     ["kapalı", "denetimli", "dengeli", "tam"],
 )
-def test_post_preset_applies_each_tier(
-    tmp_path: Path, preset: str
-) -> None:
+def test_post_preset_applies_each_tier(tmp_path: Path, preset: str) -> None:
     store = AutonomyStore(path=tmp_path / "autonomy.yaml")
-    response = _client(store=store).post(
-        f"/api/heartbeat/autonomy/preset/{preset}"
-    )
+    response = _client(store=store).post(f"/api/heartbeat/autonomy/preset/{preset}")
     assert response.status_code == 200
     persisted = store.read()
     assert persisted is not None
@@ -105,9 +99,7 @@ def test_post_preset_applies_each_tier(
 
 def test_post_preset_rejects_unknown(tmp_path: Path) -> None:
     store = AutonomyStore(path=tmp_path / "autonomy.yaml")
-    response = _client(store=store).post(
-        "/api/heartbeat/autonomy/preset/bogus"
-    )
+    response = _client(store=store).post("/api/heartbeat/autonomy/preset/bogus")
     assert response.status_code == 400
 
 
@@ -153,9 +145,7 @@ async def test_state_with_running_scheduler(tmp_path: Path) -> None:
         await asyncio.sleep(0.1)
         # TestClient is sync but the underlying scheduler is in the
         # same event loop; spawn a synchronous read via TestClient.
-        client = TestClient(
-            _build_app(store=store, scheduler=scheduler)
-        )
+        client = TestClient(_build_app(store=store, scheduler=scheduler))
         response = client.get("/api/heartbeat/state")
         assert response.status_code == 200
         payload = response.json()

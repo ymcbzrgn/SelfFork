@@ -66,8 +66,13 @@ class AndroidScrollArgs(ToolArgs):
 
 class AndroidPressKeyArgs(ToolArgs):
     key: Literal[
-        "back", "home", "menu", "app_switch", "power",
-        "volume_up", "volume_down",
+        "back",
+        "home",
+        "menu",
+        "app_switch",
+        "power",
+        "volume_up",
+        "volume_down",
     ] = Field(description="Android hardware/system key")
 
 
@@ -78,6 +83,7 @@ class AndroidPinchArgs(ToolArgs):
 
 # Per AndroidDriver.click contract: requires bbox to compute center.
 # Our tool takes raw (x, y) and dispatches via mcp.tap directly.
+
 
 async def _android_click(ctx: ToolContext, args: AndroidClickArgs) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
@@ -91,7 +97,8 @@ async def _android_click(ctx: ToolContext, args: AndroidClickArgs) -> dict[str, 
 
 
 async def _android_double_click(
-    ctx: ToolContext, args: AndroidDoubleClickArgs,
+    ctx: ToolContext,
+    args: AndroidDoubleClickArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
     return await _invoke_mobile(
@@ -104,7 +111,8 @@ async def _android_double_click(
 
 
 async def _android_long_press(
-    ctx: ToolContext, args: AndroidLongPressArgs,
+    ctx: ToolContext,
+    args: AndroidLongPressArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
     return await _invoke_mobile(
@@ -134,7 +142,8 @@ async def _android_type(ctx: ToolContext, args: AndroidTypeArgs) -> dict[str, An
 
 
 async def _android_clear_text(
-    ctx: ToolContext, args: AndroidClearTextArgs,
+    ctx: ToolContext,
+    args: AndroidClearTextArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
     return await _invoke_mobile(
@@ -158,7 +167,10 @@ async def _android_swipe(ctx: ToolContext, args: AndroidSwipeArgs) -> dict[str, 
             "duration_ms": args.duration_ms,
         },
         coro_factory=lambda: drv.swipe(
-            args.start_x, args.start_y, args.end_x, args.end_y,
+            args.start_x,
+            args.start_y,
+            args.end_x,
+            args.end_y,
             duration_ms=args.duration_ms,
         ),
     )
@@ -176,7 +188,8 @@ async def _android_scroll(ctx: ToolContext, args: AndroidScrollArgs) -> dict[str
 
 
 async def _android_press_key(
-    ctx: ToolContext, args: AndroidPressKeyArgs,
+    ctx: ToolContext,
+    args: AndroidPressKeyArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
     return await _invoke_mobile(

@@ -26,19 +26,20 @@ def _gh_path() -> str:
     path = shutil.which("gh")
     if path is None:
         raise RuntimeError(
-            "gh CLI not found; install via "
-            "`brew install gh` and authenticate with `gh auth login`",
+            "gh CLI not found; install via `brew install gh` and authenticate with `gh auth login`",
         )
     return path
 
 
 async def _run_gh(
-    *args: str, timeout: float = 60.0,  # noqa: ASYNC109 — propagates to wait_for
+    *args: str,
+    timeout: float = 60.0,  # noqa: ASYNC109 — propagates to wait_for
 ) -> dict[str, Any]:
     """Run ``gh <args>`` capturing stdout/stderr. Returns structured result."""
     gh = _gh_path()
     proc = await asyncio.create_subprocess_exec(
-        gh, *args,
+        gh,
+        *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -87,8 +88,7 @@ async def _invoke_gh(
     result = await _run_gh(*cmd, timeout=timeout)
     _emit_audit(
         ctx,
-        "body.action.executed" if result.get("status") == "ok"
-        else "body.action.failed",
+        "body.action.executed" if result.get("status") == "ok" else "body.action.failed",
         {
             "action_type": action_type,
             "target_uri_redacted": target_uri,

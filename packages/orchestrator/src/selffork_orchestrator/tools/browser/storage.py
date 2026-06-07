@@ -56,32 +56,42 @@ async def _browser_cookies_get(ctx: ToolContext, args: BrowserCookiesGetArgs) ->
         return {"count": len(cookies), "cookies": cookies[:100]}
 
     return await _invoke_browser(
-        ctx, action_type="browser.cookies_get", target_uri=args.url,
-        args_summary={"url": args.url}, coro_factory=_get,
+        ctx,
+        action_type="browser.cookies_get",
+        target_uri=args.url,
+        args_summary={"url": args.url},
+        coro_factory=_get,
     )
 
 
 async def _browser_cookies_set(ctx: ToolContext, args: BrowserCookiesSetArgs) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
     return await _invoke_browser(
-        ctx, action_type="browser.cookies_set", target_uri=None,
+        ctx,
+        action_type="browser.cookies_set",
+        target_uri=None,
         args_summary={"count": len(args.cookies)},
         coro_factory=lambda: drv.cookies_set(args.cookies),
     )
 
 
 async def _browser_cookies_clear(
-    ctx: ToolContext, args: BrowserCookiesClearArgs,
+    ctx: ToolContext,
+    args: BrowserCookiesClearArgs,
 ) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
     return await _invoke_browser(
-        ctx, action_type="browser.cookies_clear", target_uri=None,
-        args_summary={}, coro_factory=lambda: drv.cookies_clear(),
+        ctx,
+        action_type="browser.cookies_clear",
+        target_uri=None,
+        args_summary={},
+        coro_factory=lambda: drv.cookies_clear(),
     )
 
 
 async def _browser_local_storage_get(
-    ctx: ToolContext, args: BrowserLocalStorageGetArgs,
+    ctx: ToolContext,
+    args: BrowserLocalStorageGetArgs,
 ) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
 
@@ -90,44 +100,84 @@ async def _browser_local_storage_get(
         return {"key": args.key, "value": value}
 
     return await _invoke_browser(
-        ctx, action_type="browser.local_storage_get", target_uri=f"ls:{args.key}",
-        args_summary={"key": args.key}, coro_factory=_get,
+        ctx,
+        action_type="browser.local_storage_get",
+        target_uri=f"ls:{args.key}",
+        args_summary={"key": args.key},
+        coro_factory=_get,
     )
 
 
 async def _browser_local_storage_set(
-    ctx: ToolContext, args: BrowserLocalStorageSetArgs,
+    ctx: ToolContext,
+    args: BrowserLocalStorageSetArgs,
 ) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
     return await _invoke_browser(
-        ctx, action_type="browser.local_storage_set", target_uri=f"ls:{args.key}",
+        ctx,
+        action_type="browser.local_storage_set",
+        target_uri=f"ls:{args.key}",
         args_summary={"key": args.key, "value_len": len(args.value)},
         coro_factory=lambda: drv.local_storage_set(args.key, args.value),
     )
 
 
 async def _browser_local_storage_clear(
-    ctx: ToolContext, args: BrowserLocalStorageClearArgs,
+    ctx: ToolContext,
+    args: BrowserLocalStorageClearArgs,
 ) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
     return await _invoke_browser(
-        ctx, action_type="browser.local_storage_clear", target_uri=None,
-        args_summary={}, coro_factory=lambda: drv.local_storage_clear(),
+        ctx,
+        action_type="browser.local_storage_clear",
+        target_uri=None,
+        args_summary={},
+        coro_factory=lambda: drv.local_storage_clear(),
     )
 
 
 def build_browser_storage_tools() -> list[ToolSpec[Any]]:
     return [
-        ToolSpec(name="browser_cookies_get", description="Read cookies (optionally scoped by URL).",
-                 args_model=BrowserCookiesGetArgs, handler=_browser_cookies_get, defer_loading=True),  # noqa: E501
-        ToolSpec(name="browser_cookies_set", description="Set one or more cookies.",
-                 args_model=BrowserCookiesSetArgs, handler=_browser_cookies_set, defer_loading=True),  # noqa: E501
-        ToolSpec(name="browser_cookies_clear", description="Clear all cookies in the active context.",  # noqa: E501
-                 args_model=BrowserCookiesClearArgs, handler=_browser_cookies_clear, defer_loading=True),  # noqa: E501
-        ToolSpec(name="browser_local_storage_get", description="Read a localStorage key on the active page.",  # noqa: E501
-                 args_model=BrowserLocalStorageGetArgs, handler=_browser_local_storage_get, defer_loading=True),  # noqa: E501
-        ToolSpec(name="browser_local_storage_set", description="Write a localStorage key on the active page.",  # noqa: E501
-                 args_model=BrowserLocalStorageSetArgs, handler=_browser_local_storage_set, defer_loading=True),  # noqa: E501
-        ToolSpec(name="browser_local_storage_clear", description="Clear localStorage on the active page.",  # noqa: E501
-                 args_model=BrowserLocalStorageClearArgs, handler=_browser_local_storage_clear, defer_loading=True),  # noqa: E501
+        ToolSpec(
+            name="browser_cookies_get",
+            description="Read cookies (optionally scoped by URL).",
+            args_model=BrowserCookiesGetArgs,
+            handler=_browser_cookies_get,
+            defer_loading=True,
+        ),  # noqa: E501
+        ToolSpec(
+            name="browser_cookies_set",
+            description="Set one or more cookies.",
+            args_model=BrowserCookiesSetArgs,
+            handler=_browser_cookies_set,
+            defer_loading=True,
+        ),  # noqa: E501
+        ToolSpec(
+            name="browser_cookies_clear",
+            description="Clear all cookies in the active context.",  # noqa: E501
+            args_model=BrowserCookiesClearArgs,
+            handler=_browser_cookies_clear,
+            defer_loading=True,
+        ),  # noqa: E501
+        ToolSpec(
+            name="browser_local_storage_get",
+            description="Read a localStorage key on the active page.",  # noqa: E501
+            args_model=BrowserLocalStorageGetArgs,
+            handler=_browser_local_storage_get,
+            defer_loading=True,
+        ),  # noqa: E501
+        ToolSpec(
+            name="browser_local_storage_set",
+            description="Write a localStorage key on the active page.",  # noqa: E501
+            args_model=BrowserLocalStorageSetArgs,
+            handler=_browser_local_storage_set,
+            defer_loading=True,
+        ),  # noqa: E501
+        ToolSpec(
+            name="browser_local_storage_clear",
+            description="Clear localStorage on the active page.",  # noqa: E501
+            args_model=BrowserLocalStorageClearArgs,
+            handler=_browser_local_storage_clear,
+            defer_loading=True,
+        ),  # noqa: E501
     ]

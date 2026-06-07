@@ -49,12 +49,14 @@ class QuestDriver(AndroidDriver):
     async def passthrough_enable(self) -> str:
         """Toggle Quest passthrough ON. Meta-specific intent."""
         return await self.fallback.broadcast(
-            _META_PASSTHROUGH_TOGGLE, extras={"state": "on"},
+            _META_PASSTHROUGH_TOGGLE,
+            extras={"state": "on"},
         )
 
     async def passthrough_disable(self) -> str:
         return await self.fallback.broadcast(
-            _META_PASSTHROUGH_TOGGLE, extras={"state": "off"},
+            _META_PASSTHROUGH_TOGGLE,
+            extras={"state": "off"},
         )
 
     async def press_meta_button(self) -> str:
@@ -81,7 +83,9 @@ class QuestDriver(AndroidDriver):
             "y": "KEYCODE_BUTTON_Y",
             "grip": "KEYCODE_BUTTON_R2" if controller == "right" else "KEYCODE_BUTTON_L2",
             "trigger": "KEYCODE_BUTTON_R1" if controller == "right" else "KEYCODE_BUTTON_L1",
-            "thumbstick": "KEYCODE_BUTTON_THUMBR" if controller == "right" else "KEYCODE_BUTTON_THUMBL",
+            "thumbstick": "KEYCODE_BUTTON_THUMBR"
+            if controller == "right"
+            else "KEYCODE_BUTTON_THUMBL",
         }
         keycode = keycode_map[button]
         return await self.fallback.adb_shell(f"input keyevent {keycode}")
@@ -166,10 +170,7 @@ class QuestDriver(AndroidDriver):
             if line.startswith("package:"):
                 pkg = line.removeprefix("package:").strip()
                 # VR-app heuristic: typical Quest apps contain "oculus", "meta", or "vr"
-                is_vr = any(
-                    marker in pkg.lower()
-                    for marker in ("oculus", "meta", "vr", "quest")
-                )
+                is_vr = any(marker in pkg.lower() for marker in ("oculus", "meta", "vr", "quest"))
                 out.append({"package": pkg, "is_vr_heuristic": str(is_vr)})
         return out
 
@@ -177,8 +178,11 @@ class QuestDriver(AndroidDriver):
         """One-shot summary of device + battery + runtime — useful for handoffs."""
         info = await self.get_device_info()
         battery = await self.get_combined_battery()
-        return json.dumps({
-            "info": info,
-            "headset_level": battery["headset_level"],
-            "controllers": battery["controllers"],
-        }, indent=2)
+        return json.dumps(
+            {
+                "info": info,
+                "headset_level": battery["headset_level"],
+                "controllers": battery["controllers"],
+            },
+            indent=2,
+        )

@@ -27,6 +27,7 @@ the most recent ``token_count`` event.
 
 Auth-only: if ``~/.codex/auth.json`` is missing, we return ``None``.
 """
+
 from __future__ import annotations
 
 import json
@@ -178,9 +179,7 @@ class CodexSnapper(Snapper):
             except OverflowError:
                 continue
             window_seconds = (
-                max(int(window_minutes) * 60, 1)
-                if isinstance(window_minutes, (int, float))
-                else 1
+                max(int(window_minutes) * 60, 1) if isinstance(window_minutes, (int, float)) else 1
             )
             result[target] = WindowState(
                 used_pct=float(used_pct),

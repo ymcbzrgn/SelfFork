@@ -55,7 +55,11 @@ class IosUnlockDeviceArgs(ToolArgs):
 
 class IosPressButtonArgs(ToolArgs):
     button: Literal[
-        "home", "lock", "volumeup", "volumedown", "siri",
+        "home",
+        "lock",
+        "volumeup",
+        "volumedown",
+        "siri",
     ] = Field(description="Hardware button to press")
 
 
@@ -113,7 +117,8 @@ async def _ios_set_clipboard(ctx: ToolContext, args: IosSetClipboardArgs) -> dic
 
 
 async def _ios_terminate_keyboard(
-    ctx: ToolContext, args: IosTerminateKeyboardArgs,
+    ctx: ToolContext,
+    args: IosTerminateKeyboardArgs,
 ) -> dict[str, Any]:
     drv = _require_ios_driver(ctx)
     return await _invoke_mobile(

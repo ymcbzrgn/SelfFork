@@ -110,9 +110,7 @@ def test_audit_writer_appends_lines(tmp_path: Path) -> None:
     target = tmp_path / "audit.jsonl"
     writer = AuditWriter(path=target)
     for i in range(3):
-        writer.write(
-            AuditEntry(tick=i, timestamp=datetime.now(UTC), trigger="t")
-        )
+        writer.write(AuditEntry(tick=i, timestamp=datetime.now(UTC), trigger="t"))
     lines = target.read_text(encoding="utf-8").strip().split("\n")
     assert len(lines) == 3
     for i, line in enumerate(lines):
@@ -176,9 +174,7 @@ def test_build_audit_entry_minimal() -> None:
 
 
 def test_build_audit_entry_with_decision_and_result() -> None:
-    decision = ActionDecision(
-        action=LegalAction.TASK_START, reasoning="Login refactor"
-    )
+    decision = ActionDecision(action=LegalAction.TASK_START, reasoning="Login refactor")
     result = ActionResult(
         action=LegalAction.TASK_START,
         outcome="executed",
@@ -326,9 +322,7 @@ def test_writer_write_correction_creates_parent_dir(tmp_path: Path) -> None:
 
     target = tmp_path / "nested" / "audit.jsonl"
     writer = AuditWriter(path=target)
-    writer.write_correction(
-        Correction(audit_idempotency_key="k", correction_text="t")
-    )
+    writer.write_correction(Correction(audit_idempotency_key="k", correction_text="t"))
     assert (tmp_path / "nested" / "corrections.jsonl").is_file()
 
 
@@ -368,13 +362,9 @@ def test_writer_read_corrections_skips_malformed_lines(tmp_path: Path) -> None:
 
     target = tmp_path / "corrections.jsonl"
     target.write_text(
-        Correction(
-            audit_idempotency_key="k", correction_text="ok"
-        ).as_jsonl()
+        Correction(audit_idempotency_key="k", correction_text="ok").as_jsonl()
         + "this is not json\n"
-        + Correction(
-            audit_idempotency_key="k2", correction_text="also ok"
-        ).as_jsonl(),
+        + Correction(audit_idempotency_key="k2", correction_text="also ok").as_jsonl(),
         encoding="utf-8",
     )
     writer = AuditWriter(path=tmp_path / "audit.jsonl")
@@ -389,14 +379,8 @@ def test_writer_audit_and_corrections_independent(tmp_path: Path) -> None:
     from selffork_orchestrator.heartbeat.audit import Correction
 
     writer = AuditWriter(path=tmp_path / "audit.jsonl")
-    writer.write(
-        AuditEntry(
-            tick=1, timestamp=datetime(2026, 5, 26, tzinfo=UTC), trigger="t"
-        )
-    )
-    writer.write_correction(
-        Correction(audit_idempotency_key="1:noop:global", correction_text="x")
-    )
+    writer.write(AuditEntry(tick=1, timestamp=datetime(2026, 5, 26, tzinfo=UTC), trigger="t"))
+    writer.write_correction(Correction(audit_idempotency_key="1:noop:global", correction_text="x"))
     assert len(list(writer.read_all())) == 1
     assert len(list(writer.read_corrections())) == 1
 

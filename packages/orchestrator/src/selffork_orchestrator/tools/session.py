@@ -4,6 +4,7 @@
 - ``mark_done``: emit the [SELFFORK:DONE] sentinel (round-loop driver scans it)
 - ``cancel_pending``: revoke a previously-emitted act-tool decision
 """
+
 from __future__ import annotations
 
 from typing import Any

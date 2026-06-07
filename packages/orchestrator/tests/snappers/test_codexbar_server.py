@@ -244,9 +244,7 @@ def test_resolver_disabled_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert server.binary is None
 
 
-def test_resolver_picks_explicit_override(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_resolver_picks_explicit_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     fake = tmp_path / "codexbar"
     fake.write_text("#!/bin/sh\nexit 0\n")
     fake.chmod(0o755)

@@ -101,13 +101,9 @@ class AutonomySettings(BaseModel):
     enabled: bool = True
     supervised_mode: bool = False
     creative_dial: CreativeDial = CreativeDial.CLOSED
-    creative_veto_window_hours: int = Field(
-        default=DEFAULT_CREATIVE_VETO_WINDOW_HOURS, ge=1, le=72
-    )
+    creative_veto_window_hours: int = Field(default=DEFAULT_CREATIVE_VETO_WINDOW_HOURS, ge=1, le=72)
     tick_seconds: float = Field(default=DEFAULT_TICK_SECONDS, ge=0.05)
-    reconciliation_seconds: float = Field(
-        default=DEFAULT_RECONCILIATION_SECONDS, ge=10.0
-    )
+    reconciliation_seconds: float = Field(default=DEFAULT_RECONCILIATION_SECONDS, ge=10.0)
     max_concurrency: int = Field(default=DEFAULT_MAX_CONCURRENCY, ge=1)
     active_hours: str = DEFAULT_ACTIVE_HOURS
     timezone: str = DEFAULT_TIMEZONE
@@ -208,16 +204,12 @@ class AutonomyStore:
             )
             return None
 
-    def read_or_default(
-        self, default: AutonomySettings | None = None
-    ) -> AutonomySettings:
+    def read_or_default(self, default: AutonomySettings | None = None) -> AutonomySettings:
         """Return persisted settings or a fallback (default preset)."""
         persisted = self.read()
         if persisted is not None:
             return persisted
-        return default if default is not None else apply_preset(
-            AutonomyPreset.DENGELI
-        )
+        return default if default is not None else apply_preset(AutonomyPreset.DENGELI)
 
     def write(self, settings: AutonomySettings) -> None:
         """Atomically persist ``settings`` to disk."""

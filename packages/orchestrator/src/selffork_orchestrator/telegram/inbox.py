@@ -11,6 +11,7 @@ SQLite over JSONL: the ``WHERE delivered = 0`` predicate is awkward in
 append-only files, and the orchestrator already uses SQLite (Mind T2,
 project store).
 """
+
 from __future__ import annotations
 
 import sqlite3

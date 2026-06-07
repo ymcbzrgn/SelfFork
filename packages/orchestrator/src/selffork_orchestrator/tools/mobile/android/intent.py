@@ -40,8 +40,15 @@ class AndroidDeeplinkArgs(ToolArgs):
 
 class AndroidPressButtonArgs(ToolArgs):
     button: Literal[
-        "back", "home", "menu", "app_switch", "recent",
-        "power", "lock", "volume_up", "volume_down",
+        "back",
+        "home",
+        "menu",
+        "app_switch",
+        "recent",
+        "power",
+        "lock",
+        "volume_up",
+        "volume_down",
     ] = Field(description="Hardware/system button name")
 
 
@@ -78,7 +85,8 @@ async def _android_intent(ctx: ToolContext, args: AndroidIntentArgs) -> dict[str
 
 
 async def _android_broadcast(
-    ctx: ToolContext, args: AndroidBroadcastArgs,
+    ctx: ToolContext,
+    args: AndroidBroadcastArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
 
@@ -99,7 +107,8 @@ async def _android_broadcast(
 
 
 async def _android_deeplink(
-    ctx: ToolContext, args: AndroidDeeplinkArgs,
+    ctx: ToolContext,
+    args: AndroidDeeplinkArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
 
@@ -117,7 +126,8 @@ async def _android_deeplink(
 
 
 async def _android_press_button(
-    ctx: ToolContext, args: AndroidPressButtonArgs,
+    ctx: ToolContext,
+    args: AndroidPressButtonArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
     return await _invoke_mobile(
@@ -130,7 +140,8 @@ async def _android_press_button(
 
 
 async def _android_notification_post(
-    ctx: ToolContext, args: AndroidNotificationPostArgs,
+    ctx: ToolContext,
+    args: AndroidNotificationPostArgs,
 ) -> dict[str, Any]:
     """Post a system notification via a synthetic intent.
 
@@ -141,10 +152,7 @@ async def _android_notification_post(
     drv = _require_android_driver(ctx)
 
     async def _post() -> dict[str, Any]:
-        cmd = (
-            f'cmd notification post -S bigtext -t {args.title!r} '
-            f"selffork-toolfleet {args.body!r}"
-        )
+        cmd = f"cmd notification post -S bigtext -t {args.title!r} selffork-toolfleet {args.body!r}"
         out = await drv.shell(cmd)
         return {"output": out[:1024], "package": args.package}
 

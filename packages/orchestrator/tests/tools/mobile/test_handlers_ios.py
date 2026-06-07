@@ -133,7 +133,8 @@ async def test_require_ios_driver_rejects_android(ctx_android) -> None:
 
 
 async def test_require_ios_driver_accepts_composite_ios(
-    ctx_composite, stub_composite_driver,
+    ctx_composite,
+    stub_composite_driver,
 ) -> None:
     drv = _require_ios_driver(ctx_composite)
     assert drv is stub_composite_driver.ios
@@ -406,7 +407,8 @@ async def test_ios_open_url(ctx_ios, stub_ios_driver) -> None:
 
 async def test_ios_set_geolocation(ctx_ios, stub_ios_driver) -> None:
     await _ios_set_geolocation(
-        ctx_ios, IosSetGeolocationArgs(latitude=40.0, longitude=-3.7),
+        ctx_ios,
+        IosSetGeolocationArgs(latitude=40.0, longitude=-3.7),
     )
     assert any(c[0] == "set_geolocation" for c in stub_ios_driver.calls)
 
@@ -418,7 +420,8 @@ async def test_ios_get_geolocation(ctx_ios, stub_ios_driver) -> None:
 
 async def test_ios_record_video_start(ctx_ios, stub_ios_driver) -> None:
     await _ios_record_video_start(
-        ctx_ios, IosRecordVideoStartArgs(output_path="/tmp/v.mp4"),
+        ctx_ios,
+        IosRecordVideoStartArgs(output_path="/tmp/v.mp4"),
     )
     assert any(c[0] == "record_video_start" for c in stub_ios_driver.calls)
 
@@ -433,7 +436,8 @@ async def test_ios_record_video_stop(ctx_ios, stub_ios_driver) -> None:
 
 async def test_ios_find_element(ctx_ios, stub_ios_driver) -> None:
     result = await _ios_find_element(
-        ctx_ios, IosFindElementArgs(by="accessibility id", value="submit"),
+        ctx_ios,
+        IosFindElementArgs(by="accessibility id", value="submit"),
     )
     assert result["status"] == "ok"
 

@@ -66,7 +66,11 @@ class IosScrollArgs(ToolArgs):
 
 class IosPressKeyArgs(ToolArgs):
     key: Literal[
-        "home", "lock", "volumeup", "volumedown", "siri",
+        "home",
+        "lock",
+        "volumeup",
+        "volumedown",
+        "siri",
     ] = Field(description="iOS hardware button / key")
 
 
@@ -148,7 +152,10 @@ async def _ios_swipe(ctx: ToolContext, args: IosSwipeArgs) -> dict[str, Any]:
             "duration_ms": args.duration_ms,
         },
         coro_factory=lambda: drv.swipe(
-            args.start_x, args.start_y, args.end_x, args.end_y,
+            args.start_x,
+            args.start_y,
+            args.end_x,
+            args.end_y,
             duration_ms=args.duration_ms,
         ),
     )
@@ -212,10 +219,7 @@ def build_ios_interaction_tools() -> list[ToolSpec[Any]]:
         ),
         ToolSpec(
             name="ios_press_key",
-            description=(
-                "Press an iOS hardware button: home, lock, volumeup, "
-                "volumedown, siri."
-            ),
+            description=("Press an iOS hardware button: home, lock, volumeup, volumedown, siri."),
             args_model=IosPressKeyArgs,
             handler=_ios_press_key,
             defer_loading=False,

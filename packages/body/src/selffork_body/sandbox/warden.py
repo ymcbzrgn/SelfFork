@@ -175,7 +175,9 @@ class PermissionWarden:
         if self._mode is WardenMode.READ_ONLY:
             if risk_tier == "T0":
                 return PermissionDecision(True, "allow", "read_only:T0_auto", now, "auto")
-            return PermissionDecision(False, "deny", f"read_only:tier_{risk_tier}_blocked", now, "warden")
+            return PermissionDecision(
+                False, "deny", f"read_only:tier_{risk_tier}_blocked", now, "warden"
+            )
         if self._mode is WardenMode.WORKSPACE_WRITE:
             if risk_tier in ("T0", "T1"):
                 return PermissionDecision(True, "allow", "workspace_write:auto", now, "auto")
@@ -193,7 +195,9 @@ class PermissionWarden:
     async def request(self, req: PermissionRequest) -> PermissionDecision:
         if self._state in (WardenState.KILLED, WardenState.INACTIVE):
             now = datetime.now(UTC)
-            return PermissionDecision(False, "deny", f"warden_state:{self._state.value}", now, "warden")
+            return PermissionDecision(
+                False, "deny", f"warden_state:{self._state.value}", now, "warden"
+            )
         async with self._lock:
             auto = self._auto_decision(req.action_type, req.risk_tier, req.target_uri)
             if auto is not None:

@@ -86,9 +86,7 @@ class ToolCatalogRetriever:
         # every token's IDF collapses (N=2 and df=1 → log(1) = 0). The
         # overlap signal keeps the retriever useful both in tests
         # (tiny corpus) and in production (~300 tools at Faz 1+).
-        self._doc_tokens: list[list[str]] = [
-            self._tokens_for(spec) for spec in self._specs
-        ]
+        self._doc_tokens: list[list[str]] = [self._tokens_for(spec) for spec in self._specs]
         self._bm25: BM25Okapi | None = None
         if self._specs:
             self._bm25 = BM25Okapi(self._doc_tokens)
@@ -96,7 +94,8 @@ class ToolCatalogRetriever:
     def _gather_specs(self) -> list[ToolSpec[Any]]:
         if self._include_eager:
             return [
-                spec for name in self._registry.names()
+                spec
+                for name in self._registry.names()
                 if (spec := self._registry.get(name)) is not None
             ]
         return self._registry.deferred_specs()
@@ -138,7 +137,10 @@ class ToolCatalogRetriever:
         query_set = set(query_tokens)
         ranked: list[tuple[float, ToolSpec[Any]]] = []
         for score, spec, doc_tokens in zip(
-            scores, self._specs, self._doc_tokens, strict=True,
+            scores,
+            self._specs,
+            self._doc_tokens,
+            strict=True,
         ):
             overlap = len(query_set & set(doc_tokens))
             if overlap == 0 and float(score) <= 0:
@@ -192,7 +194,8 @@ async def handle_tool_search(
         }
 
     retriever = ToolCatalogRetriever(
-        registry, include_eager=args.include_eager,
+        registry,
+        include_eager=args.include_eager,
     )
     specs = retriever.search(args.query, top_k=args.top_k)
     results = [

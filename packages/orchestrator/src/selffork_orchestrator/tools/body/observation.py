@@ -36,7 +36,8 @@ class BodyAxTreeArgs(ToolArgs):
 
 
 async def _body_screenshot(
-    ctx: ToolContext, args: BodyScreenshotArgs,
+    ctx: ToolContext,
+    args: BodyScreenshotArgs,
 ) -> dict[str, Any]:
     driver = _require_driver(ctx)
 
@@ -72,7 +73,8 @@ async def _body_screenshot(
 
 
 async def _body_ax_tree(
-    ctx: ToolContext, args: BodyAxTreeArgs,
+    ctx: ToolContext,
+    args: BodyAxTreeArgs,
 ) -> dict[str, Any]:
     driver = _require_driver(ctx)
 
@@ -95,17 +97,13 @@ def build_observation_tools() -> list[ToolSpec[Any]]:
     return [
         ToolSpec(
             name="body_screenshot",
-            description=(
-                "Capture a PNG screenshot; optionally crop by rect (T0)."
-            ),
+            description=("Capture a PNG screenshot; optionally crop by rect (T0)."),
             args_model=BodyScreenshotArgs,
             handler=_body_screenshot,
         ),
         ToolSpec(
             name="body_ax_tree",
-            description=(
-                "Dump the accessibility tree of an app or system-wide (T0)."
-            ),
+            description=("Dump the accessibility tree of an app or system-wide (T0)."),
             args_model=BodyAxTreeArgs,
             handler=_body_ax_tree,
         ),

@@ -204,9 +204,7 @@ class IdeationManager:
         idea_id = uuid4().hex[:12]
         title = _derive_title(text)
         created_at = datetime.now(tz=UTC)
-        filename = (
-            f"{created_at.strftime('%Y-%m-%d')}-{size.value}-{idea_id}.md"
-        )
+        filename = f"{created_at.strftime('%Y-%m-%d')}-{size.value}-{idea_id}.md"
         path = self._root / filename
         path.parent.mkdir(parents=True, exist_ok=True)
         body = _render_idea_markdown(

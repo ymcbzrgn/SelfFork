@@ -88,19 +88,27 @@ async def _browser_screenshot(ctx: ToolContext, args: BrowserScreenshotArgs) -> 
                     session_id=ctx.session_id,
                     project_slug=ctx.project_slug,
                 )
-                ref = {"path": str(ref_obj.path), "sha256": ref_obj.sha256, "bytes_size": ref_obj.bytes_size}  # noqa: E501
+                ref = {
+                    "path": str(ref_obj.path),
+                    "sha256": ref_obj.sha256,
+                    "bytes_size": ref_obj.bytes_size,
+                }  # noqa: E501
             except Exception:
                 ref = None
         return {"bytes_size": len(png), "ref": ref}
 
     return await _invoke_browser(
-        ctx, action_type="browser.screenshot", target_uri=None,
-        args_summary={"rect": args.rect}, coro_factory=_shot,
+        ctx,
+        action_type="browser.screenshot",
+        target_uri=None,
+        args_summary={"rect": args.rect},
+        coro_factory=_shot,
     )
 
 
 async def _browser_dom_snapshot(
-    ctx: ToolContext, args: BrowserDomSnapshotArgs,
+    ctx: ToolContext,
+    args: BrowserDomSnapshotArgs,
 ) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
 
@@ -109,13 +117,17 @@ async def _browser_dom_snapshot(
         return {"node_count": len(tree), "preview": tree[:50]}
 
     return await _invoke_browser(
-        ctx, action_type="browser.dom_snapshot", target_uri=None,
-        args_summary={}, coro_factory=_dump,
+        ctx,
+        action_type="browser.dom_snapshot",
+        target_uri=None,
+        args_summary={},
+        coro_factory=_dump,
     )
 
 
 async def _browser_text_content(
-    ctx: ToolContext, args: BrowserTextContentArgs,
+    ctx: ToolContext,
+    args: BrowserTextContentArgs,
 ) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
 
@@ -124,13 +136,17 @@ async def _browser_text_content(
         return {"text": text[:16_384], "len": len(text)}
 
     return await _invoke_browser(
-        ctx, action_type="browser.text_content", target_uri=args.target,
-        args_summary={"target": args.target}, coro_factory=_read,
+        ctx,
+        action_type="browser.text_content",
+        target_uri=args.target,
+        args_summary={"target": args.target},
+        coro_factory=_read,
     )
 
 
 async def _browser_get_attribute(
-    ctx: ToolContext, args: BrowserGetAttributeArgs,
+    ctx: ToolContext,
+    args: BrowserGetAttributeArgs,
 ) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
 
@@ -139,7 +155,9 @@ async def _browser_get_attribute(
         return {"name": args.name, "value": value}
 
     return await _invoke_browser(
-        ctx, action_type="browser.get_attribute", target_uri=args.target,
+        ctx,
+        action_type="browser.get_attribute",
+        target_uri=args.target,
         args_summary={"target": args.target, "name": args.name},
         coro_factory=_read,
     )
@@ -153,13 +171,17 @@ async def _browser_evaluate(ctx: ToolContext, args: BrowserEvaluateArgs) -> dict
         return {"result": repr(result)[:8192]}
 
     return await _invoke_browser(
-        ctx, action_type="browser.evaluate", target_uri=None,
-        args_summary={"js_len": len(args.js_code)}, coro_factory=_eval,
+        ctx,
+        action_type="browser.evaluate",
+        target_uri=None,
+        args_summary={"js_len": len(args.js_code)},
+        coro_factory=_eval,
     )
 
 
 async def _browser_query_selector(
-    ctx: ToolContext, args: BrowserQuerySelectorArgs,
+    ctx: ToolContext,
+    args: BrowserQuerySelectorArgs,
 ) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
 
@@ -168,13 +190,17 @@ async def _browser_query_selector(
         return {"found": el is not None, "element": el}
 
     return await _invoke_browser(
-        ctx, action_type="browser.query_selector", target_uri=args.target,
-        args_summary={"target": args.target}, coro_factory=_q,
+        ctx,
+        action_type="browser.query_selector",
+        target_uri=args.target,
+        args_summary={"target": args.target},
+        coro_factory=_q,
     )
 
 
 async def _browser_query_selector_all(
-    ctx: ToolContext, args: BrowserQuerySelectorAllArgs,
+    ctx: ToolContext,
+    args: BrowserQuerySelectorAllArgs,
 ) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
 
@@ -183,7 +209,9 @@ async def _browser_query_selector_all(
         return {"count": len(els), "elements": els}
 
     return await _invoke_browser(
-        ctx, action_type="browser.query_selector_all", target_uri=args.target,
+        ctx,
+        action_type="browser.query_selector_all",
+        target_uri=args.target,
         args_summary={"target": args.target, "max_items": args.max_items},
         coro_factory=_q,
     )
@@ -197,13 +225,17 @@ async def _browser_get_pdf(ctx: ToolContext, args: BrowserGetPdfArgs) -> dict[st
         return {"bytes_size": len(data), "output_path": args.output_path}
 
     return await _invoke_browser(
-        ctx, action_type="browser.get_pdf", target_uri=args.output_path,
-        args_summary={"output_path": args.output_path}, coro_factory=_pdf,
+        ctx,
+        action_type="browser.get_pdf",
+        target_uri=args.output_path,
+        args_summary={"output_path": args.output_path},
+        coro_factory=_pdf,
     )
 
 
 async def _browser_screenshot_element(
-    ctx: ToolContext, args: BrowserScreenshotElementArgs,
+    ctx: ToolContext,
+    args: BrowserScreenshotElementArgs,
 ) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
 
@@ -212,8 +244,11 @@ async def _browser_screenshot_element(
         return {"bytes_size": len(png)}
 
     return await _invoke_browser(
-        ctx, action_type="browser.screenshot_element", target_uri=args.target,
-        args_summary={"target": args.target}, coro_factory=_shot,
+        ctx,
+        action_type="browser.screenshot_element",
+        target_uri=args.target,
+        args_summary={"target": args.target},
+        coro_factory=_shot,
     )
 
 
@@ -225,13 +260,17 @@ async def _browser_get_html(ctx: ToolContext, args: BrowserGetHtmlArgs) -> dict[
         return {"len": len(html), "preview": html[:8192]}
 
     return await _invoke_browser(
-        ctx, action_type="browser.get_html", target_uri=None,
-        args_summary={}, coro_factory=_html,
+        ctx,
+        action_type="browser.get_html",
+        target_uri=None,
+        args_summary={},
+        coro_factory=_html,
     )
 
 
 async def _browser_get_console_logs(
-    ctx: ToolContext, args: BrowserGetConsoleLogsArgs,
+    ctx: ToolContext,
+    args: BrowserGetConsoleLogsArgs,
 ) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
 
@@ -240,8 +279,11 @@ async def _browser_get_console_logs(
         return {"count": len(logs), "preview": logs[:50]}
 
     return await _invoke_browser(
-        ctx, action_type="browser.get_console_logs", target_uri=None,
-        args_summary={}, coro_factory=_logs,
+        ctx,
+        action_type="browser.get_console_logs",
+        target_uri=None,
+        args_summary={},
+        coro_factory=_logs,
     )
 
 

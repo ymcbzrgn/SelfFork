@@ -60,12 +60,20 @@ class DockerAndroidRuntime:
 
     def _docker_run_command(self) -> list[str]:
         cmd = [
-            "docker", "run", "--privileged", "-d",
-            "-e", f"EMULATOR_DEVICE={self.device_type}",
-            "-e", "WEB_VNC=true",
-            "-p", f"{self.appium_port}:4723",
-            "-p", f"{self.web_port}:6080",
-            "-p", f"{self.adb_host_port}:5555",
+            "docker",
+            "run",
+            "--privileged",
+            "-d",
+            "-e",
+            f"EMULATOR_DEVICE={self.device_type}",
+            "-e",
+            "WEB_VNC=true",
+            "-p",
+            f"{self.appium_port}:4723",
+            "-p",
+            f"{self.web_port}:6080",
+            "-p",
+            f"{self.adb_host_port}:5555",
         ]
         if self.container_name:
             cmd += ["--name", self.container_name]
@@ -110,9 +118,15 @@ class DockerAndroidRuntime:
         if self._container_id is None:
             return False
         proc = await asyncio.create_subprocess_exec(
-            "docker", "exec", self._container_id,
-            "adb", "-s", "emulator-5554",
-            "shell", "getprop", "sys.boot_completed",
+            "docker",
+            "exec",
+            self._container_id,
+            "adb",
+            "-s",
+            "emulator-5554",
+            "shell",
+            "getprop",
+            "sys.boot_completed",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -124,7 +138,9 @@ class DockerAndroidRuntime:
             return
         for action in ("kill", "rm"):
             proc = await asyncio.create_subprocess_exec(
-                "docker", action, self._container_id,
+                "docker",
+                action,
+                self._container_id,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )

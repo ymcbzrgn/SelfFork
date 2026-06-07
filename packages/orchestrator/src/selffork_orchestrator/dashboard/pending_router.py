@@ -22,9 +22,7 @@ from selffork_body.sandbox.pending_confirmations import (
 _log = logging.getLogger(__name__)
 
 
-def _audit_extended(
-    entry: PendingConfirmation, *, hours: int, by: str
-) -> None:
+def _audit_extended(entry: PendingConfirmation, *, hours: int, by: str) -> None:
     """Best-effort log of a ``destructive_action_extended`` event.
 
     The orchestrator's per-session :class:`AuditLogger` is scoped to a
@@ -110,10 +108,7 @@ def build_pending_router(*, store: PendingConfirmationStore) -> APIRouter:
         """Pending confirmations scoped to a single workspace."""
         store.reload_from_disk()
         store.expire_stale()
-        return [
-            _serialise(p)
-            for p in store.list_pending(workspace_slug=slug)
-        ]
+        return [_serialise(p) for p in store.list_pending(workspace_slug=slug)]
 
     @router.post(
         "/api/pending-confirmations/{confirmation_id}/approve",

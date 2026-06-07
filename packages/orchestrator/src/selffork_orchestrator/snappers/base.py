@@ -17,6 +17,7 @@ Operator-tunable env vars:
   (default ``~/.selffork/cli-state/``). Used by tests to isolate from
   the operator's real on-disk surfaces.
 """
+
 from __future__ import annotations
 
 import contextlib

@@ -78,14 +78,10 @@ failure.
 """
 
 
-_JSON_BLOCK_RE: Final[re.Pattern[str]] = re.compile(
-    r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL
-)
+_JSON_BLOCK_RE: Final[re.Pattern[str]] = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 """Match a fenced JSON block. The first capture group is the JSON body."""
 
-_BARE_JSON_RE: Final[re.Pattern[str]] = re.compile(
-    r"(\{[^{}]*\"action\"[^{}]*\})", re.DOTALL
-)
+_BARE_JSON_RE: Final[re.Pattern[str]] = re.compile(r"(\{[^{}]*\"action\"[^{}]*\})", re.DOTALL)
 """Fallback: a bare JSON object containing an ``action`` key (no fences)."""
 
 
@@ -180,9 +176,7 @@ class DeliberationLayer:
                 fallback=True,
             )
 
-        user_prompt = self._render_user_prompt(
-            legal_actions, world_state, resume_hint
-        )
+        user_prompt = self._render_user_prompt(legal_actions, world_state, resume_hint)
         messages: Sequence[dict[str, str]] = [
             {"role": "system", "content": self._system_prompt},
             {"role": "user", "content": user_prompt},
@@ -265,24 +259,12 @@ class DeliberationLayer:
         legal_list = ", ".join(sorted(a.value for a in legal_actions))
         quota_summary = self._summarize_quota(state)
         creative = "ON" if state.creative_mode_enabled else "OFF"
-        supervised = (
-            "ON (every act → Telegram approval)"
-            if state.supervised_mode
-            else "OFF"
-        )
+        supervised = "ON (every act → Telegram approval)" if state.supervised_mode else "OFF"
         workspace = state.last_active_workspace or "—"
-        concurrency = (
-            f"{state.active_concurrent_sessions} / "
-            f"{state.max_concurrent_sessions}"
-        )
-        prefix = (
-            f"== Resuming after a restart ==\n{resume_hint}\n\n"
-            if resume_hint
-            else ""
-        )
+        concurrency = f"{state.active_concurrent_sessions} / {state.max_concurrent_sessions}"
+        prefix = f"== Resuming after a restart ==\n{resume_hint}\n\n" if resume_hint else ""
         return (
-            prefix
-            + "== Current state ==\n"
+            prefix + "== Current state ==\n"
             f"- Active workspace (last operator activity): {workspace}\n"
             f"- Pause flag: {'set' if state.pause_active else 'clear'}\n"
             f"- Active concurrent sessions: {concurrency}\n"
@@ -316,9 +298,7 @@ class DeliberationLayer:
 # ── parsing internals ───────────────────────────────────────────────
 
 
-def _parse_decision(
-    reply: str, legal_actions: frozenset[LegalAction]
-) -> tuple[LegalAction, str]:
+def _parse_decision(reply: str, legal_actions: frozenset[LegalAction]) -> tuple[LegalAction, str]:
     """Extract ``(action, reasoning)`` from a model reply.
 
     Tries fenced JSON first, then bare JSON. Raises

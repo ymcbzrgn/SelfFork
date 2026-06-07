@@ -358,9 +358,7 @@ def test_put_destructive_category_window_updates_single_field(
     body = r.json()
     # Source flipped to override + window updated
     assert body["source"] == "override"
-    target = next(
-        c for c in body["categories"] if c["id"] == "social_outbound"
-    )
+    target = next(c for c in body["categories"] if c["id"] == "social_outbound")
     assert target["confirm_window_hours"] == 8
     # Other categories preserved their bundled defaults
     prod = next(c for c in body["categories"] if c["id"] == "prod_deploy")

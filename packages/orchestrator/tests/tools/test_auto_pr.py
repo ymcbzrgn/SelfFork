@@ -59,9 +59,7 @@ def test_args_extra_field_silently_ignored() -> None:
     """ToolArgs base intentionally uses ``extra='ignore'`` (per its
     docstring) so old Jr training data with new field names still parses;
     extra keys are silently dropped, NOT rejected."""
-    args = _AutoPRCreateArgs.model_validate(
-        {"title": "t", "body": "b", "sneaky": "dropped"}
-    )
+    args = _AutoPRCreateArgs.model_validate({"title": "t", "body": "b", "sneaky": "dropped"})
     assert args.title == "t"
     assert not hasattr(args, "sneaky")
 
@@ -161,12 +159,8 @@ def test_handler_omits_head_and_draft_when_not_set(
         captured["cmd"] = list(args[0])
         return _completed(returncode=0, stdout="https://github.com/x/y/pull/1")
 
-    monkeypatch.setattr(
-        "selffork_orchestrator.tools.auto_pr._gh_binary", lambda: "/bin/gh"
-    )
-    monkeypatch.setattr(
-        "selffork_orchestrator.tools.auto_pr.subprocess.run", fake_run
-    )
+    monkeypatch.setattr("selffork_orchestrator.tools.auto_pr._gh_binary", lambda: "/bin/gh")
+    monkeypatch.setattr("selffork_orchestrator.tools.auto_pr.subprocess.run", fake_run)
     _auto_pr_create_handler(
         _ctx(),
         _AutoPRCreateArgs(title="t", body="b"),
@@ -181,9 +175,7 @@ def test_handler_omits_head_and_draft_when_not_set(
 def test_handler_gh_nonzero_returns_gh_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "selffork_orchestrator.tools.auto_pr._gh_binary", lambda: "/bin/gh"
-    )
+    monkeypatch.setattr("selffork_orchestrator.tools.auto_pr._gh_binary", lambda: "/bin/gh")
     monkeypatch.setattr(
         "selffork_orchestrator.tools.auto_pr.subprocess.run",
         lambda *a, **kw: _completed(
@@ -203,9 +195,7 @@ def test_handler_gh_nonzero_returns_gh_error(
 def test_handler_no_url_in_stdout_returns_no_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "selffork_orchestrator.tools.auto_pr._gh_binary", lambda: "/bin/gh"
-    )
+    monkeypatch.setattr("selffork_orchestrator.tools.auto_pr._gh_binary", lambda: "/bin/gh")
     monkeypatch.setattr(
         "selffork_orchestrator.tools.auto_pr.subprocess.run",
         lambda *a, **kw: _completed(
@@ -223,16 +213,12 @@ def test_handler_no_url_in_stdout_returns_no_url(
 def test_handler_subprocess_timeout_returns_structured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "selffork_orchestrator.tools.auto_pr._gh_binary", lambda: "/bin/gh"
-    )
+    monkeypatch.setattr("selffork_orchestrator.tools.auto_pr._gh_binary", lambda: "/bin/gh")
 
     def fake_run(*a: Any, **kw: Any) -> subprocess.CompletedProcess[str]:
         raise subprocess.TimeoutExpired(cmd=["gh"], timeout=60)
 
-    monkeypatch.setattr(
-        "selffork_orchestrator.tools.auto_pr.subprocess.run", fake_run
-    )
+    monkeypatch.setattr("selffork_orchestrator.tools.auto_pr.subprocess.run", fake_run)
     result = _auto_pr_create_handler(
         _ctx(),
         _AutoPRCreateArgs(title="t", body="b"),

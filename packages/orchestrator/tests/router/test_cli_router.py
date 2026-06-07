@@ -86,9 +86,7 @@ def _router(
 
 async def test_sticky_override_cli_and_model(tmp_path: Path) -> None:
     router = _router(tmp_path)
-    router.override_store.set(
-        workspace="demo", cli="codex", model="gpt-5.3-codex", sticky=True
-    )
+    router.override_store.set(workspace="demo", cli="codex", model="gpt-5.3-codex", sticky=True)
     sel = await router.select_cli(workspace="demo", task_type="t")
     assert sel.method == "override"
     assert sel.cli == "codex"
@@ -108,9 +106,7 @@ async def test_override_cli_only_affinity_picks_model(tmp_path: Path) -> None:
 
 async def test_single_turn_override_then_affinity(tmp_path: Path) -> None:
     router = _router(tmp_path)
-    router.override_store.set(
-        workspace="demo", cli="opencode", sticky=False
-    )
+    router.override_store.set(workspace="demo", cli="opencode", sticky=False)
     first = await router.select_cli(workspace="demo")
     assert first.method == "override"
     assert first.cli == "opencode"
@@ -173,9 +169,7 @@ async def test_all_exhausted_raises(tmp_path: Path) -> None:
 
 async def test_affinity_argmax_picks_winning_model(tmp_path: Path) -> None:
     router = _router(tmp_path, candidates=("codex",))
-    router.runtime_store.set_enabled_models(
-        cli="codex", models=["gpt-5.5", "gpt-5.4"]
-    )
+    router.runtime_store.set_enabled_models(cli="codex", models=["gpt-5.5", "gpt-5.4"])
     for _ in range(8):
         await router.affinity.record_outcome(
             workspace="demo",
@@ -223,9 +217,7 @@ async def test_record_outcome_roundtrip(tmp_path: Path) -> None:
         turns=3,
     )
     resolver = await router.affinity.resolver_for("demo")
-    score = await resolver.score(
-        task_type="t", cli="codex", model="gpt-5.5"
-    )
+    score = await resolver.score(task_type="t", cli="codex", model="gpt-5.5")
     assert score.match_level == "project_leaf"
     assert score.score > 0.5
 

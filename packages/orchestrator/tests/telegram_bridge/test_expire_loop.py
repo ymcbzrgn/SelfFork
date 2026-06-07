@@ -32,9 +32,7 @@ async def test_expire_loop_flips_stale_entries() -> None:
     )
     assert entry.status == "pending"
 
-    task = asyncio.create_task(
-        expire_loop(store=store, interval_seconds=0.02)
-    )
+    task = asyncio.create_task(expire_loop(store=store, interval_seconds=0.02))
     # Let one sweep land.
     await asyncio.sleep(0.05)
     task.cancel()
@@ -65,9 +63,7 @@ async def test_expire_loop_cancel_runs_final_sweep() -> None:
     )
     # Start the loop before opening the entry so the request lands
     # while the loop is asleep; cancel before the next tick fires.
-    task = asyncio.create_task(
-        expire_loop(store=store, interval_seconds=10.0)
-    )
+    task = asyncio.create_task(expire_loop(store=store, interval_seconds=10.0))
     # Give the loop a moment to enter its first sleep.
     await asyncio.sleep(0.01)
     entry = store.request(

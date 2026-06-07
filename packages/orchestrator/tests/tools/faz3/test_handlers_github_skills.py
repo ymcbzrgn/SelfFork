@@ -43,27 +43,31 @@ from selffork_orchestrator.tools.skills.tools import (
 @pytest.fixture(autouse=True)
 def mock_gh_run():
     """Mock the gh subprocess call to return success without invoking gh CLI."""
+
     async def _fake_run(*args, timeout=60.0):  # noqa: ASYNC109 — mock signature
         return {
             "status": "ok",
             "returncode": 0,
-            "stdout": '[]',
+            "stdout": "[]",
             "stderr": "",
         }
+
     with patch("selffork_orchestrator.tools.github._internal._run_gh", _fake_run):
         yield
 
 
 async def test_github_repo_list(ctx_no_driver_with_warden) -> None:
     result = await _github_repo_list(
-        ctx_no_driver_with_warden, GithubRepoListArgs(owner="ymcbzrgn"),
+        ctx_no_driver_with_warden,
+        GithubRepoListArgs(owner="ymcbzrgn"),
     )
     assert result["status"] == "ok"
 
 
 async def test_github_issue_list(ctx_no_driver_with_warden) -> None:
     result = await _github_issue_list(
-        ctx_no_driver_with_warden, GithubIssueListArgs(repo="x/y"),
+        ctx_no_driver_with_warden,
+        GithubIssueListArgs(repo="x/y"),
     )
     assert result["status"] == "ok"
 
@@ -97,7 +101,8 @@ def canonical_dir(tmp_path):
 
 async def test_skill_list_empty(ctx_no_driver_with_warden, canonical_dir) -> None:
     result = await _skill_list(
-        ctx_no_driver_with_warden, SkillListArgs(canonical_dir=str(canonical_dir)),
+        ctx_no_driver_with_warden,
+        SkillListArgs(canonical_dir=str(canonical_dir)),
     )
     assert result["result"]["count"] == 0
 
@@ -106,31 +111,38 @@ async def test_skill_create_and_list(ctx_no_driver_with_warden, canonical_dir) -
     create_result = await _skill_create(
         ctx_no_driver_with_warden,
         SkillCreateArgs(
-            name="mytool", description="My test skill",
+            name="mytool",
+            description="My test skill",
             canonical_dir=str(canonical_dir),
         ),
     )
     assert create_result["result"]["status"] == "ok"
     list_result = await _skill_list(
-        ctx_no_driver_with_warden, SkillListArgs(canonical_dir=str(canonical_dir)),
+        ctx_no_driver_with_warden,
+        SkillListArgs(canonical_dir=str(canonical_dir)),
     )
     assert list_result["result"]["count"] == 1
     assert "mytool" in list_result["result"]["names"]
 
 
 async def test_skill_create_idempotent(
-    ctx_no_driver_with_warden, canonical_dir,
+    ctx_no_driver_with_warden,
+    canonical_dir,
 ) -> None:
     await _skill_create(
         ctx_no_driver_with_warden,
         SkillCreateArgs(
-            name="x", description="d", canonical_dir=str(canonical_dir),
+            name="x",
+            description="d",
+            canonical_dir=str(canonical_dir),
         ),
     )
     second = await _skill_create(
         ctx_no_driver_with_warden,
         SkillCreateArgs(
-            name="x", description="d", canonical_dir=str(canonical_dir),
+            name="x",
+            description="d",
+            canonical_dir=str(canonical_dir),
         ),
     )
     assert second["result"]["status"] == "already_exists"
@@ -140,7 +152,9 @@ async def test_skill_show(ctx_no_driver_with_warden, canonical_dir) -> None:
     await _skill_create(
         ctx_no_driver_with_warden,
         SkillCreateArgs(
-            name="x", description="d", canonical_dir=str(canonical_dir),
+            name="x",
+            description="d",
+            canonical_dir=str(canonical_dir),
         ),
     )
     result = await _skill_show(
@@ -163,7 +177,9 @@ async def test_skill_validate_valid(ctx_no_driver_with_warden, canonical_dir) ->
     await _skill_create(
         ctx_no_driver_with_warden,
         SkillCreateArgs(
-            name="v", description="d", canonical_dir=str(canonical_dir),
+            name="v",
+            description="d",
+            canonical_dir=str(canonical_dir),
         ),
     )
     result = await _skill_validate(
@@ -183,12 +199,15 @@ async def test_skill_validate_missing(ctx_no_driver_with_warden, canonical_dir) 
 
 
 async def test_skill_uninstall_removes_dir(
-    ctx_no_driver_with_warden, canonical_dir,
+    ctx_no_driver_with_warden,
+    canonical_dir,
 ) -> None:
     await _skill_create(
         ctx_no_driver_with_warden,
         SkillCreateArgs(
-            name="bye", description="d", canonical_dir=str(canonical_dir),
+            name="bye",
+            description="d",
+            canonical_dir=str(canonical_dir),
         ),
     )
     result = await _skill_uninstall(
@@ -200,7 +219,8 @@ async def test_skill_uninstall_removes_dir(
 
 
 async def test_skill_uninstall_not_installed(
-    ctx_no_driver_with_warden, canonical_dir,
+    ctx_no_driver_with_warden,
+    canonical_dir,
 ) -> None:
     result = await _skill_uninstall(
         ctx_no_driver_with_warden,
@@ -210,12 +230,14 @@ async def test_skill_uninstall_not_installed(
 
 
 async def test_skill_search_in_manifest(
-    ctx_no_driver_with_warden, canonical_dir,
+    ctx_no_driver_with_warden,
+    canonical_dir,
 ) -> None:
     await _skill_create(
         ctx_no_driver_with_warden,
         SkillCreateArgs(
-            name="found", description="searchable description",
+            name="found",
+            description="searchable description",
             canonical_dir=str(canonical_dir),
         ),
     )
@@ -227,19 +249,25 @@ async def test_skill_search_in_manifest(
 
 
 async def test_skill_export_creates_tarball(
-    ctx_no_driver_with_warden, canonical_dir, tmp_path,
+    ctx_no_driver_with_warden,
+    canonical_dir,
+    tmp_path,
 ) -> None:
     await _skill_create(
         ctx_no_driver_with_warden,
         SkillCreateArgs(
-            name="exp", description="d", canonical_dir=str(canonical_dir),
+            name="exp",
+            description="d",
+            canonical_dir=str(canonical_dir),
         ),
     )
     out = tmp_path / "exp.tar.gz"
     result = await _skill_export(
         ctx_no_driver_with_warden,
         SkillExportArgs(
-            name="exp", output_path=str(out), canonical_dir=str(canonical_dir),
+            name="exp",
+            output_path=str(out),
+            canonical_dir=str(canonical_dir),
         ),
     )
     assert result["result"]["status"] == "ok"
@@ -248,13 +276,17 @@ async def test_skill_export_creates_tarball(
 
 
 async def test_skill_sync_custom_targets(
-    ctx_no_driver_with_warden, canonical_dir, tmp_path,
+    ctx_no_driver_with_warden,
+    canonical_dir,
+    tmp_path,
 ) -> None:
     """Sync against tmp target dirs so we don't pollute the real CLI skill dirs."""
     await _skill_create(
         ctx_no_driver_with_warden,
         SkillCreateArgs(
-            name="syncme", description="d", canonical_dir=str(canonical_dir),
+            name="syncme",
+            description="d",
+            canonical_dir=str(canonical_dir),
         ),
     )
     target_a = tmp_path / "target_a"
@@ -272,7 +304,9 @@ async def test_skill_sync_custom_targets(
 
 
 async def test_skill_install_local_path(
-    ctx_no_driver_with_warden, canonical_dir, tmp_path,
+    ctx_no_driver_with_warden,
+    canonical_dir,
+    tmp_path,
 ) -> None:
     """Install a skill from a local path."""
     source = tmp_path / "src_skill"
@@ -281,7 +315,8 @@ async def test_skill_install_local_path(
     result = await _skill_install(
         ctx_no_driver_with_warden,
         SkillInstallArgs(
-            name="imported", source=str(source),
+            name="imported",
+            source=str(source),
             canonical_dir=str(canonical_dir),
         ),
     )

@@ -102,9 +102,7 @@ def test_drafts_list_and_claim_cycle(
     assert after.json() == []
 
 
-def test_cross_process_pending_reload(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cross_process_pending_reload(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """A request written by an external process (here: a JSON line on
     disk) becomes visible to the dashboard's pending list after one
     GET — proving the cross-process replay (``reload_from_disk``) works.

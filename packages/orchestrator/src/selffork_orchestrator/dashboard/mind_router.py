@@ -124,9 +124,7 @@ def build_mind_router(*, mind_config: MindConfig) -> APIRouter:
                 status_code=400,
                 detail="limit must be in [1, 1000]",
             )
-        tiers: tuple[TierName, ...] = (
-            (cast(TierName, tier),) if tier is not None else ()
-        )
+        tiers: tuple[TierName, ...] = (cast(TierName, tier),) if tier is not None else ()
         config = RetrieveConfig(
             tiers=tiers,
             scope=StoreScope(project_slug=slug),
@@ -199,10 +197,7 @@ def build_mind_router(*, mind_config: MindConfig) -> APIRouter:
         async with _scoped_store(mind_config, slug) as store:
             stored = await store.upsert_note(note)
             if payload.tag_pairs:
-                tags = [
-                    Tag.now(note_id=stored.id, key=k, value=v)
-                    for k, v in payload.tag_pairs
-                ]
+                tags = [Tag.now(note_id=stored.id, key=k, value=v) for k, v in payload.tag_pairs]
                 await store.attach_tags(tags)
         return _note_to_response(stored)
 
@@ -249,8 +244,7 @@ def build_mind_router(*, mind_config: MindConfig) -> APIRouter:
         # Reject a fully-empty patch — defensive against accidental
         # debounce calls firing with stale empty state.
         if all(
-            getattr(payload, name) is None
-            for name in ("content", "intent", "importance", "pinned")
+            getattr(payload, name) is None for name in ("content", "intent", "importance", "pinned")
         ):
             raise HTTPException(
                 status_code=400,
@@ -263,9 +257,7 @@ def build_mind_router(*, mind_config: MindConfig) -> APIRouter:
                     status_code=404,
                     detail=f"note {note_id!r} not found in project {slug!r}",
                 )
-            new_content = (
-                payload.content if payload.content is not None else old.content
-            )
+            new_content = payload.content if payload.content is not None else old.content
             if not new_content.strip():
                 raise HTTPException(
                     status_code=400,
@@ -286,9 +278,7 @@ def build_mind_router(*, mind_config: MindConfig) -> APIRouter:
                 kind=old.kind,
                 content=new_content,
                 intent=payload.intent if payload.intent is not None else old.intent,
-                importance=payload.importance
-                if payload.importance is not None
-                else old.importance,
+                importance=payload.importance if payload.importance is not None else old.importance,
                 pinned=payload.pinned if payload.pinned is not None else old.pinned,
                 project_slug=slug,
                 session_id=old.session_id,
@@ -334,9 +324,7 @@ def build_mind_router(*, mind_config: MindConfig) -> APIRouter:
         tiers: tuple[TierName, ...] = (
             (cast(TierName, payload.tier),) if payload.tier is not None else ()
         )
-        tag_pairs: tuple[tuple[str, str], ...] = tuple(
-            (k, v) for k, v in payload.tag_pairs
-        )
+        tag_pairs: tuple[tuple[str, str], ...] = tuple((k, v) for k, v in payload.tag_pairs)
         # When the operator configures a real embedder, embed the query
         # so the store runs vector cosine search instead of falling back
         # to the recency-weighted baseline. ``mind.embedder = "none"``

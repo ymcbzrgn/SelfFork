@@ -171,9 +171,7 @@ def build_chat_router(
                 detail=f"invalid role {payload.role!r}",
             )
         store = await state.store()
-        branch = await _resolve_or_seed_branch(
-            store, session_id, payload.branch_id
-        )
+        branch = await _resolve_or_seed_branch(store, session_id, payload.branch_id)
         try:
             message = await store.append_message(
                 branch_id=branch.id,
@@ -409,7 +407,8 @@ async def _log_alternative_path(
             session_id=session_id,
         )
         return _AltPathOutcome(
-            status="failed", reason=f"resolver_exc:{type(exc).__name__}",
+            status="failed",
+            reason=f"resolver_exc:{type(exc).__name__}",
         )
     if slug is None:
         return _AltPathOutcome(status="skipped", reason="orphan_session")
@@ -457,7 +456,10 @@ async def _log_alternative_path(
     finally:
         await store.teardown()
     return _AltPathOutcome(
-        status="ok", reason=None, project_slug=slug, note_id=str(note.id),
+        status="ok",
+        reason=None,
+        project_slug=slug,
+        note_id=str(note.id),
     )
 
 
@@ -493,7 +495,8 @@ async def _tail_session_messages(
         for branch in await store.list_branches(session_id):
             after = cursor_by_branch.get(branch.id)
             messages = await store.list_messages_after(
-                branch.id, after=after,
+                branch.id,
+                after=after,
             )
             if messages:
                 cursor_by_branch[branch.id] = messages[-1].created_at
@@ -515,16 +518,8 @@ def _branch_to_response(branch: Branch) -> BranchResponse:
     return BranchResponse(
         id=str(branch.id),
         session_id=branch.session_id,
-        parent_branch_id=(
-            str(branch.parent_branch_id)
-            if branch.parent_branch_id
-            else None
-        ),
-        fork_message_id=(
-            str(branch.fork_message_id)
-            if branch.fork_message_id
-            else None
-        ),
+        parent_branch_id=(str(branch.parent_branch_id) if branch.parent_branch_id else None),
+        fork_message_id=(str(branch.fork_message_id) if branch.fork_message_id else None),
         label=branch.label,
         is_active=branch.is_active,
         created_at=branch.created_at,
@@ -537,10 +532,6 @@ def _message_to_response(message: ChatMessage) -> ChatMessageResponse:
         branch_id=str(message.branch_id),
         role=message.role,
         content=message.content,
-        parent_message_id=(
-            str(message.parent_message_id)
-            if message.parent_message_id
-            else None
-        ),
+        parent_message_id=(str(message.parent_message_id) if message.parent_message_id else None),
         created_at=message.created_at,
     )

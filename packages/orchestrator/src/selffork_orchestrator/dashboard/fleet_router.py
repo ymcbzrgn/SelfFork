@@ -90,9 +90,7 @@ class FleetRegistry:
             record.online = True
             return record
 
-    async def update_state(
-        self, *, machine_id: str, cli: str, state: dict[str, Any]
-    ) -> None:
+    async def update_state(self, *, machine_id: str, cli: str, state: dict[str, Any]) -> None:
         async with self._lock:
             record = self._records.get(machine_id)
             if record is None:

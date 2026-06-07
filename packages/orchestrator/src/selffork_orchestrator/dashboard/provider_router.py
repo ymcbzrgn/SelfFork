@@ -154,9 +154,7 @@ def _serialise(record: ProviderRecord) -> ProviderView:
     )
 
 
-def _serialise_with_disk(
-    record: ProviderRecord, disk: ProviderAuthStatus | None
-) -> ProviderView:
+def _serialise_with_disk(record: ProviderRecord, disk: ProviderAuthStatus | None) -> ProviderView:
     """Serialise a record with the on-disk auth status overlaid.
 
     On-disk creds win for ``status`` (the operator re-signs-in via the
@@ -172,9 +170,7 @@ def _serialise_with_disk(
         name=record.name,
         status=disk.status,
         expires_at=expires_at.isoformat() if expires_at else None,
-        last_sign_in=record.last_sign_in.isoformat()
-        if record.last_sign_in
-        else None,
+        last_sign_in=record.last_sign_in.isoformat() if record.last_sign_in else None,
         last_error=record.last_error,
         storage_state_path=record.storage_state_path,
     )
@@ -197,10 +193,7 @@ def build_provider_router(
         # dashboard-sign-in record stays empty. Detection does a keychain
         # subprocess + file reads, so run it off the event loop.
         disk = await anyio.to_thread.run_sync(detector)
-        return [
-            _serialise_with_disk(r, disk.get(r.name))
-            for r in registry.list_records()
-        ]
+        return [_serialise_with_disk(r, disk.get(r.name)) for r in registry.list_records()]
 
     @router.post("/{name}/sign_in_start", response_model=SignInStartResponse)
     async def sign_in_start(name: str) -> SignInStartResponse:
@@ -264,9 +257,7 @@ def build_provider_router(
         the state until the operator re-authenticates.
         """
         if name not in PROVIDER_NAMES:
-            raise HTTPException(
-                status_code=404, detail=f"unknown provider {name!r}"
-            )
+            raise HTTPException(status_code=404, detail=f"unknown provider {name!r}")
         reason = (payload.reason if payload else "auth expired").strip()
         if not reason:
             reason = "auth expired"

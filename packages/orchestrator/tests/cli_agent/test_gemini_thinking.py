@@ -4,6 +4,7 @@ Opt-in: only when an effort != "dynamic" AND a model is pinned does the
 agent write a workspace-local .gemini/settings.json with the (verified)
 experimental gate + a model-targeted thinkingConfig override.
 """
+
 from __future__ import annotations
 
 import json

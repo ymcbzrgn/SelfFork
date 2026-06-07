@@ -79,7 +79,10 @@ async def _browser_navigate(ctx: ToolContext, args: BrowserNavigateArgs) -> dict
 async def _browser_back(ctx: ToolContext, args: BrowserBackArgs) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
     return await _invoke_browser(
-        ctx, action_type="browser.back", target_uri=None, args_summary={},
+        ctx,
+        action_type="browser.back",
+        target_uri=None,
+        args_summary={},
         coro_factory=lambda: drv.back(),
     )
 
@@ -87,7 +90,10 @@ async def _browser_back(ctx: ToolContext, args: BrowserBackArgs) -> dict[str, An
 async def _browser_forward(ctx: ToolContext, args: BrowserForwardArgs) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
     return await _invoke_browser(
-        ctx, action_type="browser.forward", target_uri=None, args_summary={},
+        ctx,
+        action_type="browser.forward",
+        target_uri=None,
+        args_summary={},
         coro_factory=lambda: drv.forward(),
     )
 
@@ -95,7 +101,10 @@ async def _browser_forward(ctx: ToolContext, args: BrowserForwardArgs) -> dict[s
 async def _browser_reload(ctx: ToolContext, args: BrowserReloadArgs) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
     return await _invoke_browser(
-        ctx, action_type="browser.reload", target_uri=None, args_summary={},
+        ctx,
+        action_type="browser.reload",
+        target_uri=None,
+        args_summary={},
         coro_factory=lambda: drv.reload(),
     )
 
@@ -107,8 +116,11 @@ async def _browser_get_url(ctx: ToolContext, args: BrowserGetUrlArgs) -> dict[st
         return {"url": await drv.get_url()}
 
     return await _invoke_browser(
-        ctx, action_type="browser.get_url", target_uri=None,
-        args_summary={}, coro_factory=_get,
+        ctx,
+        action_type="browser.get_url",
+        target_uri=None,
+        args_summary={},
+        coro_factory=_get,
     )
 
 
@@ -119,37 +131,48 @@ async def _browser_get_title(ctx: ToolContext, args: BrowserGetTitleArgs) -> dic
         return {"title": await drv.get_title()}
 
     return await _invoke_browser(
-        ctx, action_type="browser.get_title", target_uri=None,
-        args_summary={}, coro_factory=_get,
+        ctx,
+        action_type="browser.get_title",
+        target_uri=None,
+        args_summary={},
+        coro_factory=_get,
     )
 
 
 async def _browser_set_viewport(ctx: ToolContext, args: BrowserSetViewportArgs) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
     return await _invoke_browser(
-        ctx, action_type="browser.set_viewport", target_uri=None,
+        ctx,
+        action_type="browser.set_viewport",
+        target_uri=None,
         args_summary={"width": args.width, "height": args.height},
         coro_factory=lambda: drv.set_viewport(args.width, args.height),
     )
 
 
 async def _browser_wait_for_load_state(
-    ctx: ToolContext, args: BrowserWaitForLoadStateArgs,
+    ctx: ToolContext,
+    args: BrowserWaitForLoadStateArgs,
 ) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
     return await _invoke_browser(
-        ctx, action_type="browser.wait_for_load_state", target_uri=None,
+        ctx,
+        action_type="browser.wait_for_load_state",
+        target_uri=None,
         args_summary={"state": args.state, "timeout": args.timeout},
         coro_factory=lambda: drv.wait_for_load_state(args.state, timeout=args.timeout),
     )
 
 
 async def _browser_wait_for_url(
-    ctx: ToolContext, args: BrowserWaitForUrlArgs,
+    ctx: ToolContext,
+    args: BrowserWaitForUrlArgs,
 ) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
     return await _invoke_browser(
-        ctx, action_type="browser.wait_for_url", target_uri=args.url_pattern,
+        ctx,
+        action_type="browser.wait_for_url",
+        target_uri=args.url_pattern,
         args_summary={"url_pattern": args.url_pattern, "timeout": args.timeout},
         coro_factory=lambda: drv.wait_for_url(args.url_pattern, timeout=args.timeout),
     )

@@ -39,9 +39,7 @@ def action() -> CandidateAction:
     return CandidateAction(tool="git", args=("push", "origin", "main"))
 
 
-def _make_store_with_recorder() -> tuple[
-    PendingConfirmationStore, list[tuple[NotifyOp, str]]
-]:
+def _make_store_with_recorder() -> tuple[PendingConfirmationStore, list[tuple[NotifyOp, str]]]:
     """Build a store wired to a recording hook."""
     events: list[tuple[NotifyOp, str]] = []
 
@@ -52,19 +50,13 @@ def _make_store_with_recorder() -> tuple[
     return store, events
 
 
-def test_request_invokes_hook(
-    category: DestructiveCategory, action: CandidateAction
-) -> None:
+def test_request_invokes_hook(category: DestructiveCategory, action: CandidateAction) -> None:
     store, events = _make_store_with_recorder()
-    entry = store.request(
-        category=category, action=action, workspace_slug="demo"
-    )
+    entry = store.request(category=category, action=action, workspace_slug="demo")
     assert events == [("request", entry.id)]
 
 
-def test_approve_invokes_hook(
-    category: DestructiveCategory, action: CandidateAction
-) -> None:
+def test_approve_invokes_hook(category: DestructiveCategory, action: CandidateAction) -> None:
     store, events = _make_store_with_recorder()
     entry = store.request(category=category, action=action, workspace_slug=None)
     events.clear()
@@ -72,9 +64,7 @@ def test_approve_invokes_hook(
     assert events == [("approve", entry.id)]
 
 
-def test_cancel_invokes_hook(
-    category: DestructiveCategory, action: CandidateAction
-) -> None:
+def test_cancel_invokes_hook(category: DestructiveCategory, action: CandidateAction) -> None:
     store, events = _make_store_with_recorder()
     entry = store.request(category=category, action=action, workspace_slug=None)
     events.clear()
@@ -82,9 +72,7 @@ def test_cancel_invokes_hook(
     assert events == [("cancel", entry.id)]
 
 
-def test_extend_invokes_hook(
-    category: DestructiveCategory, action: CandidateAction
-) -> None:
+def test_extend_invokes_hook(category: DestructiveCategory, action: CandidateAction) -> None:
     store, events = _make_store_with_recorder()
     entry = store.request(category=category, action=action, workspace_slug=None)
     events.clear()
@@ -92,9 +80,7 @@ def test_extend_invokes_hook(
     assert events == [("extend", entry.id)]
 
 
-def test_extend_advances_expires_at(
-    category: DestructiveCategory, action: CandidateAction
-) -> None:
+def test_extend_advances_expires_at(category: DestructiveCategory, action: CandidateAction) -> None:
     store, _events = _make_store_with_recorder()
     entry = store.request(category=category, action=action, workspace_slug=None)
     before = datetime.datetime.fromisoformat(entry.expires_at)
@@ -106,9 +92,7 @@ def test_extend_advances_expires_at(
     assert updated.status == "pending"
 
 
-def test_extend_rejects_nonpositive(
-    category: DestructiveCategory, action: CandidateAction
-) -> None:
+def test_extend_rejects_nonpositive(category: DestructiveCategory, action: CandidateAction) -> None:
     store, events = _make_store_with_recorder()
     entry = store.request(category=category, action=action, workspace_slug=None)
     events.clear()

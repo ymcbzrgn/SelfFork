@@ -29,9 +29,7 @@ def _setup(tmp_path: Path, slug: str) -> tuple[TestClient, Path]:
     (projects_root / slug).mkdir(parents=True)
     db_path = tmp_path / "theater" / "events.db"
     app = FastAPI()
-    app.include_router(
-        build_theater_router(projects_root=projects_root, db_path=db_path)
-    )
+    app.include_router(build_theater_router(projects_root=projects_root, db_path=db_path))
     app.include_router(build_loop_router(db_path=db_path))
     return TestClient(app), db_path
 
@@ -83,34 +81,24 @@ def _seed_loop(db_path: Path, slug: str, *, cli: str, turn: int) -> None:
 class TestSnapshot:
     def test_empty_workspace_idle(self, tmp_path: Path) -> None:
         client, _ = _setup(tmp_path, "proj-x")
-        body = client.get(
-            "/api/workspaces/proj-x/theater/snapshot"
-        ).json()
+        body = client.get("/api/workspaces/proj-x/theater/snapshot").json()
         assert body["active"] is False
         assert body["output"] == []
         assert body["thoughts"] == []
         assert body["screenshots"] == []
 
-    def test_includes_cli_output_and_thoughts(
-        self, tmp_path: Path
-    ) -> None:
+    def test_includes_cli_output_and_thoughts(self, tmp_path: Path) -> None:
         client, db = _setup(tmp_path, "proj-x")
         _seed_cli_output(db, "proj-x", "npm run dev")
         _seed_thought(db, "proj-x", "Testing the login flow")
-        body = client.get(
-            "/api/workspaces/proj-x/theater/snapshot"
-        ).json()
+        body = client.get("/api/workspaces/proj-x/theater/snapshot").json()
         assert [c["text"] for c in body["output"]] == ["npm run dev"]
-        assert [t["summary"] for t in body["thoughts"]] == [
-            "Testing the login flow"
-        ]
+        assert [t["summary"] for t in body["thoughts"]] == ["Testing the login flow"]
 
     def test_reflects_active_loop(self, tmp_path: Path) -> None:
         client, db = _setup(tmp_path, "proj-x")
         _seed_loop(db, "proj-x", cli="claude", turn=4)
-        body = client.get(
-            "/api/workspaces/proj-x/theater/snapshot"
-        ).json()
+        body = client.get("/api/workspaces/proj-x/theater/snapshot").json()
         assert body["active"] is True
         assert body["cli"] == "claude"
         assert body["turn"] == 4
@@ -149,20 +137,14 @@ class TestStream:
     def test_first_frame_is_snapshot(self, tmp_path: Path) -> None:
         client, db = _setup(tmp_path, "ws-snap")
         _seed_cli_output(db, "ws-snap", "hello")
-        with client.websocket_connect(
-            "/api/workspaces/ws-snap/theater/stream"
-        ) as ws:
+        with client.websocket_connect("/api/workspaces/ws-snap/theater/stream") as ws:
             frame = json.loads(ws.receive_text())
             assert frame["event_type"] == "snapshot"
-            assert [
-                c["text"] for c in frame["payload"]["output"]
-            ] == ["hello"]
+            assert [c["text"] for c in frame["payload"]["output"]] == ["hello"]
 
     def test_tails_new_event(self, tmp_path: Path) -> None:
         client, db = _setup(tmp_path, "ws-tail")
-        with client.websocket_connect(
-            "/api/workspaces/ws-tail/theater/stream"
-        ) as ws:
+        with client.websocket_connect("/api/workspaces/ws-tail/theater/stream") as ws:
             snap = json.loads(ws.receive_text())
             assert snap["event_type"] == "snapshot"
             # A fresh event lands after connect — Phase 2 poll surfaces it.
@@ -175,17 +157,13 @@ class TestStream:
         client, _ = _setup(tmp_path, "ws-real")
         with (
             pytest.raises(WebSocketDisconnect),
-            client.websocket_connect(
-                "/api/workspaces/ws-ghost/theater/stream"
-            ) as ws,
+            client.websocket_connect("/api/workspaces/ws-ghost/theater/stream") as ws,
         ):
             ws.receive_text()
 
     def test_tails_new_thought(self, tmp_path: Path) -> None:
         client, db = _setup(tmp_path, "ws-thought")
-        with client.websocket_connect(
-            "/api/workspaces/ws-thought/theater/stream"
-        ) as ws:
+        with client.websocket_connect("/api/workspaces/ws-thought/theater/stream") as ws:
             snap = json.loads(ws.receive_text())
             assert snap["event_type"] == "snapshot"
             _seed_thought(db, "ws-thought", "Reviewing the auth flow")
@@ -193,20 +171,14 @@ class TestStream:
             assert frame["event_type"] == "thought.new"
             assert frame["payload"]["summary"] == "Reviewing the auth flow"
 
-    def test_reconnect_still_serves_persisted_events(
-        self, tmp_path: Path
-    ) -> None:
+    def test_reconnect_still_serves_persisted_events(self, tmp_path: Path) -> None:
         client, db = _setup(tmp_path, "ws-reconn")
         _seed_cli_output(db, "ws-reconn", "before reconnect")
-        with client.websocket_connect(
-            "/api/workspaces/ws-reconn/theater/stream"
-        ) as ws:
+        with client.websocket_connect("/api/workspaces/ws-reconn/theater/stream") as ws:
             ws.receive_text()
         # A fresh reconnect must re-sync the persisted stream via a
         # snapshot frame (drain past any replayed frames to find it).
-        with client.websocket_connect(
-            "/api/workspaces/ws-reconn/theater/stream"
-        ) as ws:
+        with client.websocket_connect("/api/workspaces/ws-reconn/theater/stream") as ws:
             snap = None
             for _ in range(5):
                 frame = json.loads(ws.receive_text())
@@ -214,18 +186,14 @@ class TestStream:
                     snap = frame
                     break
             assert snap is not None
-            assert [
-                c["text"] for c in snap["payload"]["output"]
-            ] == ["before reconnect"]
+            assert [c["text"] for c in snap["payload"]["output"]] == ["before reconnect"]
 
 
 # ── Build-app wiring ─────────────────────────────────────────────────────────
 
 
 class TestWiring:
-    def test_theater_routers_mounted_on_full_app(
-        self, tmp_path: Path
-    ) -> None:
+    def test_theater_routers_mounted_on_full_app(self, tmp_path: Path) -> None:
         config = DashboardConfig(
             audit_dir=tmp_path / "audit",
             resume_dir=tmp_path / "scheduled",

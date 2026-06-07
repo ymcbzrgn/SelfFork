@@ -83,11 +83,7 @@ def build_telegram_application(
         msg = "build_telegram_application: webhook mode requires webhook_url"
         raise ValueError(msg)
 
-    application = (
-        Application.builder()
-        .token(config.bot_token)
-        .build()
-    )
+    application = Application.builder().token(config.bot_token).build()
     application.bot_data[ROUTER_BOT_DATA_KEY] = router
     register_inbound_handlers(application)
     return application
@@ -191,9 +187,7 @@ async def _on_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     args = parts[1:]
     chat = message.chat
     chat_id = chat.id if chat is not None else 0
-    outcome = await router.handle_command(
-        chat_id=chat_id, command=command, args=args
-    )
+    outcome = await router.handle_command(chat_id=chat_id, command=command, args=args)
     if outcome.reply:
         await message.reply_text(outcome.reply)
 
@@ -210,13 +204,9 @@ async def _on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     chat = message.chat
     chat_id = chat.id if chat is not None else 0
     sender = (
-        message.from_user.username
-        if message.from_user and message.from_user.username
-        else None
+        message.from_user.username if message.from_user and message.from_user.username else None
     )
-    outcome = await router.handle_message(
-        chat_id=chat_id, sender=sender, text=message.text
-    )
+    outcome = await router.handle_message(chat_id=chat_id, sender=sender, text=message.text)
     if outcome.reply:
         await message.reply_text(outcome.reply)
 
@@ -240,9 +230,7 @@ async def _on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat = message.chat
     chat_id = chat.id if chat is not None else 0
     sender = (
-        message.from_user.username
-        if message.from_user and message.from_user.username
-        else None
+        message.from_user.username if message.from_user and message.from_user.username else None
     )
     try:
         voice_file = await message.voice.get_file()
@@ -258,7 +246,10 @@ async def _on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     mime = message.voice.mime_type or "audio/ogg"
     outcome = await router.handle_voice(
-        chat_id=chat_id, sender=sender, audio=audio, mime=mime,
+        chat_id=chat_id,
+        sender=sender,
+        audio=audio,
+        mime=mime,
     )
     if outcome.reply:
         await message.reply_text(outcome.reply)

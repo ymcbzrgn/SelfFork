@@ -3,7 +3,7 @@ name = "selffork-reflex"
 version = "0.0.1"
 description = "Reflex pillar — Yamaç-style adapter fine-tuning. Skeleton only in MVP v0; implementation lands in M7."
 readme = "README.md"
-requires-python = ">=3.12, <3.15"
+requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Yamaç Bezirgan" }]
 dependencies = []

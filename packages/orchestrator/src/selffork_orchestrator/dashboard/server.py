@@ -191,9 +191,7 @@ def build_app(config: DashboardConfig) -> FastAPI:
 
     telegram_store = cast(
         "YamlSettingsStore[TelegramConfig]",
-        config.telegram_store
-        if config.telegram_store is not None
-        else default_telegram_store(),
+        config.telegram_store if config.telegram_store is not None else default_telegram_store(),
     )
     telegram_cfg = resolve_telegram_config(telegram_store)
     app_telegram_cfg = telegram_cfg
@@ -267,9 +265,7 @@ def build_app(config: DashboardConfig) -> FastAPI:
     from selffork_shared.quota import QuotaSnapshot
 
     _telegram_for_heartbeat = (
-        None
-        if isinstance(wrapped_bridge, NullTelegramBridge)
-        else wrapped_bridge
+        None if isinstance(wrapped_bridge, NullTelegramBridge) else wrapped_bridge
     )
 
     # S6 (ADR-006 §4.6) — CLI + model router. One quota reader (CodexBar
@@ -285,9 +281,7 @@ def build_app(config: DashboardConfig) -> FastAPI:
     _quota_fallback_reader = build_codexbar_fallback_reader(
         primary=ProactiveUsageReader(),
         codexbar_base_url=(
-            codexbar_server.base_url
-            if codexbar_server.binary is not None
-            else None
+            codexbar_server.base_url if codexbar_server.binary is not None else None
         ),
     )
 
@@ -296,11 +290,7 @@ def build_app(config: DashboardConfig) -> FastAPI:
 
     async def _model_quota(cli: str, model: str) -> QuotaSnapshot | None:
         cap = capability_for(cli)
-        key = (
-            f"{cli}__{model}"
-            if cap is not None and cap.per_model_quota
-            else cli
-        )
+        key = f"{cli}__{model}" if cap is not None and cap.per_model_quota else cli
         return await _quota_fallback_reader.read(key)
 
     cli_override_store = (
@@ -362,9 +352,7 @@ def build_app(config: DashboardConfig) -> FastAPI:
         snapper_runner = getattr(_app.state, "snapper_runner", None)
         snapper_task: asyncio.Task[None] | None = None
         heartbeat = getattr(_app.state, "heartbeat", None)
-        cli_affinity_provider = getattr(
-            _app.state, "cli_affinity_provider", None
-        )
+        cli_affinity_provider = getattr(_app.state, "cli_affinity_provider", None)
         # S-Stream (ADR-011) — the Talk router spawns background generation
         # tasks via asyncio.create_task; teardown cancels any in-flight ones
         # so a shutdown doesn't orphan a streaming reply mid-token.
@@ -372,9 +360,7 @@ def build_app(config: DashboardConfig) -> FastAPI:
         # S-ToolFleet Faz 0 F4 — periodic cleanup of expired pending
         # structured questions so a long-lived dashboard process does
         # not accumulate stale dict entries.
-        structured_question_store = getattr(
-            _app.state, "structured_question_store", None
-        )
+        structured_question_store = getattr(_app.state, "structured_question_store", None)
         structured_question_cleanup_task: asyncio.Task[None] | None = None
         try:
             # S-Quota Faz B/E — boot the CodexBar sidecar first so the
@@ -417,16 +403,9 @@ def build_app(config: DashboardConfig) -> FastAPI:
                     # config into starting both updater.poll AND a
                     # registered webhook simultaneously (Telegram
                     # rejects with 409 Conflict).
-                    resolved_mode = getattr(
-                        _app.state, "telegram_mode", "polling"
-                    )
-                    if (
-                        resolved_mode != "webhook"
-                        and ptb_app.updater is not None
-                    ):
-                        await ptb_app.updater.start_polling(
-                            drop_pending_updates=True
-                        )
+                    resolved_mode = getattr(_app.state, "telegram_mode", "polling")
+                    if resolved_mode != "webhook" and ptb_app.updater is not None:
+                        await ptb_app.updater.start_polling(drop_pending_updates=True)
                 except Exception:
                     _log.exception("telegram_application_start_failed")
                     ptb_app = None
@@ -660,9 +639,7 @@ def build_app(config: DashboardConfig) -> FastAPI:
 
     _theater_db = theater_db_path(config.projects_root)
     app.include_router(
-        build_theater_router(
-            projects_root=config.projects_root, db_path=_theater_db
-        ),
+        build_theater_router(projects_root=config.projects_root, db_path=_theater_db),
     )
     app.include_router(build_loop_router(db_path=_theater_db))
 
@@ -934,9 +911,7 @@ def _wire_telegram_inbound(
     if not bot_token:
         app.state.telegram_application = None
         return
-    normalised_mode: Literal["polling", "webhook"] = (
-        "webhook" if mode == "webhook" else "polling"
-    )
+    normalised_mode: Literal["polling", "webhook"] = "webhook" if mode == "webhook" else "polling"
     try:
         ptb_app = build_telegram_application(
             config=TelegramAppConfig(
@@ -1022,7 +997,8 @@ def _window_label_from_seconds(seconds: int) -> str:
 
 
 async def _synthesize_proactive_rows(
-    app: FastAPI, audit_cli_ids: AbstractSet[str],
+    app: FastAPI,
+    audit_cli_ids: AbstractSet[str],
 ) -> list[ProviderUsage]:
     """Add :class:`ProviderUsage` rows for CLIs with proactive signal only.
 
@@ -1047,9 +1023,7 @@ async def _synthesize_proactive_rows(
     if reader is None:
         return []
 
-    candidates = [
-        name for name in get_args(ProviderName) if name not in audit_cli_ids
-    ]
+    candidates = [name for name in get_args(ProviderName) if name not in audit_cli_ids]
 
     async def _maybe_row(cli_id: str) -> ProviderUsage | None:
         try:
@@ -1201,9 +1175,7 @@ def _register_api_routes(app: FastAPI, config: DashboardConfig) -> None:
         """
         capped = max(1, min(limit, _ACTIVITY_MAX_LIMIT))
         telegram_log = getattr(app.state, "telegram_activity_log", None)
-        telegram_snapshot = (
-            telegram_log.snapshot() if telegram_log is not None else None
-        )
+        telegram_snapshot = telegram_log.snapshot() if telegram_log is not None else None
 
         def _aggregate() -> tuple[list[ActivityRow], bool]:
             return aggregate_activity(
@@ -1230,9 +1202,7 @@ def _register_api_routes(app: FastAPI, config: DashboardConfig) -> None:
         # Resolve audit dir across orphan + project layouts. Without
         # this the recent listing surfaces a project session and the
         # detail click 404s — see Order 1 audit (#1.B).
-        audit_dir = await anyio.to_thread.run_sync(
-            _resolve_audit_dir, config, session_id
-        )
+        audit_dir = await anyio.to_thread.run_sync(_resolve_audit_dir, config, session_id)
         if audit_dir is None:
             raise HTTPException(
                 status_code=404,
@@ -1829,9 +1799,7 @@ def _register_api_routes(app: FastAPI, config: DashboardConfig) -> None:
     async def stream(websocket: WebSocket, session_id: str) -> None:
         # Resolve audit dir before accepting the WS — same multi-dir
         # logic as the events REST endpoint (Order 1 #1.B).
-        audit_dir = await anyio.to_thread.run_sync(
-            _resolve_audit_dir, config, session_id
-        )
+        audit_dir = await anyio.to_thread.run_sync(_resolve_audit_dir, config, session_id)
         if audit_dir is None:
             # Accept first so the close code reaches the client; raw
             # ``websocket.close`` before ``accept`` would 403 instead.

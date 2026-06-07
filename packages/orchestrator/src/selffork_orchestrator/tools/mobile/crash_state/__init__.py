@@ -121,7 +121,8 @@ class CrashThreadDumpArgs(ToolArgs):
 
 
 async def _crash_log_fetch(
-    ctx: ToolContext, args: CrashLogFetchArgs,
+    ctx: ToolContext,
+    args: CrashLogFetchArgs,
 ) -> dict[str, Any]:
     drv = _require_mobile_driver(ctx)
 
@@ -163,7 +164,8 @@ async def _crash_log_fetch(
 
 
 async def _crash_bug_report(
-    ctx: ToolContext, args: CrashBugReportArgs,
+    ctx: ToolContext,
+    args: CrashBugReportArgs,
 ) -> dict[str, Any]:
     drv = _require_mobile_driver(ctx)
 
@@ -190,7 +192,8 @@ async def _crash_bug_report(
 
 
 async def _crash_state_snapshot(
-    ctx: ToolContext, args: CrashStateSnapshotArgs,
+    ctx: ToolContext,
+    args: CrashStateSnapshotArgs,
 ) -> dict[str, Any]:
     _validate_label(args.label)
     drv = _require_mobile_driver(ctx)
@@ -240,7 +243,8 @@ async def _crash_state_snapshot(
 
 
 async def _crash_state_restore(
-    ctx: ToolContext, args: CrashStateRestoreArgs,
+    ctx: ToolContext,
+    args: CrashStateRestoreArgs,
 ) -> dict[str, Any]:
     _validate_label(args.label)
     workspace = args.workspace_slug or ctx.project_slug
@@ -262,7 +266,8 @@ async def _crash_state_restore(
 
 
 async def _crash_state_list(
-    ctx: ToolContext, args: CrashStateListArgs,
+    ctx: ToolContext,
+    args: CrashStateListArgs,
 ) -> dict[str, Any]:
     workspace = args.workspace_slug or ctx.project_slug
     target_dir = _state_dir_for(workspace)
@@ -270,9 +275,7 @@ async def _crash_state_list(
     async def _list() -> dict[str, Any]:
         if not target_dir.is_dir():
             return {"labels": [], "dir": str(target_dir)}
-        labels = sorted(
-            p.stem for p in target_dir.glob("*.json")
-        )
+        labels = sorted(p.stem for p in target_dir.glob("*.json"))
         return {"labels": labels[:500], "count": len(labels), "dir": str(target_dir)}
 
     return await _invoke_mobile(
@@ -285,7 +288,8 @@ async def _crash_state_list(
 
 
 async def _crash_state_delete(
-    ctx: ToolContext, args: CrashStateDeleteArgs,
+    ctx: ToolContext,
+    args: CrashStateDeleteArgs,
 ) -> dict[str, Any]:
     _validate_label(args.label)
     workspace = args.workspace_slug or ctx.project_slug
@@ -307,7 +311,8 @@ async def _crash_state_delete(
 
 
 async def _crash_state_diff(
-    ctx: ToolContext, args: CrashStateDiffArgs,
+    ctx: ToolContext,
+    args: CrashStateDiffArgs,
 ) -> dict[str, Any]:
     _validate_label(args.label_a)
     _validate_label(args.label_b)
@@ -379,7 +384,8 @@ async def _crash_anr_dump(ctx: ToolContext, args: CrashAnrDumpArgs) -> dict[str,
 
 
 async def _crash_heap_dump(
-    ctx: ToolContext, args: CrashHeapDumpArgs,
+    ctx: ToolContext,
+    args: CrashHeapDumpArgs,
 ) -> dict[str, Any]:
     drv = _require_mobile_driver(ctx)
 
@@ -390,7 +396,8 @@ async def _crash_heap_dump(
                 f"am dumpheap {args.pid} /sdcard/{Path(args.output_path).name}",
             )
             await drv.pull(
-                f"/sdcard/{Path(args.output_path).name}", Path(args.output_path),
+                f"/sdcard/{Path(args.output_path).name}",
+                Path(args.output_path),
             )
             return {"status": "ok", "output_path": args.output_path}
         if platform == "composite" and drv.android is not None:
@@ -398,7 +405,8 @@ async def _crash_heap_dump(
                 f"am dumpheap {args.pid} /sdcard/{Path(args.output_path).name}",
             )
             await drv.android.pull(
-                f"/sdcard/{Path(args.output_path).name}", Path(args.output_path),
+                f"/sdcard/{Path(args.output_path).name}",
+                Path(args.output_path),
             )
             return {"status": "ok", "output_path": args.output_path}
         return {"status": "unsupported", "platform": platform}
@@ -413,7 +421,8 @@ async def _crash_heap_dump(
 
 
 async def _crash_thread_dump(
-    ctx: ToolContext, args: CrashThreadDumpArgs,
+    ctx: ToolContext,
+    args: CrashThreadDumpArgs,
 ) -> dict[str, Any]:
     drv = _require_mobile_driver(ctx)
 
@@ -455,8 +464,7 @@ def build_crash_state_tools() -> list[ToolSpec[Any]]:
         ToolSpec(
             name="crash_state_snapshot",
             description=(
-                "Persist a labelled state snapshot (a11y + optional logs) "
-                "under ~/.selffork/state/."
+                "Persist a labelled state snapshot (a11y + optional logs) under ~/.selffork/state/."
             ),
             args_model=CrashStateSnapshotArgs,
             handler=_crash_state_snapshot,
@@ -486,8 +494,7 @@ def build_crash_state_tools() -> list[ToolSpec[Any]]:
         ToolSpec(
             name="crash_state_diff",
             description=(
-                "Diff two snapshots' a11y trees; returns only-in-A / only-in-B "
-                "line sets."
+                "Diff two snapshots' a11y trees; returns only-in-A / only-in-B line sets."
             ),
             args_model=CrashStateDiffArgs,
             handler=_crash_state_diff,

@@ -38,9 +38,7 @@ _log = logging.getLogger(__name__)
 class SessionOutcome(BaseModel):
     """One finished session's affinity signal (turn-to-complete metric)."""
 
-    model_config = ConfigDict(
-        frozen=True, extra="forbid", protected_namespaces=()
-    )
+    model_config = ConfigDict(frozen=True, extra="forbid", protected_namespaces=())
 
     workspace_slug: str
     cli: str
@@ -93,9 +91,7 @@ class OutcomeIngester:
         tmp.write_text(str(offset), encoding="utf-8")
         tmp.replace(self._offset_path)
 
-    async def drain(
-        self, handler: Callable[[SessionOutcome], Awaitable[None]]
-    ) -> int:
+    async def drain(self, handler: Callable[[SessionOutcome], Awaitable[None]]) -> int:
         """Fold every new complete line into ``handler``; return the count.
 
         Only newline-terminated lines are consumed (a partial trailing

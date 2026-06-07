@@ -101,7 +101,9 @@ class StorageStateAutoSave:
                     await self.manager.save(self.context, self.provider, self.project_slug)
                     self._last_hash = digest
                 except Exception as exc:
-                    _log.warning("storage_state_autosave_failed provider=%s err=%s", self.provider, exc)
+                    _log.warning(
+                        "storage_state_autosave_failed provider=%s err=%s", self.provider, exc
+                    )
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=self.interval_sec)
             except TimeoutError:
@@ -111,7 +113,9 @@ class StorageStateAutoSave:
         if self._task is not None:
             return
         self._stop.clear()
-        self._task = asyncio.create_task(self._loop(), name=f"storage_state_autosave:{self.provider}")
+        self._task = asyncio.create_task(
+            self._loop(), name=f"storage_state_autosave:{self.provider}"
+        )
 
     async def stop(self) -> None:
         self._stop.set()

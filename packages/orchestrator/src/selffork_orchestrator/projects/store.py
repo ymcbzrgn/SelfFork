@@ -169,11 +169,7 @@ class ProjectStore:
                 **({"name": name} if name is not None else {}),
                 **({"description": description} if description is not None else {}),
                 **({"root_path": root_path} if not isinstance(root_path, _Sentinel) else {}),
-                **(
-                    {"archived_at": archived_at}
-                    if not isinstance(archived_at, _Sentinel)
-                    else {}
-                ),
+                **({"archived_at": archived_at} if not isinstance(archived_at, _Sentinel) else {}),
                 **(
                     {"autopilot_paused": autopilot_paused}
                     if not isinstance(autopilot_paused, _Sentinel)

@@ -115,7 +115,10 @@ class ExpoDoctorArgs(ToolArgs):
 
 
 async def _run_subprocess(
-    cmd: list[str], cwd: Path, *, timeout: float | None = 300.0,  # noqa: ASYNC109
+    cmd: list[str],
+    cwd: Path,
+    *,
+    timeout: float | None = 300.0,  # noqa: ASYNC109
 ) -> dict[str, Any]:
     """Run a subprocess capturing stdout/stderr with timeout."""
     proc = await asyncio.create_subprocess_exec(
@@ -126,7 +129,8 @@ async def _run_subprocess(
     )
     try:
         stdout, stderr = await asyncio.wait_for(
-            proc.communicate(), timeout=timeout,
+            proc.communicate(),
+            timeout=timeout,
         )
     except TimeoutError:
         proc.kill()
@@ -240,7 +244,8 @@ async def _expo_dev_stop(ctx: ToolContext, args: ExpoDevStopArgs) -> dict[str, A
 
 
 async def _expo_metro_reload(
-    ctx: ToolContext, args: ExpoMetroReloadArgs,
+    ctx: ToolContext,
+    args: ExpoMetroReloadArgs,
 ) -> dict[str, Any]:
     project_dir = _resolve_project_dir(args.project_dir)
     # Metro reload trigger via DevServer HTTP endpoint
@@ -256,7 +261,8 @@ async def _expo_metro_reload(
 
 
 async def _expo_logs_capture(
-    ctx: ToolContext, args: ExpoLogsCaptureArgs,
+    ctx: ToolContext,
+    args: ExpoLogsCaptureArgs,
 ) -> dict[str, Any]:
     project_dir = _resolve_project_dir(args.project_dir)
     # Read the metro log if present
@@ -275,19 +281,24 @@ async def _expo_logs_capture(
         return denied
     if not log_path.is_file():
         return {"status": "not_found", "path": str(log_path)}
-    lines = log_path.read_text(errors="replace").splitlines()[-args.max_lines:]
+    lines = log_path.read_text(errors="replace").splitlines()[-args.max_lines :]
     text = "\n".join(lines)
     return {"status": "ok", "text_len": len(text), "preview": text[:8192]}
 
 
 async def _expo_eas_build(
-    ctx: ToolContext, args: ExpoEasBuildArgs,
+    ctx: ToolContext,
+    args: ExpoEasBuildArgs,
 ) -> dict[str, Any]:
     project_dir = _resolve_project_dir(args.project_dir)
     cmd = [
-        "npx", "eas", "build",
-        "--profile", args.profile,
-        "--platform", args.platform,
+        "npx",
+        "eas",
+        "build",
+        "--profile",
+        args.profile,
+        "--platform",
+        args.platform,
         "--non-interactive",
     ]
     if args.local:
@@ -308,13 +319,18 @@ async def _expo_eas_build(
 
 
 async def _expo_eas_submit(
-    ctx: ToolContext, args: ExpoEasSubmitArgs,
+    ctx: ToolContext,
+    args: ExpoEasSubmitArgs,
 ) -> dict[str, Any]:
     project_dir = _resolve_project_dir(args.project_dir)
     cmd = [
-        "npx", "eas", "submit",
-        "--profile", args.profile,
-        "--platform", args.platform,
+        "npx",
+        "eas",
+        "submit",
+        "--profile",
+        args.profile,
+        "--platform",
+        args.platform,
         "--non-interactive",
     ]
     return await _expo_gate_and_run(
@@ -375,7 +391,8 @@ async def _expo_run_ios(ctx: ToolContext, args: ExpoRunIosArgs) -> dict[str, Any
 
 
 async def _expo_run_android(
-    ctx: ToolContext, args: ExpoRunAndroidArgs,
+    ctx: ToolContext,
+    args: ExpoRunAndroidArgs,
 ) -> dict[str, Any]:
     project_dir = _resolve_project_dir(args.project_dir)
     cmd = ["npx", "expo", "run:android", "--variant", args.variant]

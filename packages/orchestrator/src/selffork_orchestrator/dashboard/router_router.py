@@ -134,8 +134,7 @@ def build_router_router(*, router: CLIRouter) -> APIRouter:
         if cli not in router.candidates:
             raise HTTPException(
                 status_code=400,
-                detail=f"unknown cli {cli!r}; expected one of "
-                f"{sorted(router.candidates)}",
+                detail=f"unknown cli {cli!r}; expected one of {sorted(router.candidates)}",
             )
         if model is not None:
             cap = capability_for(cli)
@@ -189,18 +188,14 @@ def build_router_router(*, router: CLIRouter) -> APIRouter:
     # ── affinity preview ───────────────────────────────────────────────
 
     @api.get("/affinity/{workspace}", response_model=AffinityView)
-    async def get_affinity(
-        workspace: str, task_type: str | None = None
-    ) -> AffinityView:
+    async def get_affinity(workspace: str, task_type: str | None = None) -> AffinityView:
         pairs = candidate_pairs(
             list(router.candidates),
             models_override=router.runtime_store.models_override(),
         )
         await router.affinity.drain()
         resolver = await router.affinity.resolver_for(workspace)
-        scored = await resolver.score_candidates(
-            task_type=task_type, candidates=pairs
-        )
+        scored = await resolver.score_candidates(task_type=task_type, candidates=pairs)
         active = router.override_store.peek(workspace)
         clis = sorted({cli for cli, _ in pairs})
         return AffinityView(
@@ -258,9 +253,7 @@ def build_router_router(*, router: CLIRouter) -> APIRouter:
     @api.put("/config/effort", response_model=CliRuntimeView)
     def put_effort(payload: EffortRequest) -> CliRuntimeView:
         try:
-            router.runtime_store.set_effort(
-                cli=payload.cli, effort=payload.effort
-            )
+            router.runtime_store.set_effort(cli=payload.cli, effort=payload.effort)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return _runtime_view()
@@ -268,9 +261,7 @@ def build_router_router(*, router: CLIRouter) -> APIRouter:
     @api.put("/config/models", response_model=CliRuntimeView)
     def put_models(payload: EnabledModelsRequest) -> CliRuntimeView:
         try:
-            router.runtime_store.set_enabled_models(
-                cli=payload.cli, models=payload.models
-            )
+            router.runtime_store.set_enabled_models(cli=payload.cli, models=payload.models)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return _runtime_view()

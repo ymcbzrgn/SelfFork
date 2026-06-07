@@ -39,9 +39,7 @@ def test_heartbeat_updates_last_activity(watchdog: BodyWatchdog) -> None:
 
 def test_check_session_max_duration(watchdog: BodyWatchdog) -> None:
     warden = PermissionWarden(mode=WardenMode.WORKSPACE_WRITE)
-    session = watchdog.register(
-        session_id="s-1", warden=warden, max_duration_sec=10
-    )
+    session = watchdog.register(session_id="s-1", warden=warden, max_duration_sec=10)
     session.started_at = datetime.now(UTC) - timedelta(seconds=20)
     reason = watchdog._check_session(session, datetime.now(UTC))
     assert reason == "max_duration_exceeded"
@@ -49,9 +47,7 @@ def test_check_session_max_duration(watchdog: BodyWatchdog) -> None:
 
 def test_check_session_idle_timeout(watchdog: BodyWatchdog) -> None:
     warden = PermissionWarden(mode=WardenMode.WORKSPACE_WRITE)
-    session = watchdog.register(
-        session_id="s-1", warden=warden, idle_timeout_sec=5
-    )
+    session = watchdog.register(session_id="s-1", warden=warden, idle_timeout_sec=5)
     session.last_activity = datetime.now(UTC) - timedelta(seconds=10)
     reason = watchdog._check_session(session, datetime.now(UTC))
     assert reason == "idle_timeout"

@@ -50,9 +50,7 @@ class _StubSpeaker:
 class _SlowReplySpeaker:
     """Speaker whose reply sleeps — exercises the per-tick budget timeout."""
 
-    def __init__(
-        self, *, delay_seconds: float, reply_text: str = "{}"
-    ) -> None:
+    def __init__(self, *, delay_seconds: float, reply_text: str = "{}") -> None:
         self._delay = delay_seconds
         self._reply_text = reply_text
 
@@ -126,9 +124,7 @@ async def test_select_parses_fenced_json_reply() -> None:
         )
     )
     layer = DeliberationLayer(speaker=speaker)
-    decision = await layer.select(
-        legal_actions=_FULL_LEGAL, world_state=_state()
-    )
+    decision = await layer.select(legal_actions=_FULL_LEGAL, world_state=_state())
     assert decision.action is LegalAction.TASK_START
     assert decision.reasoning == "Beta projesinde önemli kart var."
     assert decision.fallback is False
@@ -143,13 +139,9 @@ async def test_select_parses_fenced_json_reply() -> None:
 
 @pytest.mark.asyncio
 async def test_select_parses_bare_json_reply() -> None:
-    speaker = _StubSpeaker(
-        reply_text='Karar: {"action": "bekle", "reasoning": "Şu an iş yok."}'
-    )
+    speaker = _StubSpeaker(reply_text='Karar: {"action": "bekle", "reasoning": "Şu an iş yok."}')
     layer = DeliberationLayer(speaker=speaker)
-    decision = await layer.select(
-        legal_actions=_FULL_LEGAL, world_state=_state()
-    )
+    decision = await layer.select(legal_actions=_FULL_LEGAL, world_state=_state())
     assert decision.action is LegalAction.WAIT
     assert decision.reasoning == "Şu an iş yok."
 
@@ -157,15 +149,10 @@ async def test_select_parses_bare_json_reply() -> None:
 @pytest.mark.asyncio
 async def test_select_handles_alternate_action_value() -> None:
     speaker = _StubSpeaker(
-        reply_text=(
-            '```json\n{"action": "operatöre_sor", '
-            '"reasoning": "API key gerekli."}\n```'
-        )
+        reply_text=('```json\n{"action": "operatöre_sor", "reasoning": "API key gerekli."}\n```')
     )
     layer = DeliberationLayer(speaker=speaker)
-    decision = await layer.select(
-        legal_actions=_FULL_LEGAL, world_state=_state()
-    )
+    decision = await layer.select(legal_actions=_FULL_LEGAL, world_state=_state())
     assert decision.action is LegalAction.OPERATOR_ASK
 
 
@@ -176,9 +163,7 @@ async def test_select_handles_alternate_action_value() -> None:
 async def test_select_empty_legal_set_falls_back() -> None:
     speaker = _StubSpeaker(reply_text='{"action": "bekle", "reasoning": "n"}')
     layer = DeliberationLayer(speaker=speaker)
-    decision = await layer.select(
-        legal_actions=frozenset(), world_state=_state()
-    )
+    decision = await layer.select(legal_actions=frozenset(), world_state=_state())
     assert decision.action is LegalAction.WAIT
     assert decision.fallback is True
     # Speaker not called when legal set is empty.
@@ -187,13 +172,9 @@ async def test_select_empty_legal_set_falls_back() -> None:
 
 @pytest.mark.asyncio
 async def test_select_speaker_unhealthy_falls_back() -> None:
-    speaker = _StubSpeaker(
-        exception=RuntimeUnhealthyError("endpoint refused")
-    )
+    speaker = _StubSpeaker(exception=RuntimeUnhealthyError("endpoint refused"))
     layer = DeliberationLayer(speaker=speaker)
-    decision = await layer.select(
-        legal_actions=_FULL_LEGAL, world_state=_state()
-    )
+    decision = await layer.select(legal_actions=_FULL_LEGAL, world_state=_state())
     assert decision.action is LegalAction.WAIT
     assert decision.fallback is True
     # Unreachable ≠ stalled — the model was never even contacted.
@@ -207,13 +188,9 @@ async def test_select_speaker_unhealthy_falls_back() -> None:
 @pytest.mark.asyncio
 async def test_select_stalled_on_speaker_stalled() -> None:
     """Idle-token watchdog (SpeakerStalledError) → stalled WAIT."""
-    speaker = _StubSpeaker(
-        exception=SpeakerStalledError("no tokens for 90s — wedged")
-    )
+    speaker = _StubSpeaker(exception=SpeakerStalledError("no tokens for 90s — wedged"))
     layer = DeliberationLayer(speaker=speaker)
-    decision = await layer.select(
-        legal_actions=_FULL_LEGAL, world_state=_state()
-    )
+    decision = await layer.select(legal_actions=_FULL_LEGAL, world_state=_state())
     assert decision.action is LegalAction.WAIT
     assert decision.fallback is True
     assert decision.stalled is True
@@ -242,13 +219,9 @@ async def test_select_stalled_on_budget_exceeded() -> None:
 @pytest.mark.asyncio
 async def test_select_within_budget_succeeds() -> None:
     """A reply that lands inside the budget is a normal (non-stalled) decision."""
-    speaker = _StubSpeaker(
-        reply_text='{"action": "bekle", "reasoning": "sakin tick"}'
-    )
+    speaker = _StubSpeaker(reply_text='{"action": "bekle", "reasoning": "sakin tick"}')
     layer = DeliberationLayer(speaker=speaker, tick_budget_seconds=5.0)
-    decision = await layer.select(
-        legal_actions=_FULL_LEGAL, world_state=_state()
-    )
+    decision = await layer.select(legal_actions=_FULL_LEGAL, world_state=_state())
     assert decision.action is LegalAction.WAIT
     assert decision.fallback is False
     assert decision.stalled is False
@@ -259,9 +232,7 @@ async def test_select_within_budget_succeeds() -> None:
 async def test_select_prose_only_reply_falls_back() -> None:
     speaker = _StubSpeaker(reply_text="Bence bekle ama JSON döndürmüyorum.")
     layer = DeliberationLayer(speaker=speaker)
-    decision = await layer.select(
-        legal_actions=_FULL_LEGAL, world_state=_state()
-    )
+    decision = await layer.select(legal_actions=_FULL_LEGAL, world_state=_state())
     assert decision.action is LegalAction.WAIT
     assert decision.fallback is True
     assert "parse failed" in decision.reasoning
@@ -269,13 +240,9 @@ async def test_select_prose_only_reply_falls_back() -> None:
 
 @pytest.mark.asyncio
 async def test_select_unknown_action_falls_back() -> None:
-    speaker = _StubSpeaker(
-        reply_text='{"action": "wholly_invented", "reasoning": "x"}'
-    )
+    speaker = _StubSpeaker(reply_text='{"action": "wholly_invented", "reasoning": "x"}')
     layer = DeliberationLayer(speaker=speaker)
-    decision = await layer.select(
-        legal_actions=_FULL_LEGAL, world_state=_state()
-    )
+    decision = await layer.select(legal_actions=_FULL_LEGAL, world_state=_state())
     assert decision.action is LegalAction.WAIT
     assert decision.fallback is True
 
@@ -283,9 +250,7 @@ async def test_select_unknown_action_falls_back() -> None:
 @pytest.mark.asyncio
 async def test_select_action_outside_legal_set_falls_back() -> None:
     """Model picks IDEATE but legal set excludes it (creative off)."""
-    speaker = _StubSpeaker(
-        reply_text='{"action": "fikirleş", "reasoning": "yaratıcı moddayım"}'
-    )
+    speaker = _StubSpeaker(reply_text='{"action": "fikirleş", "reasoning": "yaratıcı moddayım"}')
     layer = DeliberationLayer(speaker=speaker)
     decision = await layer.select(
         legal_actions=frozenset(LegalAction) - {LegalAction.IDEATE},
@@ -301,9 +266,7 @@ async def test_select_malformed_json_falls_back() -> None:
         reply_text='```json\n{"action": "bekle", "reasoning":\n```'  # malformed
     )
     layer = DeliberationLayer(speaker=speaker)
-    decision = await layer.select(
-        legal_actions=_FULL_LEGAL, world_state=_state()
-    )
+    decision = await layer.select(legal_actions=_FULL_LEGAL, world_state=_state())
     assert decision.action is LegalAction.WAIT
     assert decision.fallback is True
 
@@ -312,9 +275,7 @@ async def test_select_malformed_json_falls_back() -> None:
 async def test_select_empty_reply_falls_back() -> None:
     speaker = _StubSpeaker(reply_text="")
     layer = DeliberationLayer(speaker=speaker)
-    decision = await layer.select(
-        legal_actions=_FULL_LEGAL, world_state=_state()
-    )
+    decision = await layer.select(legal_actions=_FULL_LEGAL, world_state=_state())
     assert decision.action is LegalAction.WAIT
     assert decision.fallback is True
 
@@ -340,9 +301,7 @@ async def test_user_prompt_includes_quota_summary_and_pause() -> None:
 async def test_user_prompt_quota_no_signal_when_dict_empty() -> None:
     speaker = _StubSpeaker(reply_text='{"action": "bekle", "reasoning": "ok"}')
     layer = DeliberationLayer(speaker=speaker)
-    await layer.select(
-        legal_actions=_FULL_LEGAL, world_state=_state(cli_quota={})
-    )
+    await layer.select(legal_actions=_FULL_LEGAL, world_state=_state(cli_quota={}))
     user_msg = speaker.calls[0][1]["content"]
     assert "CLI quota: no signal" in user_msg
 
@@ -351,7 +310,7 @@ async def test_user_prompt_quota_no_signal_when_dict_empty() -> None:
 
 
 def test_parse_decision_handles_extra_whitespace() -> None:
-    reply = "\n```json\n  {\n    \"action\": \"bekle\",\n    \"reasoning\": \"r\"\n  }\n```\n"
+    reply = '\n```json\n  {\n    "action": "bekle",\n    "reasoning": "r"\n  }\n```\n'
     action, reasoning = _parse_decision(reply, _FULL_LEGAL)
     assert action is LegalAction.WAIT
     assert reasoning == "r"
@@ -369,9 +328,7 @@ def test_parse_decision_rejects_missing_action() -> None:
 
 def test_parse_decision_reasoning_optional() -> None:
     """Missing ``reasoning`` is tolerated; falls back to empty string."""
-    action, reasoning = _parse_decision(
-        '{"action": "bekle"}', _FULL_LEGAL
-    )
+    action, reasoning = _parse_decision('{"action": "bekle"}', _FULL_LEGAL)
     assert action is LegalAction.WAIT
     assert reasoning == ""
 

@@ -135,9 +135,7 @@ class WorldState:
     max_concurrent_sessions: int
     creative_mode_enabled: bool
     cli_quota: Mapping[str, QuotaSnapshot | None] = field(default_factory=dict)
-    quota_exhaustion_threshold_pct: float = (
-        DEFAULT_QUOTA_EXHAUSTION_THRESHOLD_PCT
-    )
+    quota_exhaustion_threshold_pct: float = DEFAULT_QUOTA_EXHAUSTION_THRESHOLD_PCT
     supervised_mode: bool = False
     last_active_workspace: str | None = None
     body_daemon_alive: bool = False
@@ -244,21 +242,11 @@ class WorldStateBuilder:
         """Snapshot the orchestrator state."""
         pause_active = self._pause.is_set()
         within_active_hours = (
-            self._within_active_hours()
-            if self._within_active_hours is not None
-            else True
+            self._within_active_hours() if self._within_active_hours is not None else True
         )
-        active_concurrent = (
-            self._concurrency() if self._concurrency is not None else 0
-        )
-        creative_enabled = (
-            self._creative_mode() if self._creative_mode is not None else False
-        )
-        supervised = (
-            self._supervised_mode()
-            if self._supervised_mode is not None
-            else False
-        )
+        active_concurrent = self._concurrency() if self._concurrency is not None else 0
+        creative_enabled = self._creative_mode() if self._creative_mode is not None else False
+        supervised = self._supervised_mode() if self._supervised_mode is not None else False
         cli_quota: dict[str, QuotaSnapshot | None] = {}
         if self._quota_reader is not None:
             for cli_id in self._cli_ids:
@@ -317,12 +305,8 @@ class WorldStateBuilder:
 
 
 _ALL_ACTIONS: Final[frozenset[LegalAction]] = frozenset(LegalAction)
-_PAUSE_ALLOWED: Final[frozenset[LegalAction]] = frozenset(
-    {LegalAction.WAIT, LegalAction.SELF_STOP}
-)
-_OUTSIDE_HOURS_ALLOWED: Final[frozenset[LegalAction]] = frozenset(
-    {LegalAction.WAIT}
-)
+_PAUSE_ALLOWED: Final[frozenset[LegalAction]] = frozenset({LegalAction.WAIT, LegalAction.SELF_STOP})
+_OUTSIDE_HOURS_ALLOWED: Final[frozenset[LegalAction]] = frozenset({LegalAction.WAIT})
 
 
 class LegalActionFilter:
@@ -352,10 +336,7 @@ class LegalActionFilter:
         legal = set(_ALL_ACTIONS)
 
         # Rule 3 — concurrency cap removes TASK_START only.
-        if (
-            state.active_concurrent_sessions
-            >= state.max_concurrent_sessions
-        ):
+        if state.active_concurrent_sessions >= state.max_concurrent_sessions:
             legal.discard(LegalAction.TASK_START)
 
         # Rule 4 — every tracked CLI exhausted ⇒ no provider can run.

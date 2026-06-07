@@ -21,7 +21,12 @@ __all__ = [
 
 class IosFindElementArgs(ToolArgs):
     by: Literal[
-        "accessibility id", "name", "class name", "xpath", "predicate string", "ios class chain",
+        "accessibility id",
+        "name",
+        "class name",
+        "xpath",
+        "predicate string",
+        "ios class chain",
     ] = "accessibility id"
     value: str = Field(min_length=1, max_length=4_096)
 
@@ -47,7 +52,8 @@ async def _ios_find_element(ctx: ToolContext, args: IosFindElementArgs) -> dict[
 
 
 async def _ios_get_active_element(
-    ctx: ToolContext, args: IosGetActiveElementArgs,
+    ctx: ToolContext,
+    args: IosGetActiveElementArgs,
 ) -> dict[str, Any]:
     drv = _require_ios_driver(ctx)
 

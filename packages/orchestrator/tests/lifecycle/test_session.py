@@ -426,9 +426,7 @@ class TestStuckDetectorWiring:
         outcome = await session.run()
         assert outcome == SessionState.FAILED
         assert "wall-clock" in (session.failure_reason or "")
-        cap_records = [
-            rec for rec in _read_audit(audit) if rec["category"] == "loop.cap_reached"
-        ]
+        cap_records = [rec for rec in _read_audit(audit) if rec["category"] == "loop.cap_reached"]
         assert cap_records
         assert cap_records[0]["payload"]["kind"] == "wall_clock"
 
@@ -993,17 +991,11 @@ class TestToolIntegration:
 
         records = _read_audit(audit)
         # The pre-invoke audit still routes by name match (structured).
-        structured_q = [
-            r for r in records
-            if r.get("category") == "tool.structured_question"
-        ]
+        structured_q = [r for r in records if r.get("category") == "tool.structured_question"]
         assert len(structured_q) == 1, structured_q
         assert structured_q[0]["payload"]["tool"] == "ask_user_question"
         # The post-invoke audit reports the drift as ``unknown_tool``.
-        structured_a = [
-            r for r in records
-            if r.get("category") == "tool.structured_answer"
-        ]
+        structured_a = [r for r in records if r.get("category") == "tool.structured_answer"]
         assert len(structured_a) == 1, structured_a
         assert structured_a[0]["payload"]["status"] == "unknown_tool"
 
@@ -1064,14 +1056,13 @@ class TestToolIntegration:
 
         records = _read_audit(audit)
         body_results = [
-            r for r in records
+            r
+            for r in records
             if r.get("category") == "tool.result"
             and isinstance(r.get("payload"), dict)
             and r["payload"].get("tool") == "body_screenshot"
         ]
-        assert len(body_results) == 1, (
-            f"expected one body_screenshot result, got: {body_results}"
-        )
+        assert len(body_results) == 1, f"expected one body_screenshot result, got: {body_results}"
         assert body_results[0]["payload"]["status"] == "ok", (
             "F1 wire broken — body_driver did not reach ToolContext"
         )

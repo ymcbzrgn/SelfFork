@@ -44,9 +44,7 @@ def _enabled_config(**overrides: object) -> HeartbeatConfig:
 
 
 @pytest.fixture(autouse=True)
-def _isolate_autonomy_store(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _isolate_autonomy_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Point the autonomy YAML store at a per-test tmp path.
 
     ``build_default_heartbeat`` resolves ``AutonomyStore.default()`` →
@@ -69,9 +67,7 @@ def _isolate_autonomy_store(
 @pytest.mark.asyncio
 async def test_disabled_config_skips_start(tmp_path: Path) -> None:
     pause = PauseSignal(flag_path=tmp_path / "pause.flag")
-    sched = HeartbeatScheduler(
-        config=HeartbeatConfig(enabled=False), pause_signal=pause
-    )
+    sched = HeartbeatScheduler(config=HeartbeatConfig(enabled=False), pause_signal=pause)
     assert sched.state is HeartbeatState.DISABLED
     await sched.start()
     assert sched.state is HeartbeatState.DISABLED
@@ -81,9 +77,7 @@ async def test_disabled_config_skips_start(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_disabled_stop_is_safe(tmp_path: Path) -> None:
     pause = PauseSignal(flag_path=tmp_path / "pause.flag")
-    sched = HeartbeatScheduler(
-        config=HeartbeatConfig(enabled=False), pause_signal=pause
-    )
+    sched = HeartbeatScheduler(config=HeartbeatConfig(enabled=False), pause_signal=pause)
     await sched.stop()
     assert sched.state is HeartbeatState.DISABLED
 
@@ -363,9 +357,7 @@ async def test_decide_tick_populates_action_decision(tmp_path: Path) -> None:
     from selffork_orchestrator.heartbeat.deliberation import DeliberationLayer
 
     class _StubSpeaker:
-        async def reply(
-            self, messages: Sequence[Mapping[str, str]]
-        ) -> str:
+        async def reply(self, messages: Sequence[Mapping[str, str]]) -> str:
             return '{"action": "bekle", "reasoning": "şu an iş yok"}'
 
     pause = PauseSignal(flag_path=tmp_path / "pause.flag")
@@ -404,12 +396,11 @@ def test_build_default_heartbeat_wires_deliberation_when_endpoint_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _clear_heartbeat_env(monkeypatch)
-    monkeypatch.setenv(
-        "SELFFORK_TALK_MODEL_ENDPOINT", "http://127.0.0.1:8080/v1"
-    )
+    monkeypatch.setenv("SELFFORK_TALK_MODEL_ENDPOINT", "http://127.0.0.1:8080/v1")
     monkeypatch.setenv("SELFFORK_TALK_MODEL", "gemma-4-e2b")
     sched = build_default_heartbeat()
     assert sched._deliberation is not None
+
 
 def test_build_default_heartbeat_skips_deliberation_when_env_missing(
     monkeypatch: pytest.MonkeyPatch,
@@ -437,29 +428,20 @@ def test_build_default_heartbeat_wires_deliberation_budget(
 ) -> None:
     """The per-tick budget reaches the constructed DeliberationLayer."""
     _clear_heartbeat_env(monkeypatch)
-    monkeypatch.setenv(
-        "SELFFORK_TALK_MODEL_ENDPOINT", "http://127.0.0.1:8080/v1"
-    )
+    monkeypatch.setenv("SELFFORK_TALK_MODEL_ENDPOINT", "http://127.0.0.1:8080/v1")
     monkeypatch.setenv("SELFFORK_TALK_MODEL", "gemma-4-e2b")
     sched = build_default_heartbeat()
     assert sched._deliberation is not None
-    assert (
-        sched._deliberation._tick_budget_seconds
-        == DEFAULT_DELIBERATION_BUDGET_SECONDS
-    )
+    assert sched._deliberation._tick_budget_seconds == DEFAULT_DELIBERATION_BUDGET_SECONDS
 
 
 def test_build_default_heartbeat_budget_env_override(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _clear_heartbeat_env(monkeypatch)
-    monkeypatch.setenv(
-        "SELFFORK_TALK_MODEL_ENDPOINT", "http://127.0.0.1:8080/v1"
-    )
+    monkeypatch.setenv("SELFFORK_TALK_MODEL_ENDPOINT", "http://127.0.0.1:8080/v1")
     monkeypatch.setenv("SELFFORK_TALK_MODEL", "gemma-4-e2b")
-    monkeypatch.setenv(
-        "SELFFORK_HEARTBEAT_DELIBERATION_BUDGET_SECONDS", "42"
-    )
+    monkeypatch.setenv("SELFFORK_HEARTBEAT_DELIBERATION_BUDGET_SECONDS", "42")
     sched = build_default_heartbeat()
     assert sched._deliberation is not None
     assert sched._deliberation._tick_budget_seconds == 42.0
@@ -556,10 +538,7 @@ async def test_restart_after_self_stop_resumes_ticking(tmp_path: Path) -> None:
         async def reply(self, messages: Sequence[Mapping[str, str]]) -> str:
             self.calls += 1
             if self.calls == 1:
-                return (
-                    '{"action": "kendini_durdur", '
-                    '"reasoning": "first run stop"}'
-                )
+                return '{"action": "kendini_durdur", "reasoning": "first run stop"}'
             return '{"action": "bekle", "reasoning": "second run idle"}'
 
     pause = PauseSignal(flag_path=tmp_path / "pause.flag")
@@ -667,6 +646,7 @@ async def test_audit_writer_records_tick_to_disk(tmp_path: Path) -> None:
     lines = audit_path.read_text(encoding="utf-8").strip().split("\n")
     assert len(lines) >= 1
     import json
+
     payload = json.loads(lines[0])
     assert payload["decision_action"] == "bekle"
     assert payload["result_outcome"] == "executed"
@@ -713,10 +693,7 @@ async def test_air_detector_panic_halts_daemon(tmp_path: Path) -> None:
 
     class _PanicSpeaker:
         async def reply(self, messages: Sequence[Mapping[str, str]]) -> str:
-            return (
-                '{"action": "bekle", '
-                '"reasoning": "I am panicking and covering up the failure"}'
-            )
+            return '{"action": "bekle", "reasoning": "I am panicking and covering up the failure"}'
 
     pause = PauseSignal(flag_path=tmp_path / "pause.flag")
     sched = HeartbeatScheduler(
@@ -757,13 +734,9 @@ async def test_air_alert_dispatches_to_emergency_bridge(tmp_path: Path) -> None:
         def __init__(self) -> None:
             self.messages: list[TelegramMessage] = []
 
-        async def notify(
-            self, message: TelegramMessage
-        ) -> DeliveryAttempt:
+        async def notify(self, message: TelegramMessage) -> DeliveryAttempt:
             self.messages.append(message)
-            return DeliveryAttempt(
-                delivered=True, chat_id=1, sent_at=datetime.now(UTC)
-            )
+            return DeliveryAttempt(delivered=True, chat_id=1, sent_at=datetime.now(UTC))
 
     bridge = _RecordingBridge()
     pause = PauseSignal(flag_path=tmp_path / "pause.flag")

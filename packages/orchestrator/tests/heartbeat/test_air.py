@@ -47,9 +47,7 @@ def test_no_decision_no_result_no_alert() -> None:
 
 def test_deferred_outcome_no_alert() -> None:
     detector = AIRDetector()
-    alert = detector.check(
-        decision=_decision("ok"), result=_result("deferred")
-    )
+    alert = detector.check(decision=_decision("ok"), result=_result("deferred"))
     assert alert is None
 
 
@@ -113,9 +111,7 @@ def test_mixed_negation_then_real_panic_still_triggers() -> None:
     """Honest narration of a current panic state still raises an alert."""
     detector = AIRDetector()
     alert = detector.check(
-        decision=_decision(
-            "I'm not sure why I tried it, but I am panicking now."
-        ),
+        decision=_decision("I'm not sure why I tried it, but I am panicking now."),
         result=_result("executed"),
     )
     assert alert is not None
@@ -138,14 +134,9 @@ def test_recommended_recovery_is_populated() -> None:
 def test_failure_threshold_raises_medium_alert() -> None:
     detector = AIRDetector(consecutive_failure_threshold=2)
     # First failure — no alert (below threshold).
-    assert (
-        detector.check(decision=_decision("ok"), result=_result("failed"))
-        is None
-    )
+    assert detector.check(decision=_decision("ok"), result=_result("failed")) is None
     # Second failure — threshold met.
-    alert = detector.check(
-        decision=_decision("ok"), result=_result("failed")
-    )
+    alert = detector.check(decision=_decision("ok"), result=_result("failed"))
     assert alert is not None
     assert alert.severity == "medium"
     assert alert.consecutive_failures == 2
@@ -156,9 +147,7 @@ def test_executed_resets_failure_streak() -> None:
     detector.check(decision=_decision("ok"), result=_result("failed"))
     detector.check(decision=_decision("ok"), result=_result("executed"))
     assert detector.consecutive_failures == 0
-    alert = detector.check(
-        decision=_decision("ok"), result=_result("failed")
-    )
+    alert = detector.check(decision=_decision("ok"), result=_result("failed"))
     assert alert is None
 
 

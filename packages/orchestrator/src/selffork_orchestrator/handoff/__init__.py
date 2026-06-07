@@ -16,6 +16,7 @@ Schema follows Letta ``.af`` AgentFileSchema patterns: Stripe-style
 scrubbed on the way out (``env_whitelist`` is allow-list, never the full
 process env).
 """
+
 from __future__ import annotations
 
 from selffork_orchestrator.handoff.bundle import (

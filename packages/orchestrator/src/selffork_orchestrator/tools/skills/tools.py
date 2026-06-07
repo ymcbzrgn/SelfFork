@@ -125,7 +125,8 @@ async def _run_subprocess(cmd: list[str], cwd: Path | None = None) -> dict[str, 
 async def _skill_list(ctx: ToolContext, args: SkillListArgs) -> dict[str, Any]:
     canonical = _resolve_canonical(args.canonical_dir)
     installer = SkillInstaller(
-        canonical_dir=canonical, target_dirs=default_target_cli_dirs(),
+        canonical_dir=canonical,
+        target_dirs=default_target_cli_dirs(),
     )
 
     async def _run() -> dict[str, Any]:
@@ -137,7 +138,9 @@ async def _skill_list(ctx: ToolContext, args: SkillListArgs) -> dict[str, Any]:
         }
 
     return await _invoke_callable(
-        ctx, action_type="skill.list", target_uri=str(canonical),
+        ctx,
+        action_type="skill.list",
+        target_uri=str(canonical),
         args_summary={"canonical_dir": str(canonical)},
         coro_factory=_run,
     )
@@ -151,17 +154,20 @@ async def _skill_show(ctx: ToolContext, args: SkillShowArgs) -> dict[str, Any]:
             return {"exists": False, "path": str(skill_dir)}
         manifest_path = skill_dir / "SKILL.md"
         manifest = (
-            manifest_path.read_text(errors="replace")[:16_384]
-            if manifest_path.is_file() else None
+            manifest_path.read_text(errors="replace")[:16_384] if manifest_path.is_file() else None
         )
         files = sorted(p.name for p in skill_dir.iterdir())
         return {
-            "exists": True, "path": str(skill_dir),
-            "manifest": manifest, "files": files[:200],
+            "exists": True,
+            "path": str(skill_dir),
+            "manifest": manifest,
+            "files": files[:200],
         }
 
     return await _invoke_callable(
-        ctx, action_type="skill.show", target_uri=str(skill_dir),
+        ctx,
+        action_type="skill.show",
+        target_uri=str(skill_dir),
         args_summary={"name": args.name},
         coro_factory=_run,
     )
@@ -174,7 +180,8 @@ async def _skill_sync(ctx: ToolContext, args: SkillSyncArgs) -> dict[str, Any]:
     else:
         targets = default_target_cli_dirs()
     installer = SkillInstaller(
-        canonical_dir=canonical, target_dirs=targets,
+        canonical_dir=canonical,
+        target_dirs=targets,
     )
 
     async def _run() -> dict[str, Any]:
@@ -189,7 +196,9 @@ async def _skill_sync(ctx: ToolContext, args: SkillSyncArgs) -> dict[str, Any]:
         }
 
     return await _invoke_callable(
-        ctx, action_type="skill.sync", target_uri=str(canonical),
+        ctx,
+        action_type="skill.sync",
+        target_uri=str(canonical),
         args_summary={"canonical_dir": str(canonical)},
         coro_factory=_run,
     )
@@ -220,7 +229,9 @@ async def _skill_install(ctx: ToolContext, args: SkillInstallArgs) -> dict[str, 
         return {"status": "ok", "method": "copytree", "path": str(skill_dir)}
 
     return await _invoke_callable(
-        ctx, action_type="skill.install", target_uri=str(skill_dir),
+        ctx,
+        action_type="skill.install",
+        target_uri=str(skill_dir),
         args_summary={"name": args.name, "source": args.source},
         coro_factory=_run,
     )
@@ -239,7 +250,9 @@ async def _skill_uninstall(ctx: ToolContext, args: SkillUninstallArgs) -> dict[s
         return {"status": "ok", "removed": True}
 
     return await _invoke_callable(
-        ctx, action_type="skill.uninstall", target_uri=str(skill_dir),
+        ctx,
+        action_type="skill.uninstall",
+        target_uri=str(skill_dir),
         args_summary={"name": args.name},
         coro_factory=_run,
     )
@@ -258,7 +271,9 @@ async def _skill_update(ctx: ToolContext, args: SkillUpdateArgs) -> dict[str, An
         }
 
     return await _invoke_callable(
-        ctx, action_type="skill.update", target_uri=str(skill_dir),
+        ctx,
+        action_type="skill.update",
+        target_uri=str(skill_dir),
         args_summary={"name": args.name},
         coro_factory=_run,
     )
@@ -280,14 +295,18 @@ async def _skill_search(ctx: ToolContext, args: SkillSearchArgs) -> dict[str, An
                 continue
             content = manifest_path.read_text(errors="replace").lower()
             if needle in content or needle in skill_dir.name.lower():
-                hits.append({
-                    "name": skill_dir.name,
-                    "match_in_name": needle in skill_dir.name.lower(),
-                })
+                hits.append(
+                    {
+                        "name": skill_dir.name,
+                        "match_in_name": needle in skill_dir.name.lower(),
+                    }
+                )
         return {"hits": hits[:200], "count": len(hits)}
 
     return await _invoke_callable(
-        ctx, action_type="skill.search", target_uri=str(canonical),
+        ctx,
+        action_type="skill.search",
+        target_uri=str(canonical),
         args_summary={"query_len": len(args.query)},
         coro_factory=_run,
     )
@@ -317,7 +336,9 @@ async def _skill_validate(ctx: ToolContext, args: SkillValidateArgs) -> dict[str
         return {"valid": True, "frontmatter_len": len(frontmatter)}
 
     return await _invoke_callable(
-        ctx, action_type="skill.validate", target_uri=str(skill_dir),
+        ctx,
+        action_type="skill.validate",
+        target_uri=str(skill_dir),
         args_summary={"name": args.name},
         coro_factory=_run,
     )
@@ -337,7 +358,9 @@ async def _skill_export(ctx: ToolContext, args: SkillExportArgs) -> dict[str, An
         return {"status": "ok", "output_path": str(output_path), "bytes": size}
 
     return await _invoke_callable(
-        ctx, action_type="skill.export", target_uri=str(output_path),
+        ctx,
+        action_type="skill.export",
+        target_uri=str(output_path),
         args_summary={"name": args.name, "output_path": str(output_path)},
         coro_factory=_run,
     )
@@ -368,7 +391,9 @@ async def _skill_create(ctx: ToolContext, args: SkillCreateArgs) -> dict[str, An
         return {"status": "ok", "path": str(skill_dir)}
 
     return await _invoke_callable(
-        ctx, action_type="skill.create", target_uri=str(skill_dir),
+        ctx,
+        action_type="skill.create",
+        target_uri=str(skill_dir),
         args_summary={"name": args.name, "description_len": len(args.description)},
         coro_factory=_run,
     )
@@ -376,57 +401,81 @@ async def _skill_create(ctx: ToolContext, args: SkillCreateArgs) -> dict[str, An
 
 def build_skills_tools_inner() -> list[ToolSpec[Any]]:
     return [
-        ToolSpec(name="skill_list",
-                 description="List installed skills under the canonical dir.",
-                 args_model=SkillListArgs, handler=_skill_list, defer_loading=True),
-        ToolSpec(name="skill_show",
-                 description="Show skill metadata (SKILL.md + file list).",
-                 args_model=SkillShowArgs, handler=_skill_show, defer_loading=True),
-        ToolSpec(name="skill_sync",
-                 description=(
-                     "Fan-out canonical skills into each CLI's skills dir "
-                     "(claude/codex/gemini/opencode). Idempotent + conflict-aware."
-                 ),
-                 args_model=SkillSyncArgs, handler=_skill_sync, defer_loading=True),
-        ToolSpec(name="skill_install",
-                 description=(
-                     "Install a skill into the canonical dir from a git URL "
-                     "or local path."
-                 ),
-                 args_model=SkillInstallArgs, handler=_skill_install,
-                 defer_loading=True),
-        ToolSpec(name="skill_uninstall",
-                 description="Remove a skill (handles symlink + dir variants).",
-                 args_model=SkillUninstallArgs, handler=_skill_uninstall,
-                 defer_loading=True),
-        ToolSpec(name="skill_update",
-                 description=(
-                     "Update a git-backed skill via `git pull --ff-only` "
-                     "inside the canonical dir."
-                 ),
-                 args_model=SkillUpdateArgs, handler=_skill_update,
-                 defer_loading=True),
-        ToolSpec(name="skill_search",
-                 description=(
-                     "Search canonical skills' SKILL.md + names for a substring."
-                 ),
-                 args_model=SkillSearchArgs, handler=_skill_search,
-                 defer_loading=True),
-        ToolSpec(name="skill_validate",
-                 description=(
-                     "Validate a skill manifest: SKILL.md exists with "
-                     "name+description YAML frontmatter."
-                 ),
-                 args_model=SkillValidateArgs, handler=_skill_validate,
-                 defer_loading=True),
-        ToolSpec(name="skill_export",
-                 description="Export a skill directory to a .tar.gz bundle.",
-                 args_model=SkillExportArgs, handler=_skill_export,
-                 defer_loading=True),
-        ToolSpec(name="skill_create",
-                 description=(
-                     "Scaffold a new skill directory with a SKILL.md template."
-                 ),
-                 args_model=SkillCreateArgs, handler=_skill_create,
-                 defer_loading=True),
+        ToolSpec(
+            name="skill_list",
+            description="List installed skills under the canonical dir.",
+            args_model=SkillListArgs,
+            handler=_skill_list,
+            defer_loading=True,
+        ),
+        ToolSpec(
+            name="skill_show",
+            description="Show skill metadata (SKILL.md + file list).",
+            args_model=SkillShowArgs,
+            handler=_skill_show,
+            defer_loading=True,
+        ),
+        ToolSpec(
+            name="skill_sync",
+            description=(
+                "Fan-out canonical skills into each CLI's skills dir "
+                "(claude/codex/gemini/opencode). Idempotent + conflict-aware."
+            ),
+            args_model=SkillSyncArgs,
+            handler=_skill_sync,
+            defer_loading=True,
+        ),
+        ToolSpec(
+            name="skill_install",
+            description=("Install a skill into the canonical dir from a git URL or local path."),
+            args_model=SkillInstallArgs,
+            handler=_skill_install,
+            defer_loading=True,
+        ),
+        ToolSpec(
+            name="skill_uninstall",
+            description="Remove a skill (handles symlink + dir variants).",
+            args_model=SkillUninstallArgs,
+            handler=_skill_uninstall,
+            defer_loading=True,
+        ),
+        ToolSpec(
+            name="skill_update",
+            description=(
+                "Update a git-backed skill via `git pull --ff-only` inside the canonical dir."
+            ),
+            args_model=SkillUpdateArgs,
+            handler=_skill_update,
+            defer_loading=True,
+        ),
+        ToolSpec(
+            name="skill_search",
+            description=("Search canonical skills' SKILL.md + names for a substring."),
+            args_model=SkillSearchArgs,
+            handler=_skill_search,
+            defer_loading=True,
+        ),
+        ToolSpec(
+            name="skill_validate",
+            description=(
+                "Validate a skill manifest: SKILL.md exists with name+description YAML frontmatter."
+            ),
+            args_model=SkillValidateArgs,
+            handler=_skill_validate,
+            defer_loading=True,
+        ),
+        ToolSpec(
+            name="skill_export",
+            description="Export a skill directory to a .tar.gz bundle.",
+            args_model=SkillExportArgs,
+            handler=_skill_export,
+            defer_loading=True,
+        ),
+        ToolSpec(
+            name="skill_create",
+            description=("Scaffold a new skill directory with a SKILL.md template."),
+            args_model=SkillCreateArgs,
+            handler=_skill_create,
+            defer_loading=True,
+        ),
     ]

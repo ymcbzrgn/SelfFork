@@ -194,9 +194,7 @@ class SpeakerClient:
         """
         chunks: list[str] = []
         full_reply: str | None = None
-        async for ev in self.reply_stream(
-            messages, stall_seconds=self._default_stall_seconds
-        ):
+        async for ev in self.reply_stream(messages, stall_seconds=self._default_stall_seconds):
             if isinstance(ev, TokenChunk):
                 chunks.append(ev.text)
                 continue
@@ -238,20 +236,17 @@ class SpeakerClient:
             pool=self._connect_seconds,
         )
         try:
-            async with httpx.AsyncClient(
-                timeout=timeout, transport=self._transport
-            ) as client, client.stream(
-                "POST", self.endpoint, json=body
-            ) as resp:
+            async with (
+                httpx.AsyncClient(timeout=timeout, transport=self._transport) as client,
+                client.stream("POST", self.endpoint, json=body) as resp,
+            ):
                 if resp.status_code != 200:
                     body_bytes = await resp.aread()
                     raise RuntimeUnhealthyError(
                         f"speaker HTTP {resp.status_code}: "
                         f"{body_bytes.decode('utf-8', errors='replace')[:500]}"
                     )
-                async for event in stream_openai_sse(
-                    resp, stall_seconds=effective_stall
-                ):
+                async for event in stream_openai_sse(resp, stall_seconds=effective_stall):
                     yield event
         except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPError) as exc:
             raise RuntimeUnhealthyError(

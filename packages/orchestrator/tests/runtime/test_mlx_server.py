@@ -99,9 +99,7 @@ async def test_shared_mode_stop_skips_process_teardown(
 
 def _sse_frame(content: str = "", *, finish_reason: str | None = None) -> bytes:
     delta: dict[str, str] = {"content": content} if content else {}
-    payload = json.dumps(
-        {"choices": [{"delta": delta, "finish_reason": finish_reason}]}
-    )
+    payload = json.dumps({"choices": [{"delta": delta, "finish_reason": finish_reason}]})
     return f"data: {payload}\n\n".encode()
 
 
@@ -159,10 +157,7 @@ def _hello_stream() -> AsyncIterator[bytes]:
 @pytest.mark.asyncio
 async def test_chat_stream_yields_tokens_then_done() -> None:
     rt = _streaming_runtime(_hello_stream)
-    events = [
-        ev
-        async for ev in rt.chat_stream([{"role": "user", "content": "hi"}])
-    ]
+    events = [ev async for ev in rt.chat_stream([{"role": "user", "content": "hi"}])]
     tokens = [e for e in events if isinstance(e, TokenChunk)]
     done = [e for e in events if isinstance(e, StreamDone)]
     assert [t.text for t in tokens] == ["hello", " world"]
@@ -227,9 +222,7 @@ async def test_chat_stream_idle_watchdog_raises_stalled() -> None:
 
     rt = _streaming_runtime(gen)
     with pytest.raises(SpeakerStalledError):
-        async for _ in rt.chat_stream(
-            [{"role": "user", "content": "x"}], stall_seconds=0.2
-        ):
+        async for _ in rt.chat_stream([{"role": "user", "content": "x"}], stall_seconds=0.2):
             pass
 
 

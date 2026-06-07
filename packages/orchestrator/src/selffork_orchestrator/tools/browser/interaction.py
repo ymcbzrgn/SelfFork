@@ -29,7 +29,9 @@ __all__ = [
 
 
 class BrowserClickArgs(ToolArgs):
-    target: str | None = Field(default=None, max_length=1024, description="CSS selector or text content")  # noqa: E501
+    target: str | None = Field(
+        default=None, max_length=1024, description="CSS selector or text content"
+    )  # noqa: E501
     x: int | None = Field(default=None, ge=0)
     y: int | None = Field(default=None, ge=0)
     button: Literal["left", "right"] = "left"
@@ -92,7 +94,9 @@ async def _browser_click(ctx: ToolContext, args: BrowserClickArgs) -> dict[str, 
 
     async def _run() -> None:
         if args.x is not None and args.y is not None:
-            await drv.click(target=args.target or "", bbox=(args.x, args.y, 1, 1), button=args.button)  # noqa: E501
+            await drv.click(
+                target=args.target or "", bbox=(args.x, args.y, 1, 1), button=args.button
+            )  # noqa: E501
         elif args.target is not None:
             await drv.click(args.target, button=args.button)
         else:
@@ -130,7 +134,11 @@ async def _browser_type(ctx: ToolContext, args: BrowserTypeArgs) -> dict[str, An
         ctx,
         action_type="browser.type",
         target_uri=args.target,
-        args_summary={"text_len": len(args.text), "target": args.target, "clear_first": args.clear_first},  # noqa: E501
+        args_summary={
+            "text_len": len(args.text),
+            "target": args.target,
+            "clear_first": args.clear_first,
+        },  # noqa: E501
         coro_factory=_run,
     )
 
@@ -178,7 +186,10 @@ async def _browser_select_option(ctx: ToolContext, args: BrowserSelectOptionArgs
 
     async def _run() -> dict[str, Any]:
         selected = await drv.select_option(
-            args.target, value=args.value, label=args.label, index=args.index,
+            args.target,
+            value=args.value,
+            label=args.label,
+            index=args.index,
         )
         return {"selected": selected}
 
@@ -254,9 +265,7 @@ def build_browser_interaction_tools() -> list[ToolSpec[Any]]:
         ),
         ToolSpec(
             name="browser_press_key",
-            description=(
-                "Press a key combo on the active page (e.g. 'Enter', 'Control+a')."
-            ),
+            description=("Press a key combo on the active page (e.g. 'Enter', 'Control+a')."),
             args_model=BrowserPressKeyArgs,
             handler=_browser_press_key,
             defer_loading=False,

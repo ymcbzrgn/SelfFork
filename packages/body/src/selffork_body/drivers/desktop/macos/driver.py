@@ -26,7 +26,6 @@ __all__ = ["MacOSDesktopDriver"]
 
 
 class MacOSDesktopDriver:
-
     platform: str = "macos"
 
     def __init__(
@@ -151,9 +150,12 @@ class MacOSDesktopDriver:
         key = parts[-1]
         for mod in parts[:-1]:
             mod_map = {
-                "cmd": "command", "command": "command",
-                "ctrl": "control", "control": "control",
-                "alt": "option", "option": "option",
+                "cmd": "command",
+                "command": "command",
+                "ctrl": "control",
+                "control": "control",
+                "alt": "option",
+                "option": "option",
                 "shift": "shift",
             }
             mod_clean = mod_map.get(mod.lower())
@@ -191,17 +193,22 @@ class MacOSDesktopDriver:
         await self._post_mouse_click(x, y, "right")
 
     async def screenshot_region(
-        self, x: int, y: int, w: int, h: int,
+        self,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
     ) -> bytes:
         return await self._screencapture.capture(rect=(x, y, w, h))
 
     async def get_active_app(self) -> dict[str, str]:
         script = (
             'var app = Application("System Events").processes.whose({frontmost: true})[0];'
-            'JSON.stringify({name: app.name(), bundleId: app.bundleIdentifier()});'
+            "JSON.stringify({name: app.name(), bundleId: app.bundleIdentifier()});"
         )
         out = await self._applescript.run(script)
         import json
+
         try:
             data = json.loads(out.strip())
         except json.JSONDecodeError:
@@ -214,14 +221,15 @@ class MacOSDesktopDriver:
     async def list_apps(self) -> list[dict[str, str]]:
         script = (
             'var procs = Application("System Events").processes.whose({backgroundOnly: false});'
-            'var out = [];'
-            'for (var i = 0; i < procs.length; i++) {'
-            '  out.push({name: procs[i].name(), bundleId: procs[i].bundleIdentifier()});'
-            '}'
-            'JSON.stringify(out);'
+            "var out = [];"
+            "for (var i = 0; i < procs.length; i++) {"
+            "  out.push({name: procs[i].name(), bundleId: procs[i].bundleIdentifier()});"
+            "}"
+            "JSON.stringify(out);"
         )
         out = await self._applescript.run(script)
         import json
+
         try:
             data = json.loads(out.strip())
             return [
@@ -236,24 +244,22 @@ class MacOSDesktopDriver:
         script = (
             f'var name = "{target}";'
             'var procs = Application("System Events").processes;'
-            'var out = [];'
-            'for (var i = 0; i < procs.length; i++) {'
-            '  if (name && procs[i].name() !== name) continue;'
-            '  var wins = procs[i].windows;'
-            '  for (var j = 0; j < wins.length; j++) {'
-            '    out.push({app: procs[i].name(), title: wins[j].name()});'
-            '  }'
-            '}'
-            'JSON.stringify(out);'
+            "var out = [];"
+            "for (var i = 0; i < procs.length; i++) {"
+            "  if (name && procs[i].name() !== name) continue;"
+            "  var wins = procs[i].windows;"
+            "  for (var j = 0; j < wins.length; j++) {"
+            "    out.push({app: procs[i].name(), title: wins[j].name()});"
+            "  }"
+            "}"
+            "JSON.stringify(out);"
         )
         out = await self._applescript.run(script)
         import json
+
         try:
             data = json.loads(out.strip())
-            return [
-                {"app": str(d.get("app", "")), "title": str(d.get("title", ""))}
-                for d in data
-            ]
+            return [{"app": str(d.get("app", "")), "title": str(d.get("title", ""))} for d in data]
         except json.JSONDecodeError:
             return []
 
@@ -264,11 +270,11 @@ class MacOSDesktopDriver:
         else:
             script = (
                 f'var app = Application("{app_name}");'
-                'app.activate();'
+                "app.activate();"
                 f'var wins = Application("System Events").processes.byName("{app_name}").windows;'
-                'for (var i = 0; i < wins.length; i++) {'
+                "for (var i = 0; i < wins.length; i++) {"
                 f'  if (wins[i].name() === "{window_title}") {{ wins[i].perform("AXRaise"); break; }}'
-                '}'
+                "}"
             )
         await self._applescript.run(script)
 
@@ -291,7 +297,10 @@ class MacOSDesktopDriver:
         await proc.communicate(text.encode())
 
     async def notification(
-        self, title: str, body: str, subtitle: str | None = None,
+        self,
+        title: str,
+        body: str,
+        subtitle: str | None = None,
     ) -> None:
         subtitle_clause = f' subtitle "{subtitle}"' if subtitle else ""
         script = (
@@ -309,6 +318,8 @@ class MacOSDesktopDriver:
             cmd += ["-r", str(rate)]
         cmd.append(text)
         proc = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+            *cmd,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
         )
         await proc.wait()

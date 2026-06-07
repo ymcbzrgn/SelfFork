@@ -122,16 +122,12 @@ def resolve_telegram_config(
                 break
     webhook_secret = base.webhook_secret
     if not webhook_secret:
-        env_secret = os.environ.get(
-            "SELFFORK_TELEGRAM_WEBHOOK_SECRET", ""
-        ).strip()
+        env_secret = os.environ.get("SELFFORK_TELEGRAM_WEBHOOK_SECRET", "").strip()
         if env_secret:
             webhook_secret = env_secret
     mode = base.mode
     if persisted is None:
-        env_mode = (
-            os.environ.get("SELFFORK_TELEGRAM_MODE", "").strip().lower()
-        )
+        env_mode = os.environ.get("SELFFORK_TELEGRAM_MODE", "").strip().lower()
         if env_mode == "webhook":
             mode = "webhook"
     soft_window = base.soft_confirm_window_hours

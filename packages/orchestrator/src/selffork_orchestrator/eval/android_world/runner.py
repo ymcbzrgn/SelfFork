@@ -98,7 +98,8 @@ class AndroidWorldRunner:
         started = time.monotonic()
         try:
             snapshot = await asyncio.wait_for(
-                self._executor(task), timeout=self._timeout,
+                self._executor(task),
+                timeout=self._timeout,
             )
         except TimeoutError:
             return TaskOutcome(
@@ -124,7 +125,8 @@ class AndroidWorldRunner:
         )
 
     async def run_all(
-        self, tasks: list[AndroidWorldTask] | None = None,
+        self,
+        tasks: list[AndroidWorldTask] | None = None,
     ) -> AndroidWorldRunResult:
         active = tasks if tasks is not None else list(TASK_REGISTRY.values())
         outcomes: list[TaskOutcome] = []

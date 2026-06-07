@@ -46,8 +46,11 @@ def test_skill_names_have_prefix() -> None:
 
 def test_desktop_eager_top_5() -> None:
     expected = {
-        "desktop_click", "desktop_type", "desktop_screenshot",
-        "desktop_press_key", "desktop_get_active_app",
+        "desktop_click",
+        "desktop_type",
+        "desktop_screenshot",
+        "desktop_press_key",
+        "desktop_get_active_app",
     }
     eager = {t.name for t in build_desktop_tools() if not t.defer_loading}
     assert expected == eager
@@ -75,7 +78,9 @@ def test_default_registry_includes_faz3_fleet() -> None:
     faz3 = [n for n in names if n.startswith(("desktop_", "github_", "skill_"))]
     assert len(faz3) == 41
     eager = sum(
-        1 for n in faz3 if not registry.get(n).defer_loading  # type: ignore[union-attr]
+        1
+        for n in faz3
+        if not registry.get(n).defer_loading  # type: ignore[union-attr]
     )
     assert eager == 8
 

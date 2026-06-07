@@ -11,6 +11,7 @@ chat_ids supported). JSON format at ``~/.selffork/operators.json``::
 Loader is fail-safe: missing file, invalid JSON, or wrong shape all
 collapse to an empty allowlist (which rejects every chat_id).
 """
+
 from __future__ import annotations
 
 import json

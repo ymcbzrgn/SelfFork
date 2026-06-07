@@ -24,8 +24,11 @@ class StubMacosDriver:
     def _record(self, name: str, args: tuple, kwargs: dict) -> None:
         self.calls.append((name, args, dict(kwargs)))
 
-    async def start(self) -> None: self._record("start", (), {})
-    async def stop(self) -> None: self._record("stop", (), {})
+    async def start(self) -> None:
+        self._record("start", (), {})
+
+    async def stop(self) -> None:
+        self._record("stop", (), {})
 
     async def click(self, target, bbox=None, button="left"):
         self._record("click", (target,), {"bbox": bbox, "button": button})
@@ -80,8 +83,13 @@ class StubMacosDriver:
 
 
 def make_ctx(
-    *, driver=None, warden=None, audit_logger=None, screenshot_store=None,
-    session_id="sess-test", project_slug=None,
+    *,
+    driver=None,
+    warden=None,
+    audit_logger=None,
+    screenshot_store=None,
+    session_id="sess-test",
+    project_slug=None,
 ) -> ToolContext:
     if warden is None:
         warden = PermissionWarden(mode=WardenMode.DANGER_FULL_ACCESS)

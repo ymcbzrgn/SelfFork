@@ -26,8 +26,11 @@ class StubBrowserDriver:
 
     # ---- core (M5) -----------------------------------------------------
 
-    async def start(self) -> None: self._record("start", (), {})
-    async def stop(self) -> None: self._record("stop", (), {})
+    async def start(self) -> None:
+        self._record("start", (), {})
+
+    async def stop(self) -> None:
+        self._record("stop", (), {})
 
     async def goto(self, url: str) -> None:
         self._record("goto", (url,), {})
@@ -66,6 +69,7 @@ class StubBrowserDriver:
     async def storage_state_save(self, provider=None, project_slug=None):
         self._record("storage_state_save", (provider,), {"project_slug": project_slug})
         from pathlib import Path
+
         return Path("/tmp/state.json")
 
     async def storage_state_load(self, provider=None, project_slug=None):
@@ -106,9 +110,14 @@ class StubBrowserDriver:
     async def swipe(self, sx, sy, ex, ey, duration_ms=250):
         self._record("swipe", (sx, sy, ex, ey), {"duration_ms": duration_ms})
 
-    async def back(self): self._record("back", (), {})
-    async def forward(self): self._record("forward", (), {})
-    async def reload(self): self._record("reload", (), {})
+    async def back(self):
+        self._record("back", (), {})
+
+    async def forward(self):
+        self._record("forward", (), {})
+
+    async def reload(self):
+        self._record("reload", (), {})
 
     async def get_url(self):
         self._record("get_url", (), {})
@@ -255,9 +264,15 @@ class StubBrowserDriver:
         return await self.dump_dom_tree()
 
 
-def make_ctx(*, driver=None, warden=None, vision_runtime=None,
-             screenshot_store=None, session_id="sess-test",
-             project_slug=None) -> ToolContext:
+def make_ctx(
+    *,
+    driver=None,
+    warden=None,
+    vision_runtime=None,
+    screenshot_store=None,
+    session_id="sess-test",
+    project_slug=None,
+) -> ToolContext:
     if warden is None and driver is not None:
         warden = PermissionWarden(mode=WardenMode.DANGER_FULL_ACCESS)
     return ToolContext(

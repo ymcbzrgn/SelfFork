@@ -237,23 +237,15 @@ def build_audit_entry(
             quota_summary[cli_id] = None
             continue
         quota_summary[cli_id] = {
-            "exhausted": snap.is_exhausted(
-                world_state.quota_exhaustion_threshold_pct
-            ),
+            "exhausted": snap.is_exhausted(world_state.quota_exhaustion_threshold_pct),
             "captured_at": snap.captured_at.isoformat(),
-            "max_pct": (
-                max(w.used_pct for w in snap.windows.values())
-                if snap.windows
-                else None
-            ),
+            "max_pct": (max(w.used_pct for w in snap.windows.values()) if snap.windows else None),
         }
     state_dict["cli_quota"] = quota_summary
 
     decision_action = decision.action.value if decision is not None else None
     project_slug = world_state.last_active_workspace
-    idempotency_key = (
-        f"{tick}:{decision_action or 'noop'}:{project_slug or 'global'}"
-    )
+    idempotency_key = f"{tick}:{decision_action or 'noop'}:{project_slug or 'global'}"
     return AuditEntry(
         tick=tick,
         timestamp=datetime.now(tz=UTC),
@@ -262,12 +254,8 @@ def build_audit_entry(
         legal_actions=sorted(legal_actions) if legal_actions else [],
         decision_action=decision_action,
         decision_reasoning=decision.reasoning if decision is not None else None,
-        decision_fallback=(
-            decision.fallback if decision is not None else None
-        ),
-        decision_stalled=(
-            decision.stalled if decision is not None else None
-        ),
+        decision_fallback=(decision.fallback if decision is not None else None),
+        decision_stalled=(decision.stalled if decision is not None else None),
         result_action=result.action.value if result is not None else None,
         result_outcome=result.outcome if result is not None else None,
         result_summary=result.summary if result is not None else None,

@@ -63,9 +63,7 @@ def test_override_cli_model_crud(tmp_path: Path) -> None:
         got = client.get("/api/router/override/alpha").json()
         assert got["cli"] == "codex"
         assert got["model"] == "gpt-5.3-codex"
-        assert client.delete("/api/router/override/alpha").json() == {
-            "cleared": True
-        }
+        assert client.delete("/api/router/override/alpha").json() == {"cleared": True}
         assert client.get("/api/router/override/alpha").json() is None
 
 
@@ -132,9 +130,7 @@ def test_config_effort_roundtrip(tmp_path: Path) -> None:
         )
         assert resp.status_code == 200
         assert resp.json()["efforts"]["claude-code"] == "low"
-        assert client.get("/api/router/config").json()["efforts"][
-            "claude-code"
-        ] == "low"
+        assert client.get("/api/router/config").json()["efforts"]["claude-code"] == "low"
 
 
 def test_config_effort_invalid_rejected(tmp_path: Path) -> None:

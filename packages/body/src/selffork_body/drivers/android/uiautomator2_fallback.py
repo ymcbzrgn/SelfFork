@@ -97,7 +97,9 @@ class UiAutomator2Fallback:
             if not path.exists():
                 raise FileNotFoundError(path)
         return await self._adb(
-            "install-multiple", "-r", *(str(p) for p in apk_paths),
+            "install-multiple",
+            "-r",
+            *(str(p) for p in apk_paths),
         )
 
     async def uninstall_app(self, package: str) -> None:
@@ -108,7 +110,9 @@ class UiAutomator2Fallback:
     async def list_devices(self) -> list[dict[str, str]]:
         """Parse ``adb devices -l`` into [{serial, state, model, transport_id}]."""
         proc = await asyncio.create_subprocess_exec(
-            "adb", "devices", "-l",
+            "adb",
+            "devices",
+            "-l",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -119,11 +123,7 @@ class UiAutomator2Fallback:
         out: list[dict[str, str]] = []
         for line in text.splitlines():
             stripped = line.strip()
-            if (
-                not stripped
-                or stripped.startswith("List of devices")
-                or stripped.startswith("*")
-            ):
+            if not stripped or stripped.startswith("List of devices") or stripped.startswith("*"):
                 continue
             parts = stripped.split()
             if not parts:
@@ -137,8 +137,12 @@ class UiAutomator2Fallback:
         return out
 
     async def intent(
-        self, action: str, *, extras: dict[str, str] | None = None,
-        component: str | None = None, data: str | None = None,
+        self,
+        action: str,
+        *,
+        extras: dict[str, str] | None = None,
+        component: str | None = None,
+        data: str | None = None,
     ) -> str:
         """Invoke ``adb shell am start -a <action> ...``."""
         parts = ["shell", "am", "start", "-a", action]
@@ -151,7 +155,10 @@ class UiAutomator2Fallback:
         return await self._adb(*parts)
 
     async def broadcast(
-        self, action: str, *, extras: dict[str, str] | None = None,
+        self,
+        action: str,
+        *,
+        extras: dict[str, str] | None = None,
     ) -> str:
         parts = ["shell", "am", "broadcast", "-a", action]
         for k, v in (extras or {}).items():
@@ -168,11 +175,14 @@ class UiAutomator2Fallback:
         text = await self._adb("shell", "pm", "list", "packages")
         return [
             line.removeprefix("package:").strip()
-            for line in text.splitlines() if line.startswith("package:")
+            for line in text.splitlines()
+            if line.startswith("package:")
         ]
 
     async def deeplink(self, url: str) -> str:
-        return await self._adb("shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url)
+        return await self._adb(
+            "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url
+        )
 
     async def dumpsys(self, service: str) -> str:
         return await self._adb("shell", "dumpsys", service)
@@ -232,7 +242,10 @@ class UiAutomator2Fallback:
             raise RuntimeError("screenrecord already in progress")
         cmd = [
             *self._adb_prefix(),
-            "shell", "screenrecord", "--bit-rate", "4000000",
+            "shell",
+            "screenrecord",
+            "--bit-rate",
+            "4000000",
             f"/sdcard/{output_path.name}",
         ]
         proc = await asyncio.create_subprocess_exec(

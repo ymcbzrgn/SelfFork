@@ -20,6 +20,7 @@ the metering endpoint itself), we still emit a snapshot with empty
 ``windows`` and ``source="credentials-present"`` — the autopilot's
 ``available_clis`` tool then surfaces ``status="auth_only"``.
 """
+
 from __future__ import annotations
 
 import json

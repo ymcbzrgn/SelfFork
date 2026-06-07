@@ -48,18 +48,22 @@ async def test_log_fetch_ios(ctx_ios, stub_ios_driver) -> None:
 
 
 async def test_log_fetch_composite_prefers_android(
-    ctx_composite, stub_composite_driver,
+    ctx_composite,
+    stub_composite_driver,
 ) -> None:
     result = await _crash_log_fetch(ctx_composite, CrashLogFetchArgs())
     assert result["result"]["source"] == "logcat"
 
 
 async def test_bug_report_android(
-    ctx_android, stub_android_driver, tmp_path,
+    ctx_android,
+    stub_android_driver,
+    tmp_path,
 ) -> None:
     out = tmp_path / "bug.zip"
     result = await _crash_bug_report(
-        ctx_android, CrashBugReportArgs(output_path=str(out)),
+        ctx_android,
+        CrashBugReportArgs(output_path=str(out)),
     )
     assert result["status"] == "ok"
 
@@ -67,14 +71,17 @@ async def test_bug_report_android(
 async def test_bug_report_ios(ctx_ios, stub_ios_driver, tmp_path) -> None:
     out = tmp_path / "bug.txt"
     result = await _crash_bug_report(
-        ctx_ios, CrashBugReportArgs(output_path=str(out)),
+        ctx_ios,
+        CrashBugReportArgs(output_path=str(out)),
     )
     assert result["status"] == "ok"
     assert out.is_file()
 
 
 async def test_state_snapshot_creates_json(
-    ctx_ios, stub_ios_driver, tmp_path,
+    ctx_ios,
+    stub_ios_driver,
+    tmp_path,
 ) -> None:
     result = await _crash_state_snapshot(
         ctx_ios,
@@ -89,7 +96,8 @@ async def test_state_snapshot_creates_json(
 
 
 async def test_state_snapshot_rejects_path_traversal(
-    ctx_ios, stub_ios_driver,
+    ctx_ios,
+    stub_ios_driver,
 ) -> None:
     with pytest.raises(ValueError, match="must match"):
         CrashStateSnapshotArgs(label="../etc/passwd")
@@ -100,7 +108,8 @@ async def test_state_snapshot_rejects_path_traversal(
 
 
 async def test_state_snapshot_label_with_slash_rejected(
-    ctx_ios, stub_ios_driver,
+    ctx_ios,
+    stub_ios_driver,
 ) -> None:
     # Validation happens inside the handler via _validate_label
     with pytest.raises(ValueError, match="must match"):
@@ -111,33 +120,41 @@ async def test_state_snapshot_label_with_slash_rejected(
 
 
 async def test_state_restore_returns_snapshot(
-    ctx_ios, stub_ios_driver, tmp_path,
+    ctx_ios,
+    stub_ios_driver,
+    tmp_path,
 ) -> None:
     await _crash_state_snapshot(
-        ctx_ios, CrashStateSnapshotArgs(label="snap1"),
+        ctx_ios,
+        CrashStateSnapshotArgs(label="snap1"),
     )
     result = await _crash_state_restore(
-        ctx_ios, CrashStateRestoreArgs(label="snap1"),
+        ctx_ios,
+        CrashStateRestoreArgs(label="snap1"),
     )
     assert result["result"]["status"] == "ok"
     assert result["result"]["snapshot"]["label"] == "snap1"
 
 
 async def test_state_restore_not_found(
-    ctx_ios, stub_ios_driver,
+    ctx_ios,
+    stub_ios_driver,
 ) -> None:
     result = await _crash_state_restore(
-        ctx_ios, CrashStateRestoreArgs(label="nonexistent"),
+        ctx_ios,
+        CrashStateRestoreArgs(label="nonexistent"),
     )
     assert result["result"]["status"] == "not_found"
 
 
 async def test_state_list_after_snapshots(
-    ctx_ios, stub_ios_driver,
+    ctx_ios,
+    stub_ios_driver,
 ) -> None:
     for label in ("snap_a", "snap_b", "snap_c"):
         await _crash_state_snapshot(
-            ctx_ios, CrashStateSnapshotArgs(label=label),
+            ctx_ios,
+            CrashStateSnapshotArgs(label=label),
         )
     result = await _crash_state_list(ctx_ios, CrashStateListArgs())
     assert sorted(result["result"]["labels"]) == ["snap_a", "snap_b", "snap_c"]
@@ -146,14 +163,16 @@ async def test_state_list_after_snapshots(
 async def test_state_delete(ctx_ios, stub_ios_driver) -> None:
     await _crash_state_snapshot(ctx_ios, CrashStateSnapshotArgs(label="kill_me"))
     result = await _crash_state_delete(
-        ctx_ios, CrashStateDeleteArgs(label="kill_me"),
+        ctx_ios,
+        CrashStateDeleteArgs(label="kill_me"),
     )
     assert result["result"]["status"] == "deleted"
 
 
 async def test_state_delete_missing(ctx_ios, stub_ios_driver) -> None:
     result = await _crash_state_delete(
-        ctx_ios, CrashStateDeleteArgs(label="nope"),
+        ctx_ios,
+        CrashStateDeleteArgs(label="nope"),
     )
     assert result["result"]["status"] == "not_found"
 
@@ -162,14 +181,16 @@ async def test_state_diff_two_snapshots(ctx_ios, stub_ios_driver) -> None:
     await _crash_state_snapshot(ctx_ios, CrashStateSnapshotArgs(label="a"))
     await _crash_state_snapshot(ctx_ios, CrashStateSnapshotArgs(label="b"))
     result = await _crash_state_diff(
-        ctx_ios, CrashStateDiffArgs(label_a="a", label_b="b"),
+        ctx_ios,
+        CrashStateDiffArgs(label_a="a", label_b="b"),
     )
     assert result["result"]["status"] == "ok"
 
 
 async def test_state_diff_missing_label(ctx_ios, stub_ios_driver) -> None:
     result = await _crash_state_diff(
-        ctx_ios, CrashStateDiffArgs(label_a="missing_a", label_b="missing_b"),
+        ctx_ios,
+        CrashStateDiffArgs(label_a="missing_a", label_b="missing_b"),
     )
     assert result["result"]["status"] == "not_found"
 

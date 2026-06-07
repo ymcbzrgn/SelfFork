@@ -52,9 +52,15 @@ def test_mobile_tools_registered_in_default() -> None:
 
 def test_ios_top_10_are_eager() -> None:
     expected_eager = {
-        "ios_click", "ios_type", "ios_swipe", "ios_press_key",
-        "ios_screenshot", "ios_a11y_tree",
-        "ios_app_launch", "ios_app_terminate", "ios_list_apps",
+        "ios_click",
+        "ios_type",
+        "ios_swipe",
+        "ios_press_key",
+        "ios_screenshot",
+        "ios_a11y_tree",
+        "ios_app_launch",
+        "ios_app_terminate",
+        "ios_list_apps",
         "ios_get_orientation",
     }
     eager = {t.name for t in build_ios_tools() if not t.defer_loading}
@@ -63,9 +69,15 @@ def test_ios_top_10_are_eager() -> None:
 
 def test_android_top_10_are_eager() -> None:
     expected_eager = {
-        "android_click", "android_type", "android_swipe", "android_press_key",
-        "android_screenshot", "android_a11y_tree",
-        "android_app_launch", "android_app_terminate", "android_list_apps",
+        "android_click",
+        "android_type",
+        "android_swipe",
+        "android_press_key",
+        "android_screenshot",
+        "android_a11y_tree",
+        "android_app_launch",
+        "android_app_terminate",
+        "android_list_apps",
         "android_get_orientation",
     }
     eager = {t.name for t in build_android_tools() if not t.defer_loading}
@@ -115,10 +127,14 @@ def test_default_registry_size_after_faz_1() -> None:
     """
     registry = build_default_registry()
     names = registry.names()
-    mobile = [n for n in names if n.startswith(("ios_", "android_", "expo_", "ui_verify_", "crash_"))]  # noqa: E501
+    mobile = [
+        n for n in names if n.startswith(("ios_", "android_", "expo_", "ui_verify_", "crash_"))
+    ]  # noqa: E501
     assert len(mobile) == 122
     eager_mobile = sum(
-        1 for n in mobile if not registry.get(n).defer_loading  # type: ignore[union-attr]
+        1
+        for n in mobile
+        if not registry.get(n).defer_loading  # type: ignore[union-attr]
     )
     assert eager_mobile == 30
 
@@ -129,8 +145,7 @@ def test_no_collision_with_existing_body_tools() -> None:
     names = registry.names()
     body_names = [n for n in names if n.startswith("body_")]
     mobile_names = [
-        n for n in names
-        if n.startswith(("ios_", "android_", "expo_", "ui_verify_", "crash_"))
+        n for n in names if n.startswith(("ios_", "android_", "expo_", "ui_verify_", "crash_"))
     ]
     assert len(body_names) == 10
     assert len(mobile_names) == 122

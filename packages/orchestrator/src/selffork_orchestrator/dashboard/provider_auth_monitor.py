@@ -76,9 +76,7 @@ class ProviderAuthMonitor:
     """
 
     bridge: TelegramBridge | None = None
-    cooldown: timedelta = field(
-        default_factory=lambda: timedelta(minutes=DEFAULT_COOLDOWN_MINUTES)
-    )
+    cooldown: timedelta = field(default_factory=lambda: timedelta(minutes=DEFAULT_COOLDOWN_MINUTES))
     _last_alert: dict[str, datetime] = field(default_factory=dict, init=False)
     _history: list[ProviderAuthAlert] = field(default_factory=list, init=False)
 
@@ -114,9 +112,7 @@ class ProviderAuthMonitor:
 
         self._last_alert[provider] = now
         delivered = False
-        if self.bridge is not None and not isinstance(
-            self.bridge, NullTelegramBridge
-        ):
+        if self.bridge is not None and not isinstance(self.bridge, NullTelegramBridge):
             text = _format_alert(provider, reason)
             try:
                 attempt = await self.bridge.notify(

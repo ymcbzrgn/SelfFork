@@ -70,9 +70,7 @@ def _decision(action: LegalAction, reasoning: str = "test reasoning") -> ActionD
 @pytest.mark.asyncio
 async def test_wait_records_quiet_tick() -> None:
     executor = ActionExecutor()
-    result = await executor.execute(
-        _decision(LegalAction.WAIT, "şu an iş yok"), _state()
-    )
+    result = await executor.execute(_decision(LegalAction.WAIT, "şu an iş yok"), _state())
     assert result.action is LegalAction.WAIT
     assert result.outcome == "executed"
     assert result.summary == "şu an iş yok"
@@ -88,9 +86,7 @@ async def test_wait_uses_default_summary_when_reasoning_empty() -> None:
 @pytest.mark.asyncio
 async def test_self_stop_signals_executor() -> None:
     executor = ActionExecutor()
-    result = await executor.execute(
-        _decision(LegalAction.SELF_STOP, "operator paused"), _state()
-    )
+    result = await executor.execute(_decision(LegalAction.SELF_STOP, "operator paused"), _state())
     assert result.action is LegalAction.SELF_STOP
     assert result.outcome == "executed"
 
@@ -121,9 +117,7 @@ async def test_cli_select_executes_with_selector() -> None:
     async def _selector(state: WorldState) -> CliSelectionOutcome:
         return CliSelectionOutcome(
             cli="codex",
-            reasoning=(
-                f"affinity → codex/gpt-5.5 for {state.last_active_workspace}"
-            ),
+            reasoning=(f"affinity → codex/gpt-5.5 for {state.last_active_workspace}"),
             metadata={
                 "chosen_cli": "codex",
                 "chosen_model": "gpt-5.5",
@@ -336,9 +330,7 @@ async def test_task_start_starter_raises_fails() -> None:
 @pytest.mark.asyncio
 async def test_kanban_suggest_without_creator_skips() -> None:
     executor = ActionExecutor(kanban_card_creator=None)
-    result = await executor.execute(
-        _decision(LegalAction.KANBAN_SUGGEST), _state()
-    )
+    result = await executor.execute(_decision(LegalAction.KANBAN_SUGGEST), _state())
     assert result.outcome == "skipped"
 
 
@@ -414,24 +406,18 @@ async def test_kanban_suggest_creator_raises_fails() -> None:
 
 
 def test_action_result_is_frozen() -> None:
-    result = ActionResult(
-        action=LegalAction.WAIT, outcome="executed", summary="ok"
-    )
+    result = ActionResult(action=LegalAction.WAIT, outcome="executed", summary="ok")
     with pytest.raises(AttributeError):
         result.summary = "edited"  # type: ignore[misc]
 
 
 def test_action_result_metadata_default_empty() -> None:
-    result = ActionResult(
-        action=LegalAction.WAIT, outcome="executed", summary="ok"
-    )
+    result = ActionResult(action=LegalAction.WAIT, outcome="executed", summary="ok")
     assert result.metadata == {}
 
 
 def test_action_result_default_executed_at_utc() -> None:
-    result = ActionResult(
-        action=LegalAction.WAIT, outcome="executed", summary="ok"
-    )
+    result = ActionResult(action=LegalAction.WAIT, outcome="executed", summary="ok")
     assert result.executed_at.tzinfo is UTC
 
 
@@ -528,9 +514,7 @@ async def test_body_review_calls_driver_and_returns_executed() -> None:
         )
 
     executor = ActionExecutor(body_review_driver=driver)
-    result = await executor.execute(
-        _decision(LegalAction.BODY_REVIEW), _state()
-    )
+    result = await executor.execute(_decision(LegalAction.BODY_REVIEW), _state())
     assert result.outcome == "executed"
     assert result.action is LegalAction.BODY_REVIEW
     assert result.metadata["text"] == "Sign In"

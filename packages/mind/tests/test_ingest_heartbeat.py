@@ -62,8 +62,7 @@ def _entry(
         "result_outcome": result_outcome,
         "air_alert": air_alert,
         "idempotency_key": (
-            idempotency_key
-            or f"{tick}:{decision_action or 'noop'}:{project_slug or 'global'}"
+            idempotency_key or f"{tick}:{decision_action or 'noop'}:{project_slug or 'global'}"
         ),
     }
 

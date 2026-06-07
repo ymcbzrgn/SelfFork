@@ -78,7 +78,9 @@ class AppiumXcuitestAdapter:
 
         driver = self._require_driver()
         await asyncio.to_thread(
-            driver.execute_script, "mobile: doubleTap", {"x": x, "y": y},
+            driver.execute_script,
+            "mobile: doubleTap",
+            {"x": x, "y": y},
         )
 
     async def long_press(self, x: int, y: int, duration_ms: int = 800) -> None:
@@ -194,7 +196,9 @@ class AppiumXcuitestAdapter:
 
         driver = self._require_driver()
         result = await asyncio.to_thread(
-            driver.execute_script, "mobile: installedApps", {},
+            driver.execute_script,
+            "mobile: installedApps",
+            {},
         )
         return list(result or [])
 
@@ -226,6 +230,7 @@ class AppiumXcuitestAdapter:
         import asyncio
 
         driver = self._require_driver()
+
         # Appium's setter via property
         def _setter() -> None:
             driver.orientation = orientation
@@ -263,11 +268,15 @@ class AppiumXcuitestAdapter:
         )
 
     async def set_geolocation(
-        self, latitude: float, longitude: float, altitude: float = 0.0,
+        self,
+        latitude: float,
+        longitude: float,
+        altitude: float = 0.0,
     ) -> None:
         import asyncio
 
         driver = self._require_driver()
+
         def _setter() -> None:
             driver.set_location(latitude, longitude, altitude)
 

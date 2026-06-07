@@ -1146,10 +1146,7 @@ def train(
         str,
         typer.Option(
             "--target-modules",
-            help=(
-                "``attention`` (LoRA on attention only) or "
-                "``attention+mlp`` (both)."
-            ),
+            help=("``attention`` (LoRA on attention only) or ``attention+mlp`` (both)."),
         ),
     ] = "attention",
     adapter_manifest: Annotated[
@@ -1183,9 +1180,7 @@ def train(
         load_adapter_manifest,
     )
 
-    manifest_path = (
-        adapter_manifest if adapter_manifest is not None else ADAPTER_MANIFEST_PATH
-    )
+    manifest_path = adapter_manifest if adapter_manifest is not None else ADAPTER_MANIFEST_PATH
     manifest = load_adapter_manifest(manifest_path)
     if manifest.trained:
         typer.echo(
@@ -1204,8 +1199,7 @@ def train(
     valid_methods = {"QLoRA", "LoRA", "Full"}
     if method not in valid_methods:
         typer.echo(
-            f"selffork: invalid --method {method!r}; "
-            f"expected one of {sorted(valid_methods)}",
+            f"selffork: invalid --method {method!r}; expected one of {sorted(valid_methods)}",
             err=True,
         )
         raise typer.Exit(code=2)
@@ -1373,10 +1367,7 @@ def skills_sync(
         Path | None,
         typer.Option(
             "--canonical",
-            help=(
-                "Canonical skills source dir (default: "
-                "~/.selffork/skills/)."
-            ),
+            help=("Canonical skills source dir (default: ~/.selffork/skills/)."),
         ),
     ] = None,
     target: Annotated[
@@ -1423,8 +1414,7 @@ def skills_sync(
 
     if not (report.installed or report.skipped or report.conflicts):
         typer.echo(
-            f"selffork skills: no skills found in {installer.canonical_dir}; "
-            "nothing to do.",
+            f"selffork skills: no skills found in {installer.canonical_dir}; nothing to do.",
         )
         raise typer.Exit(code=0)
 

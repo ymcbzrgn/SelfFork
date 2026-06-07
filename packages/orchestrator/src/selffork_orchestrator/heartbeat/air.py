@@ -137,9 +137,7 @@ class AIRDetector:
         self,
         *,
         panic_keywords: Sequence[str] = DEFAULT_PANIC_KEYWORDS,
-        consecutive_failure_threshold: int = (
-            DEFAULT_CONSECUTIVE_FAILURE_THRESHOLD
-        ),
+        consecutive_failure_threshold: int = (DEFAULT_CONSECUTIVE_FAILURE_THRESHOLD),
     ) -> None:
         self._keywords = tuple(k.lower() for k in panic_keywords)
         self._failure_threshold = consecutive_failure_threshold
@@ -170,9 +168,7 @@ class AIRDetector:
             # ``skipped`` neither resets nor advances — it's "no signal".
 
         panic_hits = self._scan_panic(decision)
-        failure_breach = (
-            self._consecutive_failures >= self._failure_threshold
-        )
+        failure_breach = self._consecutive_failures >= self._failure_threshold
 
         if not panic_hits and not failure_breach:
             return None
@@ -200,8 +196,7 @@ class AIRDetector:
             severity = "medium"
             reason = f"{self._consecutive_failures} consecutive failed results"
             recovery = (
-                "Inspect the last failed result's metadata; the "
-                "automation surface is degraded."
+                "Inspect the last failed result's metadata; the automation surface is degraded."
             )
 
         return AIRAlert(
@@ -213,9 +208,7 @@ class AIRDetector:
             recommended_recovery=recovery,
         )
 
-    def _scan_panic(
-        self, decision: ActionDecision | None
-    ) -> tuple[str, ...]:
+    def _scan_panic(self, decision: ActionDecision | None) -> tuple[str, ...]:
         """Substring scan with negation pre-filter.
 
         Audit fix #2 (audit-god 2026-05-23 MAJOR): strip ``not X``

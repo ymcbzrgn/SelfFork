@@ -42,9 +42,7 @@ async def test_null_backend_raises_unavailable() -> None:
 async def test_whisper_missing_binary_raises_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "selffork_orchestrator.voice.shutil.which", lambda _name: None
-    )
+    monkeypatch.setattr("selffork_orchestrator.voice.shutil.which", lambda _name: None)
     backend = WhisperCliVoiceBackend()
     with pytest.raises(VoiceUnavailableError, match="whisper CLI not found"):
         await backend.transcribe(b"audio")
@@ -58,9 +56,7 @@ async def test_whisper_custom_binary_skips_lookup(
     """A custom ``binary=`` overrides PATH lookup."""
     seen: dict[str, Any] = {}
 
-    def fake_run(
-        cmd: list[str], **kwargs: object
-    ) -> subprocess.CompletedProcess[str]:
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         seen["cmd"] = cmd
         # Write the transcript file the handler expects.
         out_dir = Path(cmd[cmd.index("--output_dir") + 1])
@@ -85,18 +81,12 @@ async def test_whisper_custom_binary_skips_lookup(
 async def test_whisper_success_reads_transcript_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_run(
-        cmd: list[str], **kwargs: object
-    ) -> subprocess.CompletedProcess[str]:
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         out_dir = Path(cmd[cmd.index("--output_dir") + 1])
-        (out_dir / "input.txt").write_text(
-            "  merhaba dünya  \n", encoding="utf-8"
-        )
+        (out_dir / "input.txt").write_text("  merhaba dünya  \n", encoding="utf-8")
         return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(
-        "selffork_orchestrator.voice.shutil.which", lambda _n: "/bin/whisper"
-    )
+    monkeypatch.setattr("selffork_orchestrator.voice.shutil.which", lambda _n: "/bin/whisper")
     monkeypatch.setattr("selffork_orchestrator.voice.subprocess.run", fake_run)
     backend = WhisperCliVoiceBackend()
     assert await backend.transcribe(b"audio") == "merhaba dünya"
@@ -106,16 +96,12 @@ async def test_whisper_success_reads_transcript_file(
 async def test_whisper_non_zero_exit_raises_transcription_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_run(
-        cmd: list[str], **kwargs: object
-    ) -> subprocess.CompletedProcess[str]:
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(
             args=cmd, returncode=1, stdout="", stderr="model file missing"
         )
 
-    monkeypatch.setattr(
-        "selffork_orchestrator.voice.shutil.which", lambda _n: "/bin/whisper"
-    )
+    monkeypatch.setattr("selffork_orchestrator.voice.shutil.which", lambda _n: "/bin/whisper")
     monkeypatch.setattr("selffork_orchestrator.voice.subprocess.run", fake_run)
     backend = WhisperCliVoiceBackend()
     with pytest.raises(VoiceTranscriptionError, match="model file missing"):
@@ -126,17 +112,11 @@ async def test_whisper_non_zero_exit_raises_transcription_error(
 async def test_whisper_succeeds_but_no_transcript_file_raises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_run(
-        cmd: list[str], **kwargs: object
-    ) -> subprocess.CompletedProcess[str]:
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         # Returns 0 but writes NO transcript file.
-        return subprocess.CompletedProcess(
-            args=cmd, returncode=0, stdout="", stderr=""
-        )
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(
-        "selffork_orchestrator.voice.shutil.which", lambda _n: "/bin/whisper"
-    )
+    monkeypatch.setattr("selffork_orchestrator.voice.shutil.which", lambda _n: "/bin/whisper")
     monkeypatch.setattr("selffork_orchestrator.voice.subprocess.run", fake_run)
     backend = WhisperCliVoiceBackend()
     with pytest.raises(VoiceTranscriptionError, match="no transcript file"):
@@ -147,14 +127,10 @@ async def test_whisper_succeeds_but_no_transcript_file_raises(
 async def test_whisper_timeout_raises_transcription_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_run(
-        cmd: list[str], **kwargs: object
-    ) -> subprocess.CompletedProcess[str]:
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         raise subprocess.TimeoutExpired(cmd=cmd, timeout=10)
 
-    monkeypatch.setattr(
-        "selffork_orchestrator.voice.shutil.which", lambda _n: "/bin/whisper"
-    )
+    monkeypatch.setattr("selffork_orchestrator.voice.shutil.which", lambda _n: "/bin/whisper")
     monkeypatch.setattr("selffork_orchestrator.voice.subprocess.run", fake_run)
     backend = WhisperCliVoiceBackend(timeout_seconds=10)
     with pytest.raises(VoiceTranscriptionError, match="exceeded the 10s budget"):
@@ -167,9 +143,7 @@ async def test_whisper_timeout_raises_transcription_error(
 def test_default_backend_picks_whisper_when_present(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "selffork_orchestrator.voice.shutil.which", lambda _n: "/bin/whisper"
-    )
+    monkeypatch.setattr("selffork_orchestrator.voice.shutil.which", lambda _n: "/bin/whisper")
     backend = default_voice_backend()
     assert isinstance(backend, WhisperCliVoiceBackend)
 
@@ -177,8 +151,6 @@ def test_default_backend_picks_whisper_when_present(
 def test_default_backend_falls_back_to_null_when_absent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "selffork_orchestrator.voice.shutil.which", lambda _n: None
-    )
+    monkeypatch.setattr("selffork_orchestrator.voice.shutil.which", lambda _n: None)
     backend = default_voice_backend()
     assert isinstance(backend, NullVoiceBackend)

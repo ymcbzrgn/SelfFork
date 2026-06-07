@@ -84,9 +84,7 @@ class VoiceBackend(Protocol):
     :class:`VoiceTranscriptionError`.
     """
 
-    async def transcribe(
-        self, audio: bytes, *, mime: str = "audio/ogg"
-    ) -> str:
+    async def transcribe(self, audio: bytes, *, mime: str = "audio/ogg") -> str:
         """Return the transcript or raise.
 
         Raises:
@@ -105,9 +103,7 @@ class NullVoiceBackend:
     error is friendly thanks to :class:`VoiceUnavailableError`.
     """
 
-    async def transcribe(
-        self, audio: bytes, *, mime: str = "audio/ogg"
-    ) -> str:
+    async def transcribe(self, audio: bytes, *, mime: str = "audio/ogg") -> str:
         del audio, mime  # contract surface — null backend ignores both
         raise VoiceUnavailableError(
             "no voice backend configured; install whisper.cpp / OpenAI "
@@ -154,9 +150,7 @@ class WhisperCliVoiceBackend:
             )
         return located
 
-    async def transcribe(
-        self, audio: bytes, *, mime: str = "audio/ogg"
-    ) -> str:
+    async def transcribe(self, audio: bytes, *, mime: str = "audio/ogg") -> str:
         del mime  # whisper auto-detects format from file content
         binary = self._resolve_binary()
         with tempfile.TemporaryDirectory(prefix="selffork-voice-") as tmp:
@@ -191,17 +185,11 @@ class WhisperCliVoiceBackend:
                 )
                 raise VoiceTranscriptionError(msg) from exc
             if proc.returncode != 0:
-                msg = (
-                    f"whisper exited {proc.returncode}: "
-                    f"{proc.stderr.strip()[:500]}"
-                )
+                msg = f"whisper exited {proc.returncode}: {proc.stderr.strip()[:500]}"
                 raise VoiceTranscriptionError(msg)
             transcript_path = tmpdir / "input.txt"
             if not transcript_path.is_file():
-                msg = (
-                    "whisper succeeded but produced no transcript file at "
-                    f"{transcript_path.name}"
-                )
+                msg = f"whisper succeeded but produced no transcript file at {transcript_path.name}"
                 raise VoiceTranscriptionError(msg)
             return transcript_path.read_text(encoding="utf-8").strip()
 

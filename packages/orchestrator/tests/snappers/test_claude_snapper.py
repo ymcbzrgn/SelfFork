@@ -1,4 +1,5 @@
 """Tests for :class:`ClaudeSnapper` (raw statusline JSON → QuotaSnapshot)."""
+
 from __future__ import annotations
 
 import json
@@ -71,7 +72,8 @@ async def test_parses_full_statusline_payload(tmp_path: Path) -> None:
     assert snap.windows[WindowKind.five_hour].used_pct == 40.5
     assert snap.windows[WindowKind.seven_day].used_pct == 32.1
     assert snap.windows[WindowKind.five_hour].resets_at == datetime.fromtimestamp(
-        five_hour_reset, tz=UTC,
+        five_hour_reset,
+        tz=UTC,
     )
 
 

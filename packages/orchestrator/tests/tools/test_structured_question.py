@@ -93,7 +93,8 @@ async def test_store_submit_answer_round_trip() -> None:
 
     async def _waiter() -> str | None:
         return await store.wait_for_answer(
-            entry.correlation_id, timeout_seconds=2.0,
+            entry.correlation_id,
+            timeout_seconds=2.0,
         )
 
     task = asyncio.create_task(_waiter())
@@ -134,7 +135,8 @@ async def test_store_cancel_wakes_waiter_without_answer() -> None:
 
     async def _waiter() -> str | None:
         return await store.wait_for_answer(
-            entry.correlation_id, timeout_seconds=2.0,
+            entry.correlation_id,
+            timeout_seconds=2.0,
         )
 
     task = asyncio.create_task(_waiter())
@@ -160,7 +162,8 @@ async def test_store_wait_for_answer_timeout_returns_none() -> None:
     store = PendingStructuredQuestionStore()
     entry = await store.register(payload=_payload(), ttl_seconds=10.0)
     answer = await store.wait_for_answer(
-        entry.correlation_id, timeout_seconds=0.1,
+        entry.correlation_id,
+        timeout_seconds=0.1,
     )
     assert answer is None
     # Entry is NOT cancelled — just timed out.
@@ -207,7 +210,8 @@ async def test_store_cleanup_wakes_pending_waiter() -> None:
 
     async def _waiter() -> str | None:
         return await store.wait_for_answer(
-            entry.correlation_id, timeout_seconds=2.0,
+            entry.correlation_id,
+            timeout_seconds=2.0,
         )
 
     task = asyncio.create_task(_waiter())
@@ -250,7 +254,8 @@ async def test_handler_returns_answer_when_submitted() -> None:
     resolver = asyncio.create_task(_resolver())
     try:
         result = await asyncio.wait_for(
-            handle_ask_user_question(ctx, args), timeout=3.0,
+            handle_ask_user_question(ctx, args),
+            timeout=3.0,
         )
     finally:
         resolver.cancel()
@@ -264,7 +269,8 @@ async def test_handler_returns_timeout_status(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(
-        "SELFFORK_STRUCTURED_QUESTION_TIMEOUT_SECONDS", "0.1",
+        "SELFFORK_STRUCTURED_QUESTION_TIMEOUT_SECONDS",
+        "0.1",
     )
     store = PendingStructuredQuestionStore()
     ctx = _make_ctx(store=store)
@@ -292,7 +298,8 @@ async def test_handler_returns_cancelled_status() -> None:
     cancel_task = asyncio.create_task(_cancel_after_register())
     try:
         result = await asyncio.wait_for(
-            handle_ask_user_question(ctx, args), timeout=3.0,
+            handle_ask_user_question(ctx, args),
+            timeout=3.0,
         )
     finally:
         cancel_task.cancel()
@@ -306,11 +313,13 @@ async def test_handler_clamps_low_timeout_env(
 ) -> None:
     """Timeout < 5s is clamped to 5s floor."""
     monkeypatch.setenv(
-        "SELFFORK_STRUCTURED_QUESTION_TIMEOUT_SECONDS", "0.001",
+        "SELFFORK_STRUCTURED_QUESTION_TIMEOUT_SECONDS",
+        "0.001",
     )
     from selffork_orchestrator.tools.structured_question import (
         _resolve_timeout_seconds,
     )
+
     assert _resolve_timeout_seconds() == 5.0
 
 
@@ -318,30 +327,28 @@ def test_handler_default_timeout_when_env_unset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv(
-        "SELFFORK_STRUCTURED_QUESTION_TIMEOUT_SECONDS", raising=False,
+        "SELFFORK_STRUCTURED_QUESTION_TIMEOUT_SECONDS",
+        raising=False,
     )
     from selffork_orchestrator.tools.structured_question import (
         _resolve_timeout_seconds,
     )
-    assert (
-        _resolve_timeout_seconds()
-        == DEFAULT_STRUCTURED_QUESTION_TIMEOUT_SECONDS
-    )
+
+    assert _resolve_timeout_seconds() == DEFAULT_STRUCTURED_QUESTION_TIMEOUT_SECONDS
 
 
 def test_handler_default_timeout_when_env_invalid(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(
-        "SELFFORK_STRUCTURED_QUESTION_TIMEOUT_SECONDS", "not-a-number",
+        "SELFFORK_STRUCTURED_QUESTION_TIMEOUT_SECONDS",
+        "not-a-number",
     )
     from selffork_orchestrator.tools.structured_question import (
         _resolve_timeout_seconds,
     )
-    assert (
-        _resolve_timeout_seconds()
-        == DEFAULT_STRUCTURED_QUESTION_TIMEOUT_SECONDS
-    )
+
+    assert _resolve_timeout_seconds() == DEFAULT_STRUCTURED_QUESTION_TIMEOUT_SECONDS
 
 
 # ── build_ask_user_question_spec (registration) ────────────────────────
@@ -355,6 +362,7 @@ def test_spec_name_matches_ask_user_question() -> None:
 
 def test_spec_registered_in_default_registry() -> None:
     from selffork_orchestrator.tools import build_default_registry
+
     registry = build_default_registry()
     assert "AskUserQuestion" in registry.names()
 
@@ -440,7 +448,9 @@ async def test_sqlite_store_register_round_trip(tmp_path: Path) -> None:
         db_path=tmp_path / "psq.db",
     )
     entry = await store.register(
-        payload=_payload(question="Q?"), session_id="s1", ttl_seconds=60.0,
+        payload=_payload(question="Q?"),
+        session_id="s1",
+        ttl_seconds=60.0,
     )
     fetched = await store.get(entry.correlation_id)
     assert fetched is not None
@@ -460,7 +470,8 @@ async def test_sqlite_store_cross_process_handshake(tmp_path: Path) -> None:
     """
     db = tmp_path / "psq.db"
     cli_store = SqlitePendingStructuredQuestionStore(
-        db_path=db, poll_interval_seconds=0.05,
+        db_path=db,
+        poll_interval_seconds=0.05,
     )
     dashboard_store = SqlitePendingStructuredQuestionStore(db_path=db)
 
@@ -469,12 +480,14 @@ async def test_sqlite_store_cross_process_handshake(tmp_path: Path) -> None:
     async def _answer_after_delay() -> bool:
         await asyncio.sleep(0.1)
         return await dashboard_store.submit_answer(
-            entry.correlation_id, "codex",
+            entry.correlation_id,
+            "codex",
         )
 
     answer_task = asyncio.create_task(_answer_after_delay())
     answer = await cli_store.wait_for_answer(
-        entry.correlation_id, timeout_seconds=5.0,
+        entry.correlation_id,
+        timeout_seconds=5.0,
     )
     assert answer == "codex"
     assert await answer_task is True
@@ -483,11 +496,13 @@ async def test_sqlite_store_cross_process_handshake(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_sqlite_store_wait_for_answer_timeout(tmp_path: Path) -> None:
     store = SqlitePendingStructuredQuestionStore(
-        db_path=tmp_path / "psq.db", poll_interval_seconds=0.05,
+        db_path=tmp_path / "psq.db",
+        poll_interval_seconds=0.05,
     )
     entry = await store.register(payload=_payload(), ttl_seconds=30.0)
     answer = await store.wait_for_answer(
-        entry.correlation_id, timeout_seconds=0.2,
+        entry.correlation_id,
+        timeout_seconds=0.2,
     )
     assert answer is None
 
@@ -496,7 +511,8 @@ async def test_sqlite_store_wait_for_answer_timeout(tmp_path: Path) -> None:
 async def test_sqlite_store_cancel_wakes_waiter(tmp_path: Path) -> None:
     db = tmp_path / "psq.db"
     cli_store = SqlitePendingStructuredQuestionStore(
-        db_path=db, poll_interval_seconds=0.05,
+        db_path=db,
+        poll_interval_seconds=0.05,
     )
     dashboard_store = SqlitePendingStructuredQuestionStore(db_path=db)
     entry = await cli_store.register(payload=_payload(), ttl_seconds=30.0)
@@ -507,7 +523,8 @@ async def test_sqlite_store_cancel_wakes_waiter(tmp_path: Path) -> None:
 
     cancel_task = asyncio.create_task(_cancel_after_delay())
     answer = await cli_store.wait_for_answer(
-        entry.correlation_id, timeout_seconds=5.0,
+        entry.correlation_id,
+        timeout_seconds=5.0,
     )
     assert answer is None
     assert await cancel_task is True
@@ -577,8 +594,7 @@ async def test_sqlite_store_cleanup_removes_expired_only(
     past = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
     with _closing(_sqlite3.connect(tmp_path / "psq.db")) as conn:
         conn.execute(
-            "UPDATE pending_structured_questions SET expires_at = ? "
-            "WHERE correlation_id = ?",
+            "UPDATE pending_structured_questions SET expires_at = ? WHERE correlation_id = ?",
             (past, expired.correlation_id),
         )
         conn.commit()
@@ -598,11 +614,13 @@ async def test_sqlite_store_rejects_invalid_poll_interval(
 ) -> None:
     with pytest.raises(ValueError):
         SqlitePendingStructuredQuestionStore(
-            db_path=tmp_path / "psq.db", poll_interval_seconds=0,
+            db_path=tmp_path / "psq.db",
+            poll_interval_seconds=0,
         )
     with pytest.raises(ValueError):
         SqlitePendingStructuredQuestionStore(
-            db_path=tmp_path / "psq.db", poll_interval_seconds=-0.1,
+            db_path=tmp_path / "psq.db",
+            poll_interval_seconds=-0.1,
         )
 
 
@@ -617,10 +635,10 @@ async def test_cleanup_loop_works_with_sqlite_store(tmp_path: Path) -> None:
     past = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
     import sqlite3 as _sqlite3
     from contextlib import closing as _closing
+
     with _closing(_sqlite3.connect(tmp_path / "psq.db")) as conn:
         conn.execute(
-            "UPDATE pending_structured_questions SET expires_at = ? "
-            "WHERE correlation_id = ?",
+            "UPDATE pending_structured_questions SET expires_at = ? WHERE correlation_id = ?",
             (past, entry.correlation_id),
         )
         conn.commit()
@@ -649,7 +667,8 @@ def test_factory_returns_sqlite_when_explicit_path(tmp_path: Path) -> None:
 
 
 def test_factory_resolves_env_var(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     target = tmp_path / "from-env.db"
     monkeypatch.setenv("SELFFORK_STRUCTURED_QUESTION_DB", str(target))
@@ -658,7 +677,8 @@ def test_factory_resolves_env_var(
 
 
 def test_factory_explicit_overrides_env(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Explicit ``db_path`` wins over the env var."""
     env_target = tmp_path / "env.db"

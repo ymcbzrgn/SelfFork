@@ -53,8 +53,7 @@ def _require_ios_driver(ctx: ToolContext) -> Any:
         if ios is not None:
             return ios
         raise_unauthorized(
-            "composite body driver has no iOS leg; set SELFFORK_BODY_PLATFORM=both "
-            "or =ios",
+            "composite body driver has no iOS leg; set SELFFORK_BODY_PLATFORM=both or =ios",
         )
         raise AssertionError("unreachable")  # pragma: no cover
     raise_unauthorized(
@@ -79,8 +78,7 @@ def _require_android_driver(ctx: ToolContext) -> Any:
         if android is not None:
             return android
         raise_unauthorized(
-            "composite body driver has no Android leg; set "
-            "SELFFORK_BODY_PLATFORM=both or =android",
+            "composite body driver has no Android leg; set SELFFORK_BODY_PLATFORM=both or =android",
         )
         raise AssertionError("unreachable")  # pragma: no cover
     raise_unauthorized(

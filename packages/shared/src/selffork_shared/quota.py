@@ -13,6 +13,7 @@ read the normalized shape without caring about per-CLI peculiarities.
 
 Wire format is JSON; schema_version is bumped on breaking changes.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

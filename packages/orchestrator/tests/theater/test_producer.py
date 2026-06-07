@@ -62,18 +62,14 @@ class TestStoreProducer:
             }
 
     @pytest.mark.anyio
-    async def test_cli_output_default_kind_is_stdout(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_cli_output_default_kind_is_stdout(self, tmp_path: Path) -> None:
         async with _store(tmp_path / "t.db") as s:
             await _producer(s).cli_output("hello")
             events = await s.list_events("proj-x")
             assert events[0].payload["kind"] == "stdout"
 
     @pytest.mark.anyio
-    async def test_thought_emits_event_and_touches_loop(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_thought_emits_event_and_touches_loop(self, tmp_path: Path) -> None:
         async with _store(tmp_path / "t.db") as s:
             p = _producer(s)
             await p.loop_started()
@@ -81,25 +77,19 @@ class TestStoreProducer:
             events = await s.list_events("proj-x")
             assert len(events) == 1
             assert events[0].kind == "thought"
-            assert events[0].payload["summary"] == (
-                "I will test the login flow."
-            )
+            assert events[0].payload["summary"] == ("I will test the login flow.")
             active = await s.active_loop()
             assert active is not None
             assert active.turn == 3
             assert active.last_thought == "I will test the login flow."
 
     @pytest.mark.anyio
-    async def test_thought_without_narration_touches_turn_only(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_thought_without_narration_touches_turn_only(self, tmp_path: Path) -> None:
         async with _store(tmp_path / "t.db") as s:
             p = _producer(s)
             await p.loop_started()
             # A pure tool-call reply parses to no thought.
-            await p.thought(
-                "<selffork-tool-call>{}</selffork-tool-call>", turn=5
-            )
+            await p.thought("<selffork-tool-call>{}</selffork-tool-call>", turn=5)
             assert await s.list_events("proj-x") == []
             active = await s.active_loop()
             assert active is not None
@@ -117,9 +107,7 @@ class TestStoreProducer:
 
 class TestResilience:
     @pytest.mark.anyio
-    async def test_producer_swallows_store_errors(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_producer_swallows_store_errors(self, tmp_path: Path) -> None:
         # A closed store raises on every call; the producer is
         # best-effort observability and must never crash the round-loop.
         s = TheaterStore(db_path=tmp_path / "t.db")

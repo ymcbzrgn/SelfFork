@@ -284,8 +284,7 @@ async def _await_decision(
     window_seconds = float(category.confirm_window_hours) * 3600.0
     safety_margin = 5.0  # let ``expire_stale`` flip the entry before we bail.
     deadline = time.monotonic() + (
-        max_wait_seconds if max_wait_seconds is not None
-        else window_seconds + safety_margin
+        max_wait_seconds if max_wait_seconds is not None else window_seconds + safety_margin
     )
 
     while time.monotonic() < deadline:

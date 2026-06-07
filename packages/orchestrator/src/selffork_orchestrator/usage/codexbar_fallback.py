@@ -50,9 +50,7 @@ __all__ = [
 _log = logging.getLogger(__name__)
 
 
-DEFAULT_CODEXBAR_CLI_IDS: Final[frozenset[str]] = frozenset(
-    _SELFFORK_TO_CODEXBAR.keys()
-)
+DEFAULT_CODEXBAR_CLI_IDS: Final[frozenset[str]] = frozenset(_SELFFORK_TO_CODEXBAR.keys())
 """SelfFork ``cli_id``s that have a CodexBar provider mapping.
 
 Derived from :data:`selffork_orchestrator.snappers.codexbar._SELFFORK_TO_CODEXBAR`
@@ -182,9 +180,7 @@ def build_codexbar_fallback_reader(
         return CodexBarFallbackReader(primary=primary, snapper_factory=None)
 
     builder = snapper_builder or (
-        lambda cli_id, base_url: CodexBarSnapper(
-            cli_id=cli_id, base_url=base_url
-        )
+        lambda cli_id, base_url: CodexBarSnapper(cli_id=cli_id, base_url=base_url)
     )
 
     def factory(cli_id: str) -> CodexBarSnapper:

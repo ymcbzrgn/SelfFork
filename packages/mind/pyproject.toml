@@ -3,7 +3,7 @@ name = "selffork-mind"
 version = "0.0.1"
 description = "Mind pillar — six-tier cognitive memory (working/episodic/semantic-graph/procedural/reflection/recall), pluggable storage (DuckDB+LanceDB+Kuzu), pluggable embedders (BGE-M3/OpenAI/Gemini/Jina/Ollama/Gemma) + rerankers (BGE/Jina/Cohere/Voyage), HippoRAG 2 multi-hop, Graphiti bi-temporal facts, deterministic compaction with Ebbinghaus forgetting curve, plain-markdown projection, provenance traces, multi-axis eval suite. Per ADR-002."
 readme = "README.md"
-requires-python = ">=3.12, <3.15"
+requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 authors = [{ name = "SelfFork contributors" }]
 keywords = [

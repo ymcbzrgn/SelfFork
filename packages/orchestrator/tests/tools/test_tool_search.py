@@ -28,10 +28,14 @@ class _EmptyArgs(ToolArgs):
 
 
 def _spec(
-    name: str, description: str, *, defer_loading: bool = False,
+    name: str,
+    description: str,
+    *,
+    defer_loading: bool = False,
 ) -> ToolSpec[_EmptyArgs]:
     async def _handler(
-        ctx: ToolContext, args: _EmptyArgs,
+        ctx: ToolContext,
+        args: _EmptyArgs,
     ) -> dict[str, Any]:
         return {"status": "ok"}
 
@@ -143,10 +147,7 @@ def test_retriever_ranks_by_bm25_score() -> None:
 
 
 def test_retriever_top_k_caps_results() -> None:
-    specs = [
-        _spec(f"action_{i}", f"do action number {i}", defer_loading=True)
-        for i in range(10)
-    ]
+    specs = [_spec(f"action_{i}", f"do action number {i}", defer_loading=True) for i in range(10)]
     registry = ToolRegistry(specs=specs)
     retriever = ToolCatalogRetriever(registry)
     results = retriever.search("action", top_k=3)
@@ -329,9 +330,7 @@ def test_default_registry_deferred_corpus_populated() -> None:
     deferred = registry.deferred_names()
     eager = registry.eager_names()
     # Mobile fleet contributes deferred entries
-    assert len(deferred) >= 80, (
-        f"expected ≥80 deferred specs after Faz 1, got {len(deferred)}"
-    )
+    assert len(deferred) >= 80, f"expected ≥80 deferred specs after Faz 1, got {len(deferred)}"
     # Eager catalog still includes the canonical core + Faz 1 eager mobile loop
     assert "body_click" in eager
     assert "tool_search" in eager

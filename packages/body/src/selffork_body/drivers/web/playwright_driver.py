@@ -74,9 +74,7 @@ class PlaywrightWebDriver:
                 "Install via `uv pip install playwright && playwright install chromium`."
             ) from exc
         self._playwright = await async_playwright().start()
-        self._browser = await self._playwright.chromium.launch(
-            headless=self.headless
-        )
+        self._browser = await self._playwright.chromium.launch(headless=self.headless)
         ctx_kwargs: dict[str, Any] = {}
         if self.storage_state_path is not None and self.storage_state_path.exists():
             ctx_kwargs["storage_state"] = str(self.storage_state_path)
@@ -232,7 +230,11 @@ class PlaywrightWebDriver:
     # ---- S-ToolFleet Faz 2 — interaction extensions ------------------
 
     async def double_click(
-        self, target: str | None = None, *, x: int | None = None, y: int | None = None,
+        self,
+        target: str | None = None,
+        *,
+        x: int | None = None,
+        y: int | None = None,
         button: Literal["left", "right"] = "left",
     ) -> None:
         page = self._require_page()
@@ -244,7 +246,11 @@ class PlaywrightWebDriver:
         await page.dblclick(target, button=button, timeout=5000)
 
     async def hover(
-        self, target: str | None = None, *, x: int | None = None, y: int | None = None,
+        self,
+        target: str | None = None,
+        *,
+        x: int | None = None,
+        y: int | None = None,
     ) -> None:
         page = self._require_page()
         if x is not None and y is not None:
@@ -268,8 +274,12 @@ class PlaywrightWebDriver:
         return filled
 
     async def select_option(
-        self, target: str, value: str | list[str] | None = None,
-        *, label: str | None = None, index: int | None = None,
+        self,
+        target: str,
+        value: str | list[str] | None = None,
+        *,
+        label: str | None = None,
+        index: int | None = None,
     ) -> list[str]:
         page = self._require_page()
         kwargs: dict[str, Any] = {}
@@ -304,7 +314,11 @@ class PlaywrightWebDriver:
         await page.fill(target, "", timeout=5000)
 
     async def swipe(
-        self, start_x: int, start_y: int, end_x: int, end_y: int,
+        self,
+        start_x: int,
+        start_y: int,
+        end_x: int,
+        end_y: int,
         duration_ms: int = 250,
     ) -> None:
         """Touch-style swipe via mouse drag (Chromium supports both)."""
@@ -342,7 +356,8 @@ class PlaywrightWebDriver:
         await page.set_viewport_size({"width": width, "height": height})
 
     async def wait_for_load_state(
-        self, state: Literal["load", "domcontentloaded", "networkidle"] = "load",
+        self,
+        state: Literal["load", "domcontentloaded", "networkidle"] = "load",
         timeout: float = 30.0,
     ) -> None:
         page = self._require_page()
@@ -375,16 +390,20 @@ class PlaywrightWebDriver:
             "is_visible": await el.is_visible(),
         }
 
-    async def query_selector_all(self, target: str, *, max_items: int = 100) -> list[dict[str, Any]]:
+    async def query_selector_all(
+        self, target: str, *, max_items: int = 100
+    ) -> list[dict[str, Any]]:
         page = self._require_page()
         els = await page.query_selector_all(target)
         out: list[dict[str, Any]] = []
         for el in els[:max_items]:
             try:
-                out.append({
-                    "tag": await el.evaluate("e => e.tagName"),
-                    "text": (await el.text_content()) or "",
-                })
+                out.append(
+                    {
+                        "tag": await el.evaluate("e => e.tagName"),
+                        "text": (await el.text_content()) or "",
+                    }
+                )
             except Exception as exc:  # element-fetch best-effort
                 _log.debug("query_selector_all_skip: %s", exc)
                 continue
@@ -452,11 +471,13 @@ class PlaywrightWebDriver:
         out: list[dict[str, str]] = []
         for i, p in enumerate(ctx.pages):
             try:
-                out.append({
-                    "index": str(i),
-                    "url": p.url,
-                    "title": await p.title(),
-                })
+                out.append(
+                    {
+                        "index": str(i),
+                        "url": p.url,
+                        "title": await p.title(),
+                    }
+                )
             except Exception as exc:  # tab listing best-effort
                 _log.debug("list_tabs_skip[%d]: %s", i, exc)
                 continue
@@ -523,8 +544,7 @@ class PlaywrightWebDriver:
         await ctx.set_extra_http_headers({"User-Agent": user_agent})
         # And new pages via init script
         await ctx.add_init_script(
-            f"Object.defineProperty(navigator, 'userAgent', "
-            f"{{get: () => {user_agent!r}}});"
+            f"Object.defineProperty(navigator, 'userAgent', {{get: () => {user_agent!r}}});"
         )
 
     async def set_extra_headers(self, headers: dict[str, str]) -> None:
@@ -540,7 +560,9 @@ class PlaywrightWebDriver:
             "Object.defineProperty(navigator, 'languages', {get: () => ['en-US','en']});"
         )
 
-    async def set_proxy(self, server: str, username: str | None = None, password: str | None = None) -> None:
+    async def set_proxy(
+        self, server: str, username: str | None = None, password: str | None = None
+    ) -> None:
         # Note: Playwright proxy must be set at browser launch time; this method
         # records intent for the next start() cycle.
         self._pending_proxy = {
@@ -558,16 +580,21 @@ class PlaywrightWebDriver:
 
     # ---- network --------------------------------------------------------
 
-    async def intercept_request(self, url_pattern: str, mode: Literal["block", "log"] = "log") -> None:
+    async def intercept_request(
+        self, url_pattern: str, mode: Literal["block", "log"] = "log"
+    ) -> None:
         page = self._require_page()
         if not hasattr(self, "_network_buffer"):
             self._network_buffer: list[dict[str, Any]] = []
 
         async def _handler(route: Any, request: Any) -> None:
-            self._network_buffer.append({
-                "url": request.url, "method": request.method,
-                "resource_type": request.resource_type,
-            })
+            self._network_buffer.append(
+                {
+                    "url": request.url,
+                    "method": request.method,
+                    "resource_type": request.resource_type,
+                }
+            )
             if mode == "block":
                 await route.abort()
             else:
@@ -575,8 +602,9 @@ class PlaywrightWebDriver:
 
         await page.route(url_pattern, _handler)
 
-    async def mock_response(self, url_pattern: str, body: str, status: int = 200,
-                            content_type: str = "application/json") -> None:
+    async def mock_response(
+        self, url_pattern: str, body: str, status: int = 200, content_type: str = "application/json"
+    ) -> None:
         page = self._require_page()
 
         async def _handler(route: Any) -> None:
@@ -591,7 +619,8 @@ class PlaywrightWebDriver:
         page = self._require_page()
         response = await page.wait_for_response(url_pattern, timeout=int(timeout * 1000))
         return {
-            "url": response.url, "status": response.status,
+            "url": response.url,
+            "status": response.status,
             "headers": dict(response.headers),
         }
 
@@ -607,11 +636,17 @@ class PlaywrightWebDriver:
         # Recreate the context with device descriptor — record for next start.
         self._device_emulation = device
 
-    async def set_geolocation(self, latitude: float, longitude: float, accuracy: float = 1.0) -> None:
+    async def set_geolocation(
+        self, latitude: float, longitude: float, accuracy: float = 1.0
+    ) -> None:
         ctx = self._require_context()
-        await ctx.set_geolocation({
-            "latitude": latitude, "longitude": longitude, "accuracy": accuracy,
-        })
+        await ctx.set_geolocation(
+            {
+                "latitude": latitude,
+                "longitude": longitude,
+                "accuracy": accuracy,
+            }
+        )
 
     async def set_locale(self, locale: str) -> None:
         self._pending_locale = locale
@@ -621,10 +656,13 @@ class PlaywrightWebDriver:
         # CDP override for Chromium
         client = await ctx.new_cdp_session(self._require_page())
         await client.send(
-            "Emulation.setTimezoneOverride", {"timezoneId": timezone_id},
+            "Emulation.setTimezoneOverride",
+            {"timezoneId": timezone_id},
         )
 
-    async def set_color_scheme(self, scheme: Literal["light", "dark", "no-preference"] = "light") -> None:
+    async def set_color_scheme(
+        self, scheme: Literal["light", "dark", "no-preference"] = "light"
+    ) -> None:
         page = self._require_page()
         await page.emulate_media(color_scheme=scheme)
 

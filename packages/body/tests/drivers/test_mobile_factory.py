@@ -119,7 +119,8 @@ def test_build_default_android_honours_device_serial(
 ) -> None:
     monkeypatch.delenv("SELFFORK_BODY_PLATFORM", raising=False)
     driver = build_default_body_driver(
-        platform="android", android_device_serial="emulator-5554",
+        platform="android",
+        android_device_serial="emulator-5554",
     )
     assert isinstance(driver, AndroidDriver)
     assert driver.device_serial == "emulator-5554"
@@ -233,7 +234,9 @@ def test_composite_routes_to_preferred_android() -> None:
     ios = _StubDriver("ios")
     android = _StubDriver("android")
     composite = CompositeMobileDriver(  # type: ignore[arg-type]
-        ios=ios, android=android, prefer="android",
+        ios=ios,
+        android=android,
+        prefer="android",
     )
     assert composite._primary is android
 
@@ -300,8 +303,13 @@ async def test_composite_scroll_swipe_appkey_ax_storage_route() -> None:
     await composite.storage_state_load("anthropic", project_slug="demo")
     names = [c[0] for c in ios.calls]
     assert names == [
-        "scroll", "swipe", "app_launch", "press_key",
-        "ax_tree", "storage_state_save", "storage_state_load",
+        "scroll",
+        "swipe",
+        "app_launch",
+        "press_key",
+        "ax_tree",
+        "storage_state_save",
+        "storage_state_load",
     ]
 
 

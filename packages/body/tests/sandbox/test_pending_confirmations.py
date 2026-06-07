@@ -72,9 +72,7 @@ def test_expire_stale_marks_old_entries_expired() -> None:
     cat = _category(window_hours=1)
     entry = store.request(category=cat, action=_action())
     # Fast-forward by stubbing the expires_at to the past.
-    entry.expires_at = (
-        datetime.now(UTC) - timedelta(hours=2)
-    ).isoformat()
+    entry.expires_at = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
     flipped = store.expire_stale()
     assert {e.id for e in flipped} == {entry.id}
     stored = store.get(entry.id)
@@ -87,9 +85,7 @@ def test_approve_after_expire_is_noop() -> None:
     """Once expired, an entry no longer flips on approve."""
     store = PendingConfirmationStore()
     entry = store.request(category=_category(window_hours=1), action=_action())
-    entry.expires_at = (
-        datetime.now(UTC) - timedelta(hours=2)
-    ).isoformat()
+    entry.expires_at = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
     store.expire_stale()
     decided = store.approve(entry.id)
     assert decided is not None
@@ -116,8 +112,6 @@ def test_persistence_round_trip(tmp_path: Path) -> None:
 def test_time_left_seconds_drops_to_zero_past_expiry() -> None:
     store = PendingConfirmationStore()
     entry = store.request(category=_category(window_hours=1), action=_action())
-    entry.expires_at = (
-        datetime.now(UTC) - timedelta(minutes=5)
-    ).isoformat()
+    entry.expires_at = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
     assert entry.time_left_seconds() == 0
     assert entry.is_expired() is True

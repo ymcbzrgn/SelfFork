@@ -36,9 +36,7 @@ def _build_client(
     detector: Callable[[], dict[str, ProviderAuthStatus]],
 ) -> TestClient:
     app = FastAPI()
-    app.include_router(
-        build_provider_router(registry=registry, creds_detector=detector)
-    )
+    app.include_router(build_provider_router(registry=registry, creds_detector=detector))
     return TestClient(app)
 
 
@@ -114,9 +112,7 @@ def test_list_providers_disk_wins_but_preserves_last_error(
         return status
 
     client = _build_client(registry, detector)
-    codex = next(
-        i for i in client.get("/api/providers").json() if i["name"] == "codex"
-    )
+    codex = next(i for i in client.get("/api/providers").json() if i["name"] == "codex")
     assert codex["status"] == "connected"
     assert codex["last_error"] == "auth_expired: 401 from upstream"
 
@@ -143,9 +139,7 @@ def test_refresh_known_returns_202(client: TestClient) -> None:
     assert response.status_code == 202
 
 
-def test_disconnect_marks_status(
-    client: TestClient, registry: ProviderRegistry
-) -> None:
+def test_disconnect_marks_status(client: TestClient, registry: ProviderRegistry) -> None:
     record = registry.mark_signed_in("codex", storage_state_path="/tmp/codex.json")
     assert record.status == "connected"
     response = client.post("/api/providers/codex/disconnect")

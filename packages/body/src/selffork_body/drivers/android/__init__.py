@@ -116,7 +116,15 @@ class AndroidDriver:
         await self.mcp.app_launch(bundle_id)
 
     async def press_key(self, key_combo: str) -> None:
-        if key_combo not in {"back", "home", "menu", "app_switch", "power", "volume_up", "volume_down"}:
+        if key_combo not in {
+            "back",
+            "home",
+            "menu",
+            "app_switch",
+            "power",
+            "volume_up",
+            "volume_down",
+        }:
             raise ValueError(f"unsupported android key combo {key_combo!r}")
         await self.mcp.press_key(key_combo)  # type: ignore[arg-type]
 
@@ -129,14 +137,12 @@ class AndroidDriver:
     async def ax_tree(self, bundle_id: str | None = None) -> dict[str, Any]:
         return await self.mcp.dump_a11y_tree()
 
-    async def storage_state_save(
-        self, provider: str, project_slug: str | None = None
-    ) -> None:
-        raise NotImplementedError("Android driver storage_state is not applicable; use cloud Account state instead")
+    async def storage_state_save(self, provider: str, project_slug: str | None = None) -> None:
+        raise NotImplementedError(
+            "Android driver storage_state is not applicable; use cloud Account state instead"
+        )
 
-    async def storage_state_load(
-        self, provider: str, project_slug: str | None = None
-    ) -> None:
+    async def storage_state_load(self, provider: str, project_slug: str | None = None) -> None:
         raise NotImplementedError("Android driver storage_state is not applicable")
 
     # ---- S-ToolFleet Faz 1 — interaction extensions ------------------
@@ -239,9 +245,12 @@ class AndroidDriver:
     async def set_orientation(self, orientation: str) -> None:
         # 0=portrait, 1=landscape, 2=upside-down portrait, 3=landscape-rev
         rotation = {
-            "PORTRAIT": "0", "LANDSCAPE": "1",
-            "UPSIDE_DOWN": "2", "LANDSCAPE_REVERSE": "3",
-            "portrait": "0", "landscape": "1",
+            "PORTRAIT": "0",
+            "LANDSCAPE": "1",
+            "UPSIDE_DOWN": "2",
+            "LANDSCAPE_REVERSE": "3",
+            "portrait": "0",
+            "landscape": "1",
         }.get(orientation, "0")
         await self.fallback.adb_shell(
             "settings put system accelerometer_rotation 0",
@@ -265,15 +274,25 @@ class AndroidDriver:
     # ---- intents / shell / files / logs / deeplink -------------------
 
     async def intent(
-        self, action: str, *, extras: dict[str, str] | None = None,
-        component: str | None = None, data: str | None = None,
+        self,
+        action: str,
+        *,
+        extras: dict[str, str] | None = None,
+        component: str | None = None,
+        data: str | None = None,
     ) -> str:
         return await self.fallback.intent(
-            action, extras=extras, component=component, data=data,
+            action,
+            extras=extras,
+            component=component,
+            data=data,
         )
 
     async def broadcast(
-        self, action: str, *, extras: dict[str, str] | None = None,
+        self,
+        action: str,
+        *,
+        extras: dict[str, str] | None = None,
     ) -> str:
         return await self.fallback.broadcast(action, extras=extras)
 
@@ -287,11 +306,16 @@ class AndroidDriver:
         return await self.fallback.dumpsys(service)
 
     async def logcat(
-        self, *, tag_filter: str | None = None,
-        max_lines: int = 200, clear: bool = False,
+        self,
+        *,
+        tag_filter: str | None = None,
+        max_lines: int = 200,
+        clear: bool = False,
     ) -> str:
         return await self.fallback.logcat(
-            tag_filter=tag_filter, max_lines=max_lines, clear=clear,
+            tag_filter=tag_filter,
+            max_lines=max_lines,
+            clear=clear,
         )
 
     async def push(self, local: Path, remote: str) -> str:

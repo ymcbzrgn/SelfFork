@@ -71,9 +71,7 @@ def category() -> DestructiveCategory:
         id="prod_deploy",
         description="PROD push",
         confirm_window_hours=4,
-        match_any=(
-            MatchRule(tool="git", args_contains=("push", "origin", "main")),
-        ),
+        match_any=(MatchRule(tool="git", args_contains=("push", "origin", "main")),),
     )
 
 
@@ -193,10 +191,7 @@ async def test_callback_ask_queues_draft_off_loop(
     )
     assert outcome.handled
     drafts = drafts_store.list_unclaimed()
-    assert any(
-        "Asked for context" in d.text and entry.command_summary in d.text
-        for d in drafts
-    )
+    assert any("Asked for context" in d.text and entry.command_summary in d.text for d in drafts)
 
 
 @pytest.mark.asyncio
@@ -222,36 +217,24 @@ async def test_callback_foreign_namespace_ignored(router: InboundRouter) -> None
 
 
 @pytest.mark.asyncio
-async def test_command_pause_writes_flag(
-    router: InboundRouter, pause_signal: PauseSignal
-) -> None:
-    outcome = await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="pause", args=[]
-    )
+async def test_command_pause_writes_flag(router: InboundRouter, pause_signal: PauseSignal) -> None:
+    outcome = await router.handle_command(chat_id=ALLOWED_CHAT, command="pause", args=[])
     assert outcome.handled
     assert pause_signal.is_set()
 
 
 @pytest.mark.asyncio
-async def test_command_resume_clears_flag(
-    router: InboundRouter, pause_signal: PauseSignal
-) -> None:
+async def test_command_resume_clears_flag(router: InboundRouter, pause_signal: PauseSignal) -> None:
     pause_signal.request_pause(reason="test")
     assert pause_signal.is_set()
-    outcome = await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="resume", args=[]
-    )
+    outcome = await router.handle_command(chat_id=ALLOWED_CHAT, command="resume", args=[])
     assert outcome.handled
     assert not pause_signal.is_set()
 
 
 @pytest.mark.asyncio
-async def test_command_workspace_sets_active(
-    router: InboundRouter, talk_store: TalkStore
-) -> None:
-    outcome = await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="workspace", args=["alpha"]
-    )
+async def test_command_workspace_sets_active(router: InboundRouter, talk_store: TalkStore) -> None:
+    outcome = await router.handle_command(chat_id=ALLOWED_CHAT, command="workspace", args=["alpha"])
     assert outcome.handled
     slug = await talk_store.get_last_active_workspace()
     assert slug == "alpha"
@@ -295,12 +278,8 @@ async def test_command_cli_uses_last_active_workspace(
     talk_store: TalkStore,
     cli_override_store: CliOverrideStore,
 ) -> None:
-    await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="workspace", args=["alpha"]
-    )
-    outcome = await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="cli", args=["codex"]
-    )
+    await router.handle_command(chat_id=ALLOWED_CHAT, command="workspace", args=["alpha"])
+    outcome = await router.handle_command(chat_id=ALLOWED_CHAT, command="cli", args=["codex"])
     assert outcome.handled
     override = cli_override_store.peek("alpha")
     assert override is not None
@@ -325,9 +304,7 @@ async def test_command_cli_unknown_cli_rejected(
 async def test_command_cli_without_workspace_rejected(
     router: InboundRouter,
 ) -> None:
-    outcome = await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="cli", args=["codex"]
-    )
+    outcome = await router.handle_command(chat_id=ALLOWED_CHAT, command="cli", args=["codex"])
     assert not outcome.handled
     assert "workspace" in outcome.reply.lower()
 
@@ -372,9 +349,7 @@ async def test_command_cli_two_arg_rejects_unknown_model(
 
 @pytest.mark.asyncio
 async def test_command_help_returns_usage(router: InboundRouter) -> None:
-    outcome = await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="help", args=[]
-    )
+    outcome = await router.handle_command(chat_id=ALLOWED_CHAT, command="help", args=[])
     assert outcome.handled
     assert "/workspace" in outcome.reply
     assert "/approve" in outcome.reply
@@ -382,18 +357,14 @@ async def test_command_help_returns_usage(router: InboundRouter) -> None:
 
 @pytest.mark.asyncio
 async def test_command_unknown_rejected(router: InboundRouter) -> None:
-    outcome = await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="nonexistent", args=[]
-    )
+    outcome = await router.handle_command(chat_id=ALLOWED_CHAT, command="nonexistent", args=[])
     assert not outcome.handled
     assert "unknown" in outcome.reply.lower()
 
 
 @pytest.mark.asyncio
 async def test_command_unauthorised_rejects(router: InboundRouter) -> None:
-    outcome = await router.handle_command(
-        chat_id=DENIED_CHAT, command="pause", args=[]
-    )
+    outcome = await router.handle_command(chat_id=DENIED_CHAT, command="pause", args=[])
     assert not outcome.handled
 
 
@@ -404,9 +375,7 @@ async def test_command_unauthorised_rejects(router: InboundRouter) -> None:
 async def test_message_with_no_active_workspace_goes_to_drafts(
     router: InboundRouter, drafts_store: TelegramDraftStore
 ) -> None:
-    outcome = await router.handle_message(
-        chat_id=ALLOWED_CHAT, sender="yamac", text="hi jr"
-    )
+    outcome = await router.handle_message(chat_id=ALLOWED_CHAT, sender="yamac", text="hi jr")
     assert outcome.target == "drafts"
     assert drafts_store.count_unclaimed() == 1
 
@@ -416,9 +385,7 @@ async def test_message_with_active_workspace_injects_into_talk(
     router: InboundRouter, talk_store: TalkStore
 ) -> None:
     # Establish an active workspace first via /workspace.
-    await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="workspace", args=["beta"]
-    )
+    await router.handle_command(chat_id=ALLOWED_CHAT, command="workspace", args=["beta"])
     outcome = await router.handle_message(
         chat_id=ALLOWED_CHAT, sender="yamac", text="continue the build"
     )
@@ -426,9 +393,7 @@ async def test_message_with_active_workspace_injects_into_talk(
     assert outcome.workspace_slug == "beta"
     # Confirm a message landed in the conversation.
     assert outcome.conversation_id is not None
-    messages = await talk_store.list_messages(
-        conversation_id=outcome.conversation_id
-    )
+    messages = await talk_store.list_messages(conversation_id=outcome.conversation_id)
     assert any(m.content == "continue the build" for m in messages)
 
 
@@ -436,9 +401,7 @@ async def test_message_with_active_workspace_injects_into_talk(
 async def test_message_unauthorised_dropped(
     router: InboundRouter, drafts_store: TelegramDraftStore
 ) -> None:
-    outcome = await router.handle_message(
-        chat_id=DENIED_CHAT, sender="ghost", text="hi"
-    )
+    outcome = await router.handle_message(chat_id=DENIED_CHAT, sender="ghost", text="hi")
     assert outcome.target == "dropped"
     assert drafts_store.count_unclaimed() == 0
 
@@ -466,9 +429,7 @@ class _FakeVoiceBackend:
         self._transcript = transcript
         self._exc = exc
 
-    async def transcribe(
-        self, audio: bytes, *, mime: str = "audio/ogg"
-    ) -> str:
+    async def transcribe(self, audio: bytes, *, mime: str = "audio/ogg") -> str:
         del audio, mime
         if self._exc is not None:
             raise self._exc
@@ -630,7 +591,9 @@ async def test_voice_success_routes_through_handle_message(
         cli_override_store=cli_override_store,
     )
     await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="workspace", args=["gamma"],
+        chat_id=ALLOWED_CHAT,
+        command="workspace",
+        args=["gamma"],
     )
     outcome = await router.handle_voice(
         chat_id=ALLOWED_CHAT,
@@ -779,13 +742,17 @@ async def test_correct_missing_args(
         cli_override_store=cli_override_store,
     )
     outcome = await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="correct", args=[],
+        chat_id=ALLOWED_CHAT,
+        command="correct",
+        args=[],
     )
     assert outcome.handled is False
     assert "Usage" in outcome.reply
 
     outcome = await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="correct", args=["KEY-only"],
+        chat_id=ALLOWED_CHAT,
+        command="correct",
+        args=["KEY-only"],
     )
     assert outcome.handled is False
     assert "Usage" in outcome.reply
@@ -883,7 +850,9 @@ async def test_correct_listed_in_help(
         cli_override_store=cli_override_store,
     )
     outcome = await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="help", args=[],
+        chat_id=ALLOWED_CHAT,
+        command="help",
+        args=[],
     )
     assert outcome.handled is True
     assert "/correct" in outcome.reply
@@ -943,7 +912,9 @@ async def test_answer_unauthorised(
         cli_override_store=cli_override_store,
     )
     outcome = await router.handle_command(
-        chat_id=DENIED_CHAT, command="answer", args=["abc", "yes"],
+        chat_id=DENIED_CHAT,
+        command="answer",
+        args=["abc", "yes"],
     )
     assert outcome.handled is False
     assert "not authorised" in outcome.reply
@@ -968,7 +939,9 @@ async def test_answer_without_store_replies_clean(
         cli_override_store=cli_override_store,
     )
     outcome = await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="answer", args=["abc", "yes"],
+        chat_id=ALLOWED_CHAT,
+        command="answer",
+        args=["abc", "yes"],
     )
     assert outcome.handled is False
     assert "not wired" in outcome.reply
@@ -994,12 +967,16 @@ async def test_answer_missing_args(
         cli_override_store=cli_override_store,
     )
     outcome = await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="answer", args=[],
+        chat_id=ALLOWED_CHAT,
+        command="answer",
+        args=[],
     )
     assert outcome.handled is False
     assert "Usage" in outcome.reply
     outcome2 = await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="answer", args=["onlykey"],
+        chat_id=ALLOWED_CHAT,
+        command="answer",
+        args=["onlykey"],
     )
     assert outcome2.handled is False
     assert "Usage" in outcome2.reply
@@ -1117,7 +1094,9 @@ async def test_cancelq_without_store_replies_clean(
         cli_override_store=cli_override_store,
     )
     outcome = await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="cancelq", args=["abc"],
+        chat_id=ALLOWED_CHAT,
+        command="cancelq",
+        args=["abc"],
     )
     assert outcome.handled is False
     assert "not wired" in outcome.reply
@@ -1143,7 +1122,9 @@ async def test_answer_listed_in_help(
         cli_override_store=cli_override_store,
     )
     outcome = await router.handle_command(
-        chat_id=ALLOWED_CHAT, command="help", args=[],
+        chat_id=ALLOWED_CHAT,
+        command="help",
+        args=[],
     )
     assert outcome.handled is True
     assert "/answer" in outcome.reply

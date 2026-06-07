@@ -160,9 +160,7 @@ class HeartbeatScheduler:
         self._air_detector = air_detector
         self._emergency_bridge = emergency_telegram_bridge
         self._state = (
-            HeartbeatState.DISABLED
-            if not self._config.enabled
-            else HeartbeatState.INACTIVE
+            HeartbeatState.DISABLED if not self._config.enabled else HeartbeatState.INACTIVE
         )
         self._task: asyncio.Task[None] | None = None
         self._event_queue: asyncio.Queue[HeartbeatEvent] = asyncio.Queue()
@@ -292,9 +290,7 @@ class HeartbeatScheduler:
         self._state = HeartbeatState.STARTING
         self._tick_count = 0
         self._last_reconciliation_ts = time.monotonic()
-        self._task = asyncio.create_task(
-            self._tick_loop(), name="heartbeat-daemon"
-        )
+        self._task = asyncio.create_task(self._tick_loop(), name="heartbeat-daemon")
         self._state = HeartbeatState.RUNNING
         _log.info(
             "heartbeat_started",
@@ -326,9 +322,7 @@ class HeartbeatScheduler:
             await self._task
         self._task = None
         self._state = HeartbeatState.STOPPED
-        _log.info(
-            "heartbeat_stopped", extra={"tick_count": self._tick_count}
-        )
+        _log.info("heartbeat_stopped", extra={"tick_count": self._tick_count})
 
     # ── internals ─────────────────────────────────────────────────────
 
@@ -362,9 +356,7 @@ class HeartbeatScheduler:
             await asyncio.sleep(self._config.tick_seconds)
             return
         if not self._within_active_hours():
-            await asyncio.sleep(
-                self._config.tick_seconds * _INACTIVE_SLEEP_MULTIPLIER
-            )
+            await asyncio.sleep(self._config.tick_seconds * _INACTIVE_SLEEP_MULTIPLIER)
             return
 
         # Drain an event or wait for the reconciliation timeout. The
@@ -399,10 +391,7 @@ class HeartbeatScheduler:
         # ACT (Faz D) — only invoked when both deliberation + executor
         # are wired. Without one or the other the daemon stays in a
         # pure observe mode (Faz A/B/C behaviour).
-        if (
-            self._executor is not None
-            and self._last_action_decision is not None
-        ):
+        if self._executor is not None and self._last_action_decision is not None:
             self._last_action_result = await self._executor.execute(
                 self._last_action_decision, world_state
             )
@@ -439,14 +428,10 @@ class HeartbeatScheduler:
                 tick=self._tick_count,
                 trigger=event.value,
                 world_state=world_state,
-                legal_actions=frozenset(
-                    a.value for a in legal_actions
-                ),
+                legal_actions=frozenset(a.value for a in legal_actions),
                 decision=self._last_action_decision,
                 result=self._last_action_result,
-                air_alert=(
-                    air_alert.severity if air_alert is not None else None
-                ),
+                air_alert=(air_alert.severity if air_alert is not None else None),
             )
             try:
                 self._audit_writer.write(entry)
@@ -481,15 +466,11 @@ class HeartbeatScheduler:
                     if self._last_action_result is not None
                     else None
                 ),
-                "air_severity": (
-                    air_alert.severity if air_alert is not None else None
-                ),
+                "air_severity": (air_alert.severity if air_alert is not None else None),
             },
         )
 
-    async def _dispatch_air_alert(
-        self, alert: AIRAlert, state: WorldState
-    ) -> None:
+    async def _dispatch_air_alert(self, alert: AIRAlert, state: WorldState) -> None:
         """Push a ``crit`` Telegram message when an emergency bridge is wired."""
         if self._emergency_bridge is None:
             _log.warning(
@@ -578,9 +559,7 @@ class HeartbeatScheduler:
             step = "perceive"
             next_action = LegalAction.WAIT.value
         failure_count = (
-            self._air_detector.consecutive_failures
-            if self._air_detector is not None
-            else 0
+            self._air_detector.consecutive_failures if self._air_detector is not None else 0
         )
         progress = (
             f"tick={self._tick_count} "
@@ -611,9 +590,7 @@ class HeartbeatScheduler:
         elapsed = now - self._last_reconciliation_ts
         timeout = max(0.0, self._config.reconciliation_seconds - elapsed)
         try:
-            event = await asyncio.wait_for(
-                self._event_queue.get(), timeout=timeout
-            )
+            event = await asyncio.wait_for(self._event_queue.get(), timeout=timeout)
         except TimeoutError:
             self._last_reconciliation_ts = time.monotonic()
             return HeartbeatEvent.RECONCILIATION
@@ -629,9 +606,7 @@ class HeartbeatScheduler:
         and the scheduler's perceive stage share a single
         implementation.
         """
-        return compute_within_active_hours(
-            self._config.active_hours, self._config.timezone
-        )
+        return compute_within_active_hours(self._config.active_hours, self._config.timezone)
 
 
 _RESUME_EXCLUDED_ACTIONS: Final[frozenset[str]] = frozenset(
@@ -684,9 +659,7 @@ def compute_within_active_hours(active_hours: str, timezone: str) -> bool:
         start_minutes = _parse_hhmm(start_raw)
         end_minutes = _parse_hhmm(end_raw)
     except ValueError:
-        _log.warning(
-            "heartbeat_active_hours_parse_failed", extra={"spec": spec}
-        )
+        _log.warning("heartbeat_active_hours_parse_failed", extra={"spec": spec})
         return True
 
     try:

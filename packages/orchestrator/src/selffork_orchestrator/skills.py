@@ -118,17 +118,11 @@ class SkillInstaller:
                 target_link = target_root / skill_name
                 outcome = self._link_one(skill_dir, target_link)
                 if outcome == "installed":
-                    report.installed.setdefault(skill_name, []).append(
-                        (target_root, target_link)
-                    )
+                    report.installed.setdefault(skill_name, []).append((target_root, target_link))
                 elif outcome == "skipped":
-                    report.skipped.setdefault(skill_name, []).append(
-                        target_root
-                    )
+                    report.skipped.setdefault(skill_name, []).append(target_root)
                 else:
-                    report.conflicts.setdefault(skill_name, []).append(
-                        (target_root, outcome)
-                    )
+                    report.conflicts.setdefault(skill_name, []).append((target_root, outcome))
         return report
 
     def _link_one(self, source: Path, target_link: Path) -> str:

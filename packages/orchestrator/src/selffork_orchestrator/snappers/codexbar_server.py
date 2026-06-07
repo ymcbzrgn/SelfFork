@@ -160,12 +160,8 @@ class CodexBarServer:
         # Indirection for tests: production uses
         # ``asyncio.create_subprocess_exec`` and a real httpx client;
         # tests substitute fakes that return canned objects.
-        self._process_factory = (
-            process_factory or self._default_process_factory
-        )
-        self._health_client_factory = (
-            health_client_factory or self._default_health_client
-        )
+        self._process_factory = process_factory or self._default_process_factory
+        self._health_client_factory = health_client_factory or self._default_health_client
 
     # ── public API ────────────────────────────────────────────────────
 
@@ -289,9 +285,7 @@ class CodexBarServer:
             *self._config.extra_args,
         )
 
-    async def _default_process_factory(
-        self, argv: Sequence[str]
-    ) -> asyncio.subprocess.Process:
+    async def _default_process_factory(self, argv: Sequence[str]) -> asyncio.subprocess.Process:
         # ``start_new_session=True`` puts the child in its own process
         # group so we can ``os.killpg`` the whole tree at teardown
         # (CodexBar may spawn helper processes for some providers).
@@ -307,10 +301,7 @@ class CodexBarServer:
 
     async def _await_readiness(self) -> bool:
         """Poll ``GET /health`` until 200 or the budget elapses."""
-        deadline = (
-            asyncio.get_event_loop().time()
-            + self._config.readiness_timeout_seconds
-        )
+        deadline = asyncio.get_event_loop().time() + self._config.readiness_timeout_seconds
         last_error: str | None = None
         client = self._health_client_factory()
         try:
@@ -319,9 +310,7 @@ class CodexBarServer:
                 # answer health probes and we'd burn the whole budget
                 # waiting.
                 if self._process is not None and self._process.returncode is not None:
-                    self._fail_reason = (
-                        f"sidecar exited with code {self._process.returncode}"
-                    )
+                    self._fail_reason = f"sidecar exited with code {self._process.returncode}"
                     return False
                 try:
                     response = await client.get(f"{self.base_url}/health")

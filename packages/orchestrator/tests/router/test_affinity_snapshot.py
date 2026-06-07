@@ -1,4 +1,5 @@
 """Tests for the affinity-landscape snapshot (cross-process read bridge)."""
+
 from __future__ import annotations
 
 from pathlib import Path

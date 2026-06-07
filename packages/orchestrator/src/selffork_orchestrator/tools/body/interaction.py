@@ -66,7 +66,9 @@ async def _body_click(ctx: ToolContext, args: BodyClickArgs) -> dict[str, Any]:
         target_uri=args.target,
         args_summary={"bbox": args.bbox, "button": args.button},
         coro_factory=lambda: driver.click(
-            args.target, bbox=args.bbox, button=args.button,
+            args.target,
+            bbox=args.bbox,
+            button=args.button,
         ),
     )
 
@@ -90,7 +92,8 @@ async def _body_scroll(ctx: ToolContext, args: BodyScrollArgs) -> dict[str, Any]
         target_uri=None,
         args_summary={"direction": args.direction, "amount": args.amount},
         coro_factory=lambda: driver.scroll(
-            direction=args.direction, amount=args.amount,
+            direction=args.direction,
+            amount=args.amount,
         ),
     )
 
@@ -117,7 +120,8 @@ async def _body_swipe(ctx: ToolContext, args: BodySwipeArgs) -> dict[str, Any]:
 
 
 async def _body_press_key(
-    ctx: ToolContext, args: BodyPressKeyArgs,
+    ctx: ToolContext,
+    args: BodyPressKeyArgs,
 ) -> dict[str, Any]:
     driver = _require_driver(ctx)
     return await _invoke(
@@ -134,41 +138,31 @@ def build_interaction_tools() -> list[ToolSpec[Any]]:
     return [
         ToolSpec(
             name="body_click",
-            description=(
-                "Click on a UI element via vision/AX-tree locator (T1)."
-            ),
+            description=("Click on a UI element via vision/AX-tree locator (T1)."),
             args_model=BodyClickArgs,
             handler=_body_click,
         ),
         ToolSpec(
             name="body_type",
-            description=(
-                "Type text into the active or specified target field (T1)."
-            ),
+            description=("Type text into the active or specified target field (T1)."),
             args_model=BodyTypeArgs,
             handler=_body_type,
         ),
         ToolSpec(
             name="body_scroll",
-            description=(
-                "Scroll the active surface by direction + amount (T0)."
-            ),
+            description=("Scroll the active surface by direction + amount (T0)."),
             args_model=BodyScrollArgs,
             handler=_body_scroll,
         ),
         ToolSpec(
             name="body_swipe",
-            description=(
-                "Swipe gesture between two points with duration (T1)."
-            ),
+            description=("Swipe gesture between two points with duration (T1)."),
             args_model=BodySwipeArgs,
             handler=_body_swipe,
         ),
         ToolSpec(
             name="body_press_key",
-            description=(
-                "Press a key combination such as 'cmd+t' or 'back' (T1)."
-            ),
+            description=("Press a key combination such as 'cmd+t' or 'back' (T1)."),
             args_model=BodyPressKeyArgs,
             handler=_body_press_key,
         ),

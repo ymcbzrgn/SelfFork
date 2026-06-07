@@ -345,27 +345,24 @@ class MlxServerRuntime(LLMRuntime):
             pool=_CONNECT_SECONDS,
         )
         try:
-            async with httpx.AsyncClient(
-                timeout=timeout, transport=self._transport
-            ) as client, client.stream("POST", url, json=body) as resp:
+            async with (
+                httpx.AsyncClient(timeout=timeout, transport=self._transport) as client,
+                client.stream("POST", url, json=body) as resp,
+            ):
                 if resp.status_code != 200:
                     body_bytes = await resp.aread()
                     raise RuntimeUnhealthyError(
                         f"chat HTTP {resp.status_code}: "
                         f"{body_bytes.decode('utf-8', errors='replace')[:500]}"
                     )
-                async for event in stream_openai_sse(
-                    resp, stall_seconds=stall_seconds
-                ):
+                async for event in stream_openai_sse(resp, stall_seconds=stall_seconds):
                     yield event
         except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPError) as exc:
             raise RuntimeUnhealthyError(
                 f"chat request failed: {type(exc).__name__}: {exc}",
             ) from exc
 
-    async def warmup_probe(
-        self, *, stall_seconds: float = _WARMUP_STALL_SECONDS
-    ) -> None:
+    async def warmup_probe(self, *, stall_seconds: float = _WARMUP_STALL_SECONDS) -> None:
         """Detect the ``mlx_lm``-on-VLM silent-hang class at spin-up.
 
         Runs a tiny generation; if NO token arrives within

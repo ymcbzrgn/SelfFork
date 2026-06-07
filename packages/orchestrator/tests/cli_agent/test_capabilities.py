@@ -59,21 +59,26 @@ def test_codex_effort_is_config_kv() -> None:
 
 def test_gemini_effort_is_settings_file_no_arg() -> None:
     # gemini thinking is settings.json-only — model_args gives just -m
-    assert _cap("gemini-cli").model_args(
-        model="gemini-2.5-pro", effort="high"
-    ) == ["-m", "gemini-2.5-pro"]
+    assert _cap("gemini-cli").model_args(model="gemini-2.5-pro", effort="high") == [
+        "-m",
+        "gemini-2.5-pro",
+    ]
 
 
 def test_opencode_effort_is_variant_flag() -> None:
-    assert _cap("opencode").model_args(
-        model="openai/gpt-5.5", effort="high"
-    ) == ["-m", "openai/gpt-5.5", "--variant", "high"]
+    assert _cap("opencode").model_args(model="openai/gpt-5.5", effort="high") == [
+        "-m",
+        "openai/gpt-5.5",
+        "--variant",
+        "high",
+    ]
 
 
 def test_minimax_no_effort_knob() -> None:
-    assert _cap("minimax-cli").model_args(
-        model="MiniMax-M2.7", effort="high"
-    ) == ["--model", "MiniMax-M2.7"]
+    assert _cap("minimax-cli").model_args(model="MiniMax-M2.7", effort="high") == [
+        "--model",
+        "MiniMax-M2.7",
+    ]
 
 
 def test_effort_clamp_invalid_to_default() -> None:
@@ -106,9 +111,7 @@ def test_candidate_pairs_enumerates_models() -> None:
 
 
 def test_candidate_pairs_honours_models_override() -> None:
-    pairs = candidate_pairs(
-        ["codex"], models_override={"codex": ("gpt-5.4-mini",)}
-    )
+    pairs = candidate_pairs(["codex"], models_override={"codex": ("gpt-5.4-mini",)})
     assert pairs == [("codex", "gpt-5.4-mini")]
 
 

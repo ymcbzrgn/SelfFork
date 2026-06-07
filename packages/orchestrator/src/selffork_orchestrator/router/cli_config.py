@@ -78,11 +78,7 @@ class CliRuntimeStore:
 
     def models_override(self) -> dict[str, tuple[str, ...]]:
         """All non-empty enabled-model subsets (for ``candidate_pairs``)."""
-        return {
-            cli: tuple(models)
-            for cli, models in self.read().enabled_models.items()
-            if models
-        }
+        return {cli: tuple(models) for cli, models in self.read().enabled_models.items() if models}
 
     def set_effort(self, *, cli: str, effort: str | None) -> None:
         """Set (or clear, with ``None``) the effort for ``cli``.
@@ -95,8 +91,7 @@ class CliRuntimeStore:
             raise ValueError(f"unknown cli: {cli!r}")
         if effort is not None and effort not in cap.effort.levels:
             raise ValueError(
-                f"cli {cli!r} does not support effort {effort!r}; "
-                f"valid: {list(cap.effort.levels)}"
+                f"cli {cli!r} does not support effort {effort!r}; valid: {list(cap.effort.levels)}"
             )
         cfg = self.read()
         efforts = dict(cfg.efforts)

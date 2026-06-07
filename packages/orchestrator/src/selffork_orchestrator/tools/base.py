@@ -241,7 +241,9 @@ class ToolRegistry:
         return self._tools.get(name)
 
     def catalog(
-        self, *, include_deferred: bool = True,
+        self,
+        *,
+        include_deferred: bool = True,
     ) -> list[dict[str, Any]]:
         """Catalog suitable for injecting into Jr's system prompt.
 
@@ -265,16 +267,11 @@ class ToolRegistry:
 
         S-ToolFleet Faz 0 helper: complement of :meth:`deferred_names`.
         """
-        return sorted(
-            name for name, spec in self._tools.items()
-            if not spec.defer_loading
-        )
+        return sorted(name for name, spec in self._tools.items() if not spec.defer_loading)
 
     def deferred_names(self) -> list[str]:
         """Names of tools that must be retrieved via ``tool_search``."""
-        return sorted(
-            name for name, spec in self._tools.items() if spec.defer_loading
-        )
+        return sorted(name for name, spec in self._tools.items() if spec.defer_loading)
 
     def deferred_specs(self) -> list[ToolSpec[Any]]:
         """ToolSpec instances of every deferred tool (RAG corpus side)."""

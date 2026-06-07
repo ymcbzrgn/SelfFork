@@ -190,15 +190,12 @@ def build_telegram_router(
                 state="not_configured",
                 soft_confirm_window_hours=cfg.soft_confirm_window_hours,
                 detail=(
-                    "Open the Connections card or PUT "
-                    "/api/telegram/setup to register a bot token."
+                    "Open the Connections card or PUT /api/telegram/setup to register a bot token."
                 ),
                 mode=cfg.mode,
             )
         state: Literal["not_configured", "connected", "errored"] = (
-            "connected"
-            if not isinstance(bridge, NullTelegramBridge)
-            else "errored"
+            "connected" if not isinstance(bridge, NullTelegramBridge) else "errored"
         )
         return TelegramStatusResponse(
             state=state,
@@ -223,9 +220,7 @@ def build_telegram_router(
     async def setup(req: TelegramSetupRequest) -> TelegramStatusResponse:
         bot_token = req.bot_token.strip()
         if not bot_token:
-            raise HTTPException(
-                status_code=400, detail="bot_token must not be empty"
-            )
+            raise HTTPException(status_code=400, detail="bot_token must not be empty")
         webhook_url = req.webhook_url.strip()
         if req.mode == "webhook" and not webhook_url:
             raise HTTPException(
@@ -261,20 +256,13 @@ def build_telegram_router(
             except httpx.HTTPError as exc:
                 raise HTTPException(
                     status_code=502,
-                    detail=(
-                        "Telegram setWebhook call failed: "
-                        f"{type(exc).__name__}: {exc}"
-                    ),
+                    detail=(f"Telegram setWebhook call failed: {type(exc).__name__}: {exc}"),
                 ) from exc
         log.record_outbound(
             summary="Setup wizard applied",
             detail=(
                 f"mode={config.mode} "
-                + (
-                    f"webhook_url={config.webhook_url}"
-                    if config.webhook_url
-                    else "no_webhook"
-                )
+                + (f"webhook_url={config.webhook_url}" if config.webhook_url else "no_webhook")
             ),
         )
         return await status()
@@ -332,9 +320,7 @@ def build_telegram_router(
         resolved_cfg = resolve_telegram_config(telegram_store)
         expected_secret = (resolved_cfg.webhook_secret or "").strip()
         if expected_secret:
-            provided = request.headers.get(
-                "X-Telegram-Bot-Api-Secret-Token", ""
-            )
+            provided = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
             if provided != expected_secret:
                 raise HTTPException(
                     status_code=401,
@@ -346,13 +332,9 @@ def build_telegram_router(
         try:
             update = Update.de_json(payload, application.bot)
         except Exception as exc:
-            raise HTTPException(
-                status_code=400, detail=f"invalid Telegram update: {exc}"
-            ) from exc
+            raise HTTPException(status_code=400, detail=f"invalid Telegram update: {exc}") from exc
         if update is None:
-            raise HTTPException(
-                status_code=400, detail="empty Telegram update"
-            )
+            raise HTTPException(status_code=400, detail="empty Telegram update")
         log.record_inbound(
             summary=_summarise_inbound(update),
             detail=None,
@@ -465,9 +447,7 @@ async def _register_telegram_webhook(
     return body
 
 
-def attach_outbound_recorder(
-    bridge: TelegramBridge, log: TelegramActivityLog
-) -> TelegramBridge:
+def attach_outbound_recorder(bridge: TelegramBridge, log: TelegramActivityLog) -> TelegramBridge:
     """Wrap ``bridge`` so every successful notify hits the activity log.
 
     Used by the dashboard lifespan to surface outbound destructive
@@ -476,15 +456,11 @@ def attach_outbound_recorder(
     """
 
     class _Wrapping(TelegramBridge):
-        async def notify(
-            self, message: TelegramMessage
-        ) -> Any:
+        async def notify(self, message: TelegramMessage) -> Any:
             attempt = await bridge.notify(message)
             if attempt.delivered:
                 log.record_outbound(
-                    summary=message.text.splitlines()[0][:80]
-                    if message.text
-                    else "(empty)",
+                    summary=message.text.splitlines()[0][:80] if message.text else "(empty)",
                     detail=f"level={message.level} session={message.session_id}",
                 )
             return attempt

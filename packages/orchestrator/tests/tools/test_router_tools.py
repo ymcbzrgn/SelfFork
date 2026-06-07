@@ -1,4 +1,5 @@
 """Tests for Self Jr CLI-router control + introspection tools (S6)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -265,9 +266,7 @@ def test_cli_config_seed_default_when_unset(tmp_path: Path) -> None:
 
 def test_cli_override_read(tmp_path: Path) -> None:
     store = _override_store(tmp_path)
-    store.set(
-        workspace="w1", cli="gemini-cli", model="gemini-2.5-pro", sticky=True
-    )
+    store.set(workspace="w1", cli="gemini-cli", model="gemini-2.5-pro", sticky=True)
     result = _invoke(
         _registry(),
         "cli_override",

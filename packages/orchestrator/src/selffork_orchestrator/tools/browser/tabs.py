@@ -55,8 +55,11 @@ async def _browser_new_tab(ctx: ToolContext, args: BrowserNewTabArgs) -> dict[st
         return {"index": index, "url": args.url}
 
     return await _invoke_browser(
-        ctx, action_type="browser.new_tab", target_uri=args.url,
-        args_summary={"url": args.url}, coro_factory=_open,
+        ctx,
+        action_type="browser.new_tab",
+        target_uri=args.url,
+        args_summary={"url": args.url},
+        coro_factory=_open,
     )
 
 
@@ -68,8 +71,11 @@ async def _browser_close_tab(ctx: ToolContext, args: BrowserCloseTabArgs) -> dic
         return {"remaining": remaining}
 
     return await _invoke_browser(
-        ctx, action_type="browser.close_tab", target_uri=None,
-        args_summary={"index": args.index}, coro_factory=_close,
+        ctx,
+        action_type="browser.close_tab",
+        target_uri=None,
+        args_summary={"index": args.index},
+        coro_factory=_close,
     )
 
 
@@ -81,8 +87,11 @@ async def _browser_list_tabs(ctx: ToolContext, args: BrowserListTabsArgs) -> dic
         return {"count": len(tabs), "tabs": tabs}
 
     return await _invoke_browser(
-        ctx, action_type="browser.list_tabs", target_uri=None,
-        args_summary={}, coro_factory=_list,
+        ctx,
+        action_type="browser.list_tabs",
+        target_uri=None,
+        args_summary={},
+        coro_factory=_list,
     )
 
 
@@ -94,13 +103,17 @@ async def _browser_switch_tab(ctx: ToolContext, args: BrowserSwitchTabArgs) -> d
         return out
 
     return await _invoke_browser(
-        ctx, action_type="browser.switch_tab", target_uri=None,
-        args_summary={"index": args.index}, coro_factory=_switch,
+        ctx,
+        action_type="browser.switch_tab",
+        target_uri=None,
+        args_summary={"index": args.index},
+        coro_factory=_switch,
     )
 
 
 async def _browser_get_active_tab(
-    ctx: ToolContext, args: BrowserGetActiveTabArgs,
+    ctx: ToolContext,
+    args: BrowserGetActiveTabArgs,
 ) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
 
@@ -109,13 +122,17 @@ async def _browser_get_active_tab(
         return out
 
     return await _invoke_browser(
-        ctx, action_type="browser.get_active_tab", target_uri=None,
-        args_summary={}, coro_factory=_active,
+        ctx,
+        action_type="browser.get_active_tab",
+        target_uri=None,
+        args_summary={},
+        coro_factory=_active,
     )
 
 
 async def _browser_duplicate_tab(
-    ctx: ToolContext, args: BrowserDuplicateTabArgs,
+    ctx: ToolContext,
+    args: BrowserDuplicateTabArgs,
 ) -> dict[str, Any]:
     drv = _require_browser_driver(ctx)
 
@@ -124,23 +141,56 @@ async def _browser_duplicate_tab(
         return {"index": index}
 
     return await _invoke_browser(
-        ctx, action_type="browser.duplicate_tab", target_uri=None,
-        args_summary={}, coro_factory=_dup,
+        ctx,
+        action_type="browser.duplicate_tab",
+        target_uri=None,
+        args_summary={},
+        coro_factory=_dup,
     )
 
 
 def build_browser_tabs_tools() -> list[ToolSpec[Any]]:
     return [
-        ToolSpec(name="browser_new_tab", description="Open a new tab, optionally navigating to URL.",  # noqa: E501
-                 args_model=BrowserNewTabArgs, handler=_browser_new_tab, defer_loading=True),
-        ToolSpec(name="browser_close_tab", description="Close the active tab (or by index).",
-                 args_model=BrowserCloseTabArgs, handler=_browser_close_tab, defer_loading=True),
-        ToolSpec(name="browser_list_tabs", description="List all open tabs (index/url/title).",
-                 args_model=BrowserListTabsArgs, handler=_browser_list_tabs, defer_loading=True),
-        ToolSpec(name="browser_switch_tab", description="Activate the tab at the given index.",
-                 args_model=BrowserSwitchTabArgs, handler=_browser_switch_tab, defer_loading=True),
-        ToolSpec(name="browser_get_active_tab", description="Return descriptor of the currently active tab.",  # noqa: E501
-                 args_model=BrowserGetActiveTabArgs, handler=_browser_get_active_tab, defer_loading=True),  # noqa: E501
-        ToolSpec(name="browser_duplicate_tab", description="Duplicate the active tab (clone URL).",
-                 args_model=BrowserDuplicateTabArgs, handler=_browser_duplicate_tab, defer_loading=True),  # noqa: E501
+        ToolSpec(
+            name="browser_new_tab",
+            description="Open a new tab, optionally navigating to URL.",  # noqa: E501
+            args_model=BrowserNewTabArgs,
+            handler=_browser_new_tab,
+            defer_loading=True,
+        ),
+        ToolSpec(
+            name="browser_close_tab",
+            description="Close the active tab (or by index).",
+            args_model=BrowserCloseTabArgs,
+            handler=_browser_close_tab,
+            defer_loading=True,
+        ),
+        ToolSpec(
+            name="browser_list_tabs",
+            description="List all open tabs (index/url/title).",
+            args_model=BrowserListTabsArgs,
+            handler=_browser_list_tabs,
+            defer_loading=True,
+        ),
+        ToolSpec(
+            name="browser_switch_tab",
+            description="Activate the tab at the given index.",
+            args_model=BrowserSwitchTabArgs,
+            handler=_browser_switch_tab,
+            defer_loading=True,
+        ),
+        ToolSpec(
+            name="browser_get_active_tab",
+            description="Return descriptor of the currently active tab.",  # noqa: E501
+            args_model=BrowserGetActiveTabArgs,
+            handler=_browser_get_active_tab,
+            defer_loading=True,
+        ),  # noqa: E501
+        ToolSpec(
+            name="browser_duplicate_tab",
+            description="Duplicate the active tab (clone URL).",
+            args_model=BrowserDuplicateTabArgs,
+            handler=_browser_duplicate_tab,
+            defer_loading=True,
+        ),  # noqa: E501
     ]
