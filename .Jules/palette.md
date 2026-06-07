@@ -1,0 +1,3 @@
+## 2026-06-07 - Accessible Hover-Only Buttons
+**Learning:** Buttons that are visually hidden until hovered (e.g., using `opacity-0 group-hover:opacity-100`) remain invisible to keyboard users who tab to them, creating an accessibility trap. Furthermore, icon-only buttons need an `aria-label` for screen readers.
+**Action:** When making a button visible on hover, always include `focus-visible:opacity-100` along with standard focus styles (`focus-visible:outline-none focus-visible:ring-2`, etc.) to ensure keyboard navigability. Always pair icon-only actions with an `aria-label` and a `title` attribute.
