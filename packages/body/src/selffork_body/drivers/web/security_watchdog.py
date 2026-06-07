@@ -84,9 +84,19 @@ class SecurityWatchdog:
 
     def attach(self, page: Any) -> None:
         """Wire the watchdog to a Playwright page's events."""
-        page.on("framenavigated", lambda frame: page.context.event_loop.create_task(
-            self.on_framenavigated(frame)
-        ) if hasattr(page.context, "event_loop") else None)
-        page.on("popup", lambda popup: page.context.event_loop.create_task(
-            self.on_popup(popup)
-        ) if hasattr(page.context, "event_loop") else None)
+        page.on(
+            "framenavigated",
+            lambda frame: (
+                page.context.event_loop.create_task(self.on_framenavigated(frame))
+                if hasattr(page.context, "event_loop")
+                else None
+            ),
+        )
+        page.on(
+            "popup",
+            lambda popup: (
+                page.context.event_loop.create_task(self.on_popup(popup))
+                if hasattr(page.context, "event_loop")
+                else None
+            ),
+        )

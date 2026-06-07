@@ -33,9 +33,7 @@ class TestExplicitBlock:
         assert thought.summary == "Upper tags work."
 
     def test_multiline_block_collapses_whitespace(self) -> None:
-        reply = (
-            "<thought_summary>\n  line one\n  line two\n</thought_summary>"
-        )
+        reply = "<thought_summary>\n  line one\n  line two\n</thought_summary>"
         thought = parse_thought(reply)
         assert thought is not None
         assert thought.summary == "line one line two"

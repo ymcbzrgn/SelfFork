@@ -88,6 +88,7 @@ def resolve_default_base_url() -> str:
         return f"http://127.0.0.1:{port}"
     return f"http://127.0.0.1:{DEFAULT_SIDECAR_PORT}"
 
+
 DEFAULT_HTTP_TIMEOUT_SECONDS: Final[float] = 4.0
 """Per-request budget for CodexBar HTTP calls.
 
@@ -109,9 +110,7 @@ _PROVIDER_ID_MAP: Final[dict[str, str]] = {
     "opencode": "opencode",
 }
 
-_SELFFORK_TO_CODEXBAR: Final[dict[str, str]] = {
-    v: k for k, v in _PROVIDER_ID_MAP.items()
-}
+_SELFFORK_TO_CODEXBAR: Final[dict[str, str]] = {v: k for k, v in _PROVIDER_ID_MAP.items()}
 
 
 def _selffork_to_codexbar_id(cli_id: str) -> str:
@@ -189,11 +188,7 @@ def _window_from_payload(raw: Any) -> tuple[WindowKind, WindowState] | None:
     used = raw.get("usedPercent")
     minutes = raw.get("windowMinutes")
     resets_at_raw = raw.get("resetsAt")
-    if (
-        not isinstance(used, (int, float))
-        or not isinstance(minutes, int)
-        or minutes <= 0
-    ):
+    if not isinstance(used, (int, float)) or not isinstance(minutes, int) or minutes <= 0:
         return None
     resets_at = _parse_iso8601(resets_at_raw)
     if resets_at is None:
@@ -209,9 +204,7 @@ def _window_from_payload(raw: Any) -> tuple[WindowKind, WindowState] | None:
     return _window_kind_for_minutes(int(minutes)), state
 
 
-def map_codexbar_payload(
-    payload: dict[str, Any], *, cli_id: str
-) -> QuotaSnapshot | None:
+def map_codexbar_payload(payload: dict[str, Any], *, cli_id: str) -> QuotaSnapshot | None:
     """Project one CodexBar ``GET /usage`` payload into a :class:`QuotaSnapshot`.
 
     Returns ``None`` when the payload is unusable (missing usage block,
@@ -240,9 +233,7 @@ def map_codexbar_payload(
     )
     source_label = payload.get("source")
     source = (
-        f"codexbar:{source_label}"
-        if isinstance(source_label, str) and source_label
-        else "codexbar"
+        f"codexbar:{source_label}" if isinstance(source_label, str) and source_label else "codexbar"
     )
 
     account_id: str | None = None
@@ -290,11 +281,9 @@ class CodexBarSnapper(Snapper):
     ) -> None:
         super().__init__(cli_id=cli_id)
         self._codexbar_provider_id = _selffork_to_codexbar_id(cli_id)
-        self._base_url = (
-            base_url
-            if base_url is not None
-            else resolve_default_base_url()
-        ).rstrip("/")
+        self._base_url = (base_url if base_url is not None else resolve_default_base_url()).rstrip(
+            "/"
+        )
         self._owned_client = client is None
         self._client = client or httpx.AsyncClient(timeout=timeout_seconds)
         self._timeout = timeout_seconds
@@ -337,8 +326,7 @@ class CodexBarSnapper(Snapper):
                 (
                     p
                     for p in payload
-                    if isinstance(p, dict)
-                    and p.get("provider") == self._codexbar_provider_id
+                    if isinstance(p, dict) and p.get("provider") == self._codexbar_provider_id
                 ),
                 None,
             )

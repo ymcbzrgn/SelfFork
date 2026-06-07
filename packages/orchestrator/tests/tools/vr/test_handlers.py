@@ -104,7 +104,8 @@ async def test_quest_screenshot(ctx_quest, stub_quest_driver) -> None:
 
 async def test_quest_app_launch(ctx_quest, stub_quest_driver) -> None:
     await _quest_app_launch(
-        ctx_quest, QuestAppLaunchArgs(package="com.oculus.firstcontact"),
+        ctx_quest,
+        QuestAppLaunchArgs(package="com.oculus.firstcontact"),
     )
     assert ("app_launch", ("com.oculus.firstcontact",), {}) in stub_quest_driver.calls
 
@@ -185,7 +186,8 @@ async def test_quest_logcat(ctx_quest, stub_quest_driver) -> None:
 
 async def test_quest_record_video(ctx_quest, stub_quest_driver) -> None:
     await _quest_record_video(
-        ctx_quest, QuestRecordVideoArgs(output_path="/tmp/v.mp4", time_limit_sec=10),
+        ctx_quest,
+        QuestRecordVideoArgs(output_path="/tmp/v.mp4", time_limit_sec=10),
     )
     assert any(c[0] == "record_video" for c in stub_quest_driver.calls)
 
@@ -197,7 +199,8 @@ async def test_quest_stop_record_video(ctx_quest, stub_quest_driver) -> None:
 
 async def test_quest_voice_command(ctx_quest, stub_quest_driver) -> None:
     await _quest_voice_command(
-        ctx_quest, QuestVoiceCommandArgs(text="hello quest"),
+        ctx_quest,
+        QuestVoiceCommandArgs(text="hello quest"),
     )
     assert ("voice_command", ("hello quest",), {}) in stub_quest_driver.calls
 
@@ -207,7 +210,8 @@ async def test_quest_voice_command(ctx_quest, stub_quest_driver) -> None:
 
 async def test_visionpro_simulator_list(ctx_visionpro, stub_visionpro_driver) -> None:
     result = await _visionpro_simulator_list(
-        ctx_visionpro, VisionProSimulatorListArgs(),
+        ctx_visionpro,
+        VisionProSimulatorListArgs(),
     )
     assert result["result"]["count"] == 1
 
@@ -215,17 +219,20 @@ async def test_visionpro_simulator_list(ctx_visionpro, stub_visionpro_driver) ->
 async def test_visionpro_simulator_boot(ctx_visionpro, stub_visionpro_driver) -> None:
     udid = "A" * 36
     result = await _visionpro_simulator_boot(
-        ctx_visionpro, VisionProSimulatorBootArgs(udid=udid),
+        ctx_visionpro,
+        VisionProSimulatorBootArgs(udid=udid),
     )
     assert result["result"]["udid"] == udid
 
 
 async def test_visionpro_simulator_shutdown(
-    ctx_visionpro, stub_visionpro_driver,
+    ctx_visionpro,
+    stub_visionpro_driver,
 ) -> None:
     udid = "A" * 36
     await _visionpro_simulator_shutdown(
-        ctx_visionpro, VisionProSimulatorShutdownArgs(udid=udid),
+        ctx_visionpro,
+        VisionProSimulatorShutdownArgs(udid=udid),
     )
     assert ("simulator_shutdown", (udid,), {}) in stub_visionpro_driver.calls
 
@@ -237,7 +244,8 @@ async def test_visionpro_screenshot(ctx_visionpro, stub_visionpro_driver) -> Non
 
 async def test_visionpro_app_launch(ctx_visionpro, stub_visionpro_driver) -> None:
     await _visionpro_app_launch(
-        ctx_visionpro, VisionProAppLaunchArgs(bundle_id="com.test"),
+        ctx_visionpro,
+        VisionProAppLaunchArgs(bundle_id="com.test"),
     )
     assert ("app_launch", ("com.test",), {}) in stub_visionpro_driver.calls
 
@@ -248,11 +256,13 @@ async def test_visionpro_get_logs(ctx_visionpro, stub_visionpro_driver) -> None:
 
 
 async def test_visionpro_find_text_unwired(
-    ctx_visionpro, stub_visionpro_driver,
+    ctx_visionpro,
+    stub_visionpro_driver,
 ) -> None:
     """Without vision_runtime, returns 'unwired' (same as browser_act)."""
     result = await _visionpro_find_text(
-        ctx_visionpro, VisionProFindTextArgs(needle="Hello"),
+        ctx_visionpro,
+        VisionProFindTextArgs(needle="Hello"),
     )
     assert result["result"]["status"] == "unwired"
 
@@ -286,6 +296,7 @@ async def test_visionpro_find_text_with_vision(
 
 async def test_visionpro_click_at(ctx_visionpro, stub_visionpro_driver) -> None:
     await _visionpro_click_at(
-        ctx_visionpro, VisionProClickAtArgs(x=500, y=300),
+        ctx_visionpro,
+        VisionProClickAtArgs(x=500, y=300),
     )
     assert ("click_at", (500, 300), {}) in stub_visionpro_driver.calls

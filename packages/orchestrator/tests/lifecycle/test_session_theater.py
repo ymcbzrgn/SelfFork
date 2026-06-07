@@ -155,9 +155,7 @@ class _FakeCLIAgent(CLIAgent):
         del plan_path, workspace
         return [{"role": "user", "content": prd}]
 
-    def build_command(
-        self, *, message: str, is_first_round: bool
-    ) -> list[str]:
+    def build_command(self, *, message: str, is_first_round: bool) -> list[str]:
         del is_first_round
         return ["run", message]
 
@@ -177,9 +175,7 @@ class _RecordingTheaterProducer:
     async def loop_started(self) -> None:
         self.calls.append(("loop_started", {}))
 
-    async def cli_output(
-        self, text: str, *, kind: CliOutputKind = "stdout"
-    ) -> None:
+    async def cli_output(self, text: str, *, kind: CliOutputKind = "stdout") -> None:
         payload: dict[str, object] = {"text": text, "kind": kind}
         self.calls.append(("cli_output", payload))
 
@@ -204,9 +200,7 @@ def _build_session(
 ) -> Session:
     workspace = Path(sandbox.host_workspace_path)
     workspace.mkdir(parents=True, exist_ok=True)
-    plan_cfg = PlanConfig(
-        backend="filesystem", plan_filename=".selffork/plan.json"
-    )
+    plan_cfg = PlanConfig(backend="filesystem", plan_filename=".selffork/plan.json")
     plan_store = FilesystemPlanStore(plan_cfg, workspace_path=str(workspace))
     audit_cfg = AuditConfig(enabled=True, audit_dir=str(tmp_path / "audit"))
     audit = AuditLogger(audit_cfg, session_id="01HJTESTSESSIONABCDEFGHIJK")

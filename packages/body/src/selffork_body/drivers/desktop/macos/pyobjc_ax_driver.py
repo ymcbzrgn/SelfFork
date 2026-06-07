@@ -120,9 +120,7 @@ class MacOSAxDriver:
             pos_t = (int(position.x), int(position.y))
         if size is not None and hasattr(size, "width"):
             size_t = (int(size.width), int(size.height))
-        return AxElementSummary(
-            role=role, title=title, label=label, position=pos_t, size=size_t
-        )
+        return AxElementSummary(role=role, title=title, label=label, position=pos_t, size=size_t)
 
     def find_by_label(self, root: Any, label: str, *, max_depth: int = 6) -> Any | None:
         """Depth-first walk; return first element whose AXTitle/AXValue matches ``label``.
@@ -146,9 +144,7 @@ class MacOSAxDriver:
                 return element
             if depth >= max_depth:
                 return None
-            result = AXUIElementCopyAttributeValue(
-                element, kAXChildrenAttribute, None
-            )
+            result = AXUIElementCopyAttributeValue(element, kAXChildrenAttribute, None)
             if not isinstance(result, tuple) or len(result) != 2:
                 return None
             first, second = result

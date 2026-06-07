@@ -209,9 +209,7 @@ class ActionExecutor:
         self._body_use = body_use_driver
         self._body_review = body_review_driver
 
-    async def execute(
-        self, decision: ActionDecision, world_state: WorldState
-    ) -> ActionResult:
+    async def execute(self, decision: ActionDecision, world_state: WorldState) -> ActionResult:
         """Dispatch ``decision`` to its matching handler.
 
         The deliberation layer is the only authority on which action
@@ -246,9 +244,7 @@ class ActionExecutor:
 
     # ── handlers with side effects ────────────────────────────────
 
-    async def _operator_ask(
-        self, decision: ActionDecision, state: WorldState
-    ) -> ActionResult:
+    async def _operator_ask(self, decision: ActionDecision, state: WorldState) -> ActionResult:
         if self._telegram is None:
             return ActionResult(
                 action=LegalAction.OPERATOR_ASK,
@@ -291,9 +287,7 @@ class ActionExecutor:
             },
         )
 
-    async def _task_start(
-        self, decision: ActionDecision, state: WorldState
-    ) -> ActionResult:
+    async def _task_start(self, decision: ActionDecision, state: WorldState) -> ActionResult:
         if self._task_starter is None:
             return ActionResult(
                 action=LegalAction.TASK_START,
@@ -333,9 +327,7 @@ class ActionExecutor:
             metadata={"pid": pid, "project_slug": project},
         )
 
-    def _ideate(
-        self, decision: ActionDecision, state: WorldState
-    ) -> ActionResult:
+    def _ideate(self, decision: ActionDecision, state: WorldState) -> ActionResult:
         if self._ideation is None:
             return _ideate_result(decision)
         text = decision.reasoning.strip()
@@ -363,10 +355,7 @@ class ActionExecutor:
         return ActionResult(
             action=LegalAction.IDEATE,
             outcome="executed",
-            summary=(
-                f"recorded {record.size.value} idea {record.idea_id} at "
-                f"{record.path.name}"
-            ),
+            summary=(f"recorded {record.size.value} idea {record.idea_id} at {record.path.name}"),
             metadata={
                 "idea_id": record.idea_id,
                 "title": record.title,
@@ -376,9 +365,7 @@ class ActionExecutor:
             },
         )
 
-    async def _kanban_suggest(
-        self, decision: ActionDecision, state: WorldState
-    ) -> ActionResult:
+    async def _kanban_suggest(self, decision: ActionDecision, state: WorldState) -> ActionResult:
         if self._kanban_creator is None:
             return ActionResult(
                 action=LegalAction.KANBAN_SUGGEST,
@@ -453,9 +440,7 @@ class ActionExecutor:
             metadata=selection.metadata,
         )
 
-    async def _body_use_action(
-        self, decision: ActionDecision, state: WorldState
-    ) -> ActionResult:
+    async def _body_use_action(self, decision: ActionDecision, state: WorldState) -> ActionResult:
         return await self._dispatch_body(
             action=LegalAction.BODY_USE,
             driver=self._body_use,
@@ -546,8 +531,7 @@ def _session_resume_result(decision: ActionDecision) -> ActionResult:
         action=LegalAction.SESSION_RESUME,
         outcome="deferred",
         summary=(
-            decision.reasoning.strip()
-            or "session resume — wired by Faz E (resume store dispatch)"
+            decision.reasoning.strip() or "session resume — wired by Faz E (resume store dispatch)"
         ),
     )
 
@@ -556,8 +540,5 @@ def _ideate_result(decision: ActionDecision) -> ActionResult:
     return ActionResult(
         action=LegalAction.IDEATE,
         outcome="deferred",
-        summary=(
-            decision.reasoning.strip()
-            or "ideate deferred to Faz F (Yaratma mode)"
-        ),
+        summary=(decision.reasoning.strip() or "ideate deferred to Faz F (Yaratma mode)"),
     )

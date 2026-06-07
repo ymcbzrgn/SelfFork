@@ -82,7 +82,8 @@ async def test_desktop_screenshot(ctx_macos, stub_macos_driver) -> None:
 
 async def test_desktop_screenshot_region(ctx_macos, stub_macos_driver) -> None:
     result = await _desktop_screenshot_region(
-        ctx_macos, DesktopScreenshotRegionArgs(x=0, y=0, width=100, height=100),
+        ctx_macos,
+        DesktopScreenshotRegionArgs(x=0, y=0, width=100, height=100),
     )
     assert result["result"]["bytes_size"] > 0
 
@@ -99,14 +100,16 @@ async def test_desktop_list_apps(ctx_macos, stub_macos_driver) -> None:
 
 async def test_desktop_list_windows(ctx_macos, stub_macos_driver) -> None:
     result = await _desktop_list_windows(
-        ctx_macos, DesktopListWindowsArgs(app_name="Terminal"),
+        ctx_macos,
+        DesktopListWindowsArgs(app_name="Terminal"),
     )
     assert result["result"]["count"] == 1
 
 
 async def test_desktop_focus_window(ctx_macos, stub_macos_driver) -> None:
     await _desktop_focus_window(
-        ctx_macos, DesktopFocusWindowArgs(app_name="Terminal", window_title="bash"),
+        ctx_macos,
+        DesktopFocusWindowArgs(app_name="Terminal", window_title="bash"),
     )
     assert any(c[0] == "focus_window" for c in stub_macos_driver.calls)
 
@@ -123,7 +126,8 @@ async def test_desktop_set_clipboard(ctx_macos, stub_macos_driver) -> None:
 
 async def test_desktop_notification(ctx_macos, stub_macos_driver) -> None:
     await _desktop_notification(
-        ctx_macos, DesktopNotificationArgs(title="T", body="B"),
+        ctx_macos,
+        DesktopNotificationArgs(title="T", body="B"),
     )
     assert ("notification", ("T", "B", None), {}) in stub_macos_driver.calls
 

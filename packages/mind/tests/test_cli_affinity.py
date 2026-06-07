@@ -233,16 +233,12 @@ class TestInMemoryStore:
 
 class TestDuckDBStore:
     async def test_require_open_before_setup(self, tmp_path: Path) -> None:
-        store = DuckDBCliAffinityStore(
-            group_id="p:demo", db_path=tmp_path / "a.duckdb"
-        )
+        store = DuckDBCliAffinityStore(group_id="p:demo", db_path=tmp_path / "a.duckdb")
         with pytest.raises(RuntimeError, match="not open"):
             await store.get(task_type="t", cli="c", model="m")
 
     async def test_record_get_aggregates(self, tmp_path: Path) -> None:
-        store = DuckDBCliAffinityStore(
-            group_id="g:global", db_path=tmp_path / "aff.duckdb"
-        )
+        store = DuckDBCliAffinityStore(group_id="g:global", db_path=tmp_path / "aff.duckdb")
         await store.setup()
         try:
             await store.record(
@@ -275,9 +271,7 @@ class TestDuckDBStore:
             await store.teardown()
 
     async def test_none_task_sentinel(self, tmp_path: Path) -> None:
-        store = DuckDBCliAffinityStore(
-            group_id="p:demo", db_path=tmp_path / "aff.duckdb"
-        )
+        store = DuckDBCliAffinityStore(group_id="p:demo", db_path=tmp_path / "aff.duckdb")
         await store.setup()
         try:
             await store.record(
@@ -323,9 +317,7 @@ class TestDuckDBStore:
 def _resolver(
     *, with_project: bool = True, config: AffinityConfig | None = None
 ) -> CliAffinityResolver:
-    project = (
-        InMemoryCliAffinityStore(group_id="p:demo") if with_project else None
-    )
+    project = InMemoryCliAffinityStore(group_id="p:demo") if with_project else None
     return CliAffinityResolver(
         project_store=project,
         global_store=InMemoryCliAffinityStore(group_id="g:global"),
@@ -336,9 +328,7 @@ def _resolver(
 class TestResolver:
     async def test_cold_start_scores_prior(self) -> None:
         res = _resolver()
-        score = await res.score(
-            task_type="refactor", cli="claude-code", model="opus"
-        )
+        score = await res.score(task_type="refactor", cli="claude-code", model="opus")
         assert score.score == pytest.approx(0.5)
         assert score.match_level == "prior"
         assert score.model == "opus"
@@ -349,12 +339,8 @@ class TestResolver:
             task_type="t", cli="codex", model="gpt-5.5", succeeded=True, turns=2
         )
         assert res.project_store is not None
-        proj = await res.project_store.get(
-            task_type="t", cli="codex", model="gpt-5.5"
-        )
-        glob = await res.global_store.get(
-            task_type="t", cli="codex", model="gpt-5.5"
-        )
+        proj = await res.project_store.get(task_type="t", cli="codex", model="gpt-5.5")
+        glob = await res.global_store.get(task_type="t", cli="codex", model="gpt-5.5")
         assert proj is not None and proj.success == pytest.approx(1.0)
         assert glob is not None and glob.success == pytest.approx(1.0)
 
@@ -368,9 +354,7 @@ class TestResolver:
                 succeeded=True,
                 turns=4,
             )
-        score = await res.score(
-            task_type="refactor", cli="claude-code", model="opus"
-        )
+        score = await res.score(task_type="refactor", cli="claude-code", model="opus")
         assert score.match_level == "project_leaf"
         assert score.score > 0.7
         assert score.avg_turns == pytest.approx(4.0, abs=0.01)
@@ -385,9 +369,7 @@ class TestResolver:
                 succeeded=True,
                 turns=3,
             )
-        score = await res.score(
-            task_type="test", cli="codex", model="gpt-5.5"
-        )
+        score = await res.score(task_type="test", cli="codex", model="gpt-5.5")
         assert score.match_level == "global_task"
         assert score.score > 0.5
 
@@ -402,9 +384,7 @@ class TestResolver:
                 turns=2,
             )
         # unseen task, but the (cli, model) pair has history
-        score = await res.score(
-            task_type="brand-new-task", cli="codex", model="gpt-5.5"
-        )
+        score = await res.score(task_type="brand-new-task", cli="codex", model="gpt-5.5")
         assert score.match_level == "global_cli_model"
         assert score.score > 0.5
 
@@ -419,9 +399,7 @@ class TestResolver:
                 turns=2,
             )
         # a brand-new model under the known-good codex CLI inherits its prior
-        score = await res.score(
-            task_type="t", cli="codex", model="gpt-9-unreleased"
-        )
+        score = await res.score(task_type="t", cli="codex", model="gpt-9-unreleased")
         assert score.match_level == "global_cli"
         assert score.score > 0.5
 
@@ -474,9 +452,7 @@ class TestFactory:
         assert glob == tmp_path / "global" / "mind" / "cli_affinity.duckdb"
 
     async def test_build_record_score_roundtrip(self, tmp_path: Path) -> None:
-        res = build_duckdb_affinity_resolver(
-            project_slug="demo", home=tmp_path
-        )
+        res = build_duckdb_affinity_resolver(project_slug="demo", home=tmp_path)
         await res.setup()
         try:
             assert res.project_store is not None
@@ -490,9 +466,7 @@ class TestFactory:
                     succeeded=True,
                     turns=3,
                 )
-            score = await res.score(
-                task_type="build", cli="claude-code", model="opus"
-            )
+            score = await res.score(task_type="build", cli="claude-code", model="opus")
             assert score.match_level == "project_leaf"
             assert score.score > 0.6
         finally:

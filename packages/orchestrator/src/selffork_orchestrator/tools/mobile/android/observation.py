@@ -33,7 +33,8 @@ class AndroidScreenTextArgs(ToolArgs):
 
 
 async def _android_screenshot(
-    ctx: ToolContext, args: AndroidScreenshotArgs,
+    ctx: ToolContext,
+    args: AndroidScreenshotArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
 
@@ -67,7 +68,8 @@ async def _android_screenshot(
 
 
 async def _android_ax_tree(
-    ctx: ToolContext, args: AndroidAxTreeArgs,
+    ctx: ToolContext,
+    args: AndroidAxTreeArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
 
@@ -86,7 +88,8 @@ async def _android_ax_tree(
 
 
 async def _android_screen_text(
-    ctx: ToolContext, args: AndroidScreenTextArgs,
+    ctx: ToolContext,
+    args: AndroidScreenTextArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
 
@@ -112,8 +115,7 @@ def build_android_observation_tools() -> list[ToolSpec[Any]]:
         ToolSpec(
             name="android_screenshot",
             description=(
-                "Capture Android screenshot as PNG bytes; persisted to "
-                "ScreenshotStore when wired."
+                "Capture Android screenshot as PNG bytes; persisted to ScreenshotStore when wired."
             ),
             args_model=AndroidScreenshotArgs,
             handler=_android_screenshot,

@@ -104,11 +104,17 @@ class IosSimulatorRuntime:
             tmp.close()
             output_path = Path(tmp.name)
         try:
-            await _run([
-                "xcrun", "simctl", "io", target, "screenshot",
-                "--type=png",
-                str(output_path),
-            ])
+            await _run(
+                [
+                    "xcrun",
+                    "simctl",
+                    "io",
+                    target,
+                    "screenshot",
+                    "--type=png",
+                    str(output_path),
+                ]
+            )
             return output_path.read_bytes()
         finally:
             with contextlib.suppress(FileNotFoundError):
@@ -147,12 +153,14 @@ class IosSimulatorRuntime:
         out: list[dict[str, str]] = []
         for runtime, items in data.get("devices", {}).items():
             for entry in items:
-                out.append({
-                    "name": entry.get("name", ""),
-                    "udid": entry.get("udid", ""),
-                    "state": entry.get("state", ""),
-                    "runtime": runtime,
-                })
+                out.append(
+                    {
+                        "name": entry.get("name", ""),
+                        "udid": entry.get("udid", ""),
+                        "state": entry.get("state", ""),
+                        "runtime": runtime,
+                    }
+                )
         return out
 
     async def boot_specific(self, udid: str) -> str:
@@ -189,7 +197,10 @@ class IosSimulatorRuntime:
     async def set_clipboard(self, text: str, udid: str | None = None) -> None:
         target = udid or self._booted_id or "booted"
         proc = await asyncio.create_subprocess_exec(
-            "xcrun", "simctl", "pbcopy", target,
+            "xcrun",
+            "simctl",
+            "pbcopy",
+            target,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -206,13 +217,22 @@ class IosSimulatorRuntime:
         return stdout.decode(errors="replace")
 
     async def set_geolocation(
-        self, latitude: float, longitude: float, udid: str | None = None,
+        self,
+        latitude: float,
+        longitude: float,
+        udid: str | None = None,
     ) -> None:
         target = udid or self._booted_id or "booted"
-        await _run([
-            "xcrun", "simctl", "location", target, "set",
-            f"{latitude},{longitude}",
-        ])
+        await _run(
+            [
+                "xcrun",
+                "simctl",
+                "location",
+                target,
+                "set",
+                f"{latitude},{longitude}",
+            ]
+        )
 
     async def clear_geolocation(self, udid: str | None = None) -> None:
         target = udid or self._booted_id or "booted"
@@ -239,7 +259,9 @@ class IosSimulatorRuntime:
         await _run(cmd)
 
     async def set_appearance(
-        self, appearance: str, udid: str | None = None,
+        self,
+        appearance: str,
+        udid: str | None = None,
     ) -> None:
         if appearance not in ("light", "dark"):
             raise IosSimulatorError(
@@ -248,11 +270,20 @@ class IosSimulatorRuntime:
         target = udid or self._booted_id or "booted"
         await _run(["xcrun", "simctl", "ui", target, "appearance", appearance])
 
-    async def push_notification(self, payload_path: Path, bundle_id: str, udid: str | None = None) -> None:
+    async def push_notification(
+        self, payload_path: Path, bundle_id: str, udid: str | None = None
+    ) -> None:
         target = udid or self._booted_id or "booted"
-        await _run([
-            "xcrun", "simctl", "push", target, bundle_id, str(payload_path),
-        ])
+        await _run(
+            [
+                "xcrun",
+                "simctl",
+                "push",
+                target,
+                bundle_id,
+                str(payload_path),
+            ]
+        )
 
     async def get_logs(
         self,
@@ -276,7 +307,12 @@ class IosSimulatorRuntime:
         target = self._booted_id or "booted"
         # ``simctl io ... recordVideo`` runs until SIGINT; spawn in background.
         proc = await asyncio.create_subprocess_exec(
-            "xcrun", "simctl", "io", target, "recordVideo", str(output_path),
+            "xcrun",
+            "simctl",
+            "io",
+            target,
+            "recordVideo",
+            str(output_path),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

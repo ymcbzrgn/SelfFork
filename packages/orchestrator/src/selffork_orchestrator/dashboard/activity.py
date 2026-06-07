@@ -458,10 +458,7 @@ def _rows_from_activity_log(path: Path) -> list[ActivityRow]:
         kind = _CATEGORY_TO_KIND.get(ev.category)
         if kind is None:
             continue
-        slug = (
-            _str_or_none(ev.payload.get("project_slug"))
-            or ev.correlation_id
-        )
+        slug = _str_or_none(ev.payload.get("project_slug")) or ev.correlation_id
         out.append(
             _make_row(
                 ts=ev.ts,

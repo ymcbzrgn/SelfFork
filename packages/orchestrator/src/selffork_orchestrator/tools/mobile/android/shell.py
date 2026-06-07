@@ -125,7 +125,8 @@ async def _android_logcat(ctx: ToolContext, args: AndroidLogcatArgs) -> dict[str
 
 
 async def _android_dumpsys(
-    ctx: ToolContext, args: AndroidDumpsysArgs,
+    ctx: ToolContext,
+    args: AndroidDumpsysArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
 
@@ -143,7 +144,8 @@ async def _android_dumpsys(
 
 
 async def _android_screenrecord_start(
-    ctx: ToolContext, args: AndroidScreenrecordStartArgs,
+    ctx: ToolContext,
+    args: AndroidScreenrecordStartArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
     return await _invoke_mobile(
@@ -156,7 +158,8 @@ async def _android_screenrecord_start(
 
 
 async def _android_screenrecord_stop(
-    ctx: ToolContext, args: AndroidScreenrecordStopArgs,
+    ctx: ToolContext,
+    args: AndroidScreenrecordStopArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
 
@@ -174,7 +177,8 @@ async def _android_screenrecord_stop(
 
 
 async def _android_install_xapk(
-    ctx: ToolContext, args: AndroidInstallXapkArgs,
+    ctx: ToolContext,
+    args: AndroidInstallXapkArgs,
 ) -> dict[str, Any]:
     """Install a split-APK bundle (XAPK directory)."""
     drv = _require_android_driver(ctx)
@@ -222,8 +226,7 @@ def build_android_shell_tools() -> list[ToolSpec[Any]]:
         ToolSpec(
             name="android_logcat",
             description=(
-                "Read recent logcat output with optional tag filter; "
-                "set clear=true to flush first."
+                "Read recent logcat output with optional tag filter; set clear=true to flush first."
             ),
             args_model=AndroidLogcatArgs,
             handler=_android_logcat,

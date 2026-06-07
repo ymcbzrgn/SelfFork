@@ -197,9 +197,7 @@ class PendingConfirmationStore:
         with self._lock:
             return self._items.get(confirmation_id)
 
-    def list_pending(
-        self, *, workspace_slug: str | None = None
-    ) -> list[PendingConfirmation]:
+    def list_pending(self, *, workspace_slug: str | None = None) -> list[PendingConfirmation]:
         """All pending entries; optionally filtered by workspace."""
         now = _utc_now()
         with self._lock:

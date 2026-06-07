@@ -34,9 +34,7 @@ class TestConversation:
     @pytest.mark.anyio
     async def test_create_round_trip(self, tmp_path: Path) -> None:
         async with _store(tmp_path / "t.db") as s:
-            c = await s.create_conversation(
-                workspace_slug="proj-x", title="login flow"
-            )
+            c = await s.create_conversation(workspace_slug="proj-x", title="login flow")
             assert c.workspace_slug == "proj-x"
             assert c.title == "login flow"
             assert c.created_at == c.last_message_at
@@ -51,9 +49,7 @@ class TestConversation:
         tmp_path: Path,
     ) -> None:
         async with _store(tmp_path / "t.db") as s:
-            c = await s.create_conversation(
-                workspace_slug=None, title="general"
-            )
+            c = await s.create_conversation(workspace_slug=None, title="general")
             assert c.workspace_slug is None
 
     @pytest.mark.anyio
@@ -73,16 +69,10 @@ class TestConversation:
         tmp_path: Path,
     ) -> None:
         async with _store(tmp_path / "t.db") as s:
-            first = await s.create_conversation(
-                workspace_slug=None, title="first"
-            )
-            second = await s.create_conversation(
-                workspace_slug=None, title="second"
-            )
+            first = await s.create_conversation(workspace_slug=None, title="first")
+            second = await s.create_conversation(workspace_slug=None, title="second")
             # Appending to `first` makes it the most-recently-active.
-            await s.append_message(
-                conversation_id=first.id, role="operator", content="ping"
-            )
+            await s.append_message(conversation_id=first.id, role="operator", content="ping")
             listed = await s.list_conversations()
             assert listed[0].id == first.id
             assert {c.id for c in listed} == {first.id, second.id}
@@ -96,9 +86,7 @@ class TestMessage:
     async def test_append_round_trip(self, tmp_path: Path) -> None:
         async with _store(tmp_path / "t.db") as s:
             c = await s.create_conversation(workspace_slug=None, title="c")
-            m = await s.append_message(
-                conversation_id=c.id, role="operator", content="hello"
-            )
+            m = await s.append_message(conversation_id=c.id, role="operator", content="hello")
             assert m.seq == 1
             assert m.role == "operator"
             assert m.content == "hello"
@@ -110,15 +98,9 @@ class TestMessage:
     ) -> None:
         async with _store(tmp_path / "t.db") as s:
             c = await s.create_conversation(workspace_slug=None, title="c")
-            m1 = await s.append_message(
-                conversation_id=c.id, role="operator", content="m1"
-            )
-            m2 = await s.append_message(
-                conversation_id=c.id, role="self_jr", content="m2"
-            )
-            m3 = await s.append_message(
-                conversation_id=c.id, role="operator", content="m3"
-            )
+            m1 = await s.append_message(conversation_id=c.id, role="operator", content="m1")
+            m2 = await s.append_message(conversation_id=c.id, role="self_jr", content="m2")
+            m3 = await s.append_message(conversation_id=c.id, role="operator", content="m3")
             assert [m1.seq, m2.seq, m3.seq] == [1, 2, 3]
 
     @pytest.mark.anyio
@@ -129,12 +111,8 @@ class TestMessage:
         async with _store(tmp_path / "t.db") as s:
             a = await s.create_conversation(workspace_slug=None, title="a")
             b = await s.create_conversation(workspace_slug=None, title="b")
-            await s.append_message(
-                conversation_id=a.id, role="operator", content="a1"
-            )
-            b1 = await s.append_message(
-                conversation_id=b.id, role="operator", content="b1"
-            )
+            await s.append_message(conversation_id=a.id, role="operator", content="a1")
+            b1 = await s.append_message(conversation_id=b.id, role="operator", content="b1")
             assert b1.seq == 1
 
     @pytest.mark.anyio
@@ -144,9 +122,7 @@ class TestMessage:
     ) -> None:
         async with _store(tmp_path / "t.db") as s:
             c = await s.create_conversation(workspace_slug=None, title="c")
-            m = await s.append_message(
-                conversation_id=c.id, role="operator", content="hi"
-            )
+            m = await s.append_message(conversation_id=c.id, role="operator", content="hi")
             updated = await s.get_conversation(c.id)
             assert updated is not None
             assert updated.last_message_at == m.created_at
@@ -158,12 +134,8 @@ class TestMessage:
     ) -> None:
         async with _store(tmp_path / "t.db") as s:
             c = await s.create_conversation(workspace_slug=None, title="c")
-            await s.append_message(
-                conversation_id=c.id, role="operator", content="m1"
-            )
-            await s.append_message(
-                conversation_id=c.id, role="self_jr", content="m2"
-            )
+            await s.append_message(conversation_id=c.id, role="operator", content="m1")
+            await s.append_message(conversation_id=c.id, role="self_jr", content="m2")
             msgs = await s.list_messages(c.id)
             assert [m.content for m in msgs] == ["m1", "m2"]
 
@@ -171,12 +143,8 @@ class TestMessage:
     async def test_list_messages_after_seq(self, tmp_path: Path) -> None:
         async with _store(tmp_path / "t.db") as s:
             c = await s.create_conversation(workspace_slug=None, title="c")
-            await s.append_message(
-                conversation_id=c.id, role="operator", content="m1"
-            )
-            await s.append_message(
-                conversation_id=c.id, role="self_jr", content="m2"
-            )
+            await s.append_message(conversation_id=c.id, role="operator", content="m1")
+            await s.append_message(conversation_id=c.id, role="self_jr", content="m2")
             delta = await s.list_messages_after(c.id, after_seq=1)
             assert [m.content for m in delta] == ["m2"]
 
@@ -185,9 +153,7 @@ class TestMessage:
         async with _store(tmp_path / "t.db") as s:
             c = await s.create_conversation(workspace_slug=None, title="c")
             with pytest.raises(ConfigError):
-                await s.append_message(
-                    conversation_id=c.id, role="operator", content="   "
-                )
+                await s.append_message(conversation_id=c.id, role="operator", content="   ")
 
     @pytest.mark.anyio
     async def test_invalid_role_rejected(self, tmp_path: Path) -> None:
@@ -223,9 +189,7 @@ class TestPersistence:
         db = tmp_path / "t.db"
         async with _store(db) as s:
             c = await s.create_conversation(workspace_slug=None, title="c")
-            await s.append_message(
-                conversation_id=c.id, role="operator", content="persist me"
-            )
+            await s.append_message(conversation_id=c.id, role="operator", content="persist me")
         # Fresh store, same file — history must survive the restart.
         async with _store(db) as s:
             msgs = await s.list_messages(c.id)

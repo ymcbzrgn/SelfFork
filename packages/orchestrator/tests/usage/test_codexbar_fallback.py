@@ -51,18 +51,14 @@ def _make_snapshot(
     )
 
 
-def _write_primary_snapshot(
-    state_dir: Path, snapshot: QuotaSnapshot
-) -> None:
+def _write_primary_snapshot(state_dir: Path, snapshot: QuotaSnapshot) -> None:
     state_dir.mkdir(parents=True, exist_ok=True)
     path = state_dir / f"{snapshot.cli_id}.json"
     path.write_text(snapshot.model_dump_json())
 
 
 def _build_primary(state_dir: Path) -> ProactiveUsageReader:
-    return ProactiveUsageReader(
-        config=ProactiveUsageReaderConfig(state_dir=state_dir)
-    )
+    return ProactiveUsageReader(config=ProactiveUsageReaderConfig(state_dir=state_dir))
 
 
 def _codexbar_handler(
@@ -153,9 +149,7 @@ async def test_returns_none_when_both_sources_empty(
 
     reader = CodexBarFallbackReader(
         primary=primary,
-        snapper_factory=_build_codexbar_factory(
-            httpx.MockTransport(transport)
-        ),
+        snapper_factory=_build_codexbar_factory(httpx.MockTransport(transport)),
     )
     assert await reader.read("claude-code") is None
 
@@ -234,9 +228,7 @@ async def test_read_all_union_of_sources(tmp_path: Path) -> None:
 
 def test_builder_disables_when_url_missing(tmp_path: Path) -> None:
     primary = _build_primary(tmp_path)
-    reader = build_codexbar_fallback_reader(
-        primary=primary, codexbar_base_url=None
-    )
+    reader = build_codexbar_fallback_reader(primary=primary, codexbar_base_url=None)
     assert reader.primary is primary
     assert reader._snapper_factory is None  # type: ignore[attr-defined]
 

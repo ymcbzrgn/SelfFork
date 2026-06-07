@@ -62,9 +62,7 @@ class CLIAgent(ABC):
         cap = capability_for(self._config.agent)
         if cap is None:
             return []
-        return cap.model_args(
-            model=self._config.model, effort=self._config.effort
-        )
+        return cap.model_args(model=self._config.model, effort=self._config.effort)
 
     def prepare_workspace(self, workspace: str) -> None:  # noqa: B027
         """Hook: prepare the host workspace before the round loop begins.

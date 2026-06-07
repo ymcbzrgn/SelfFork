@@ -1,4 +1,5 @@
 """Tests for :class:`SnapperRunner` lifecycle."""
+
 from __future__ import annotations
 
 import json
@@ -156,9 +157,7 @@ def test_build_default_snapper_runner_constructs_full_fleet(
 ) -> None:
     """Default invocation builds a runner wired with every registered snapper."""
     monkeypatch.delenv("SELFFORK_SNAPPER_RUNNER_ENABLED", raising=False)
-    monkeypatch.delenv(
-        "SELFFORK_SNAPPER_RUNNER_DEFAULT_INTERVAL_SECONDS", raising=False
-    )
+    monkeypatch.delenv("SELFFORK_SNAPPER_RUNNER_DEFAULT_INTERVAL_SECONDS", raising=False)
     monkeypatch.delenv("SELFFORK_SNAPPER_RUNNER_STATE_DIR", raising=False)
     runner = build_default_snapper_runner()
     assert runner is not None
@@ -174,9 +173,7 @@ def test_build_default_snapper_runner_constructs_full_fleet(
     }
     # Default cadence is the dashboard sidecar constant (slower than the
     # per-session 1 Hz default — see DEFAULT_SIDECAR_INTERVAL_SECONDS).
-    assert (
-        runner.config.default_interval_seconds == DEFAULT_SIDECAR_INTERVAL_SECONDS
-    )
+    assert runner.config.default_interval_seconds == DEFAULT_SIDECAR_INTERVAL_SECONDS
     # No state_dir override → consumers (proactive reader) fall back to
     # base.default_state_dir().
     assert runner.config.state_dir is None
@@ -200,9 +197,7 @@ def test_build_default_snapper_runner_honors_interval_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("SELFFORK_SNAPPER_RUNNER_ENABLED", raising=False)
-    monkeypatch.setenv(
-        "SELFFORK_SNAPPER_RUNNER_DEFAULT_INTERVAL_SECONDS", "2.5"
-    )
+    monkeypatch.setenv("SELFFORK_SNAPPER_RUNNER_DEFAULT_INTERVAL_SECONDS", "2.5")
     runner = build_default_snapper_runner()
     assert runner is not None
     assert runner.config.default_interval_seconds == 2.5
@@ -212,14 +207,10 @@ def test_build_default_snapper_runner_falls_back_on_invalid_interval(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("SELFFORK_SNAPPER_RUNNER_ENABLED", raising=False)
-    monkeypatch.setenv(
-        "SELFFORK_SNAPPER_RUNNER_DEFAULT_INTERVAL_SECONDS", "not-a-number"
-    )
+    monkeypatch.setenv("SELFFORK_SNAPPER_RUNNER_DEFAULT_INTERVAL_SECONDS", "not-a-number")
     runner = build_default_snapper_runner()
     assert runner is not None
-    assert (
-        runner.config.default_interval_seconds == DEFAULT_SIDECAR_INTERVAL_SECONDS
-    )
+    assert runner.config.default_interval_seconds == DEFAULT_SIDECAR_INTERVAL_SECONDS
 
 
 def test_build_default_snapper_runner_clamps_low_interval(
@@ -227,9 +218,7 @@ def test_build_default_snapper_runner_clamps_low_interval(
 ) -> None:
     """Interval is clamped to >= 0.25s to keep the fleet kind to disk + CPU."""
     monkeypatch.delenv("SELFFORK_SNAPPER_RUNNER_ENABLED", raising=False)
-    monkeypatch.setenv(
-        "SELFFORK_SNAPPER_RUNNER_DEFAULT_INTERVAL_SECONDS", "0.05"
-    )
+    monkeypatch.setenv("SELFFORK_SNAPPER_RUNNER_DEFAULT_INTERVAL_SECONDS", "0.05")
     runner = build_default_snapper_runner()
     assert runner is not None
     assert runner.config.default_interval_seconds == 0.25

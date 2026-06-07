@@ -21,6 +21,7 @@ Telemetry OFF (Yamaç's current setup as of 2026-05-09): snapshot returns
 ``None`` until the user adds ``telemetry.target=local``. The audit-log
 derivation layer (``project_provider_usage_source``) acts as the fallback.
 """
+
 from __future__ import annotations
 
 import json
@@ -61,13 +62,9 @@ class GeminiSnapper(Snapper):
         context_window: int = _DEFAULT_GEMINI_CONTEXT_WINDOW,
     ) -> None:
         super().__init__(cli_id="gemini-cli")
-        self._gemini_home = (
-            gemini_home if gemini_home is not None else _DEFAULT_GEMINI_DIR
-        )
+        self._gemini_home = gemini_home if gemini_home is not None else _DEFAULT_GEMINI_DIR
         self._telemetry_path = (
-            telemetry_path
-            if telemetry_path is not None
-            else self._gemini_home / "telemetry.log"
+            telemetry_path if telemetry_path is not None else self._gemini_home / "telemetry.log"
         )
         self._max_tail_bytes = max(max_tail_bytes, 1024)
         self._context_window = max(context_window, 1)
@@ -118,12 +115,7 @@ class GeminiSnapper(Snapper):
             attrs = obj.get("attributes")
             if not isinstance(attrs, dict):
                 continue
-            event_marker = (
-                obj.get("body")
-                or attrs.get("event.name")
-                or obj.get("name")
-                or ""
-            )
+            event_marker = obj.get("body") or attrs.get("event.name") or obj.get("name") or ""
             if not isinstance(event_marker, str) or "api_response" not in event_marker:
                 continue
             total = attrs.get("total_token_count")

@@ -214,7 +214,8 @@ async def test_browser_type_clear_first(ctx_browser, stub_browser_driver) -> Non
 
 async def test_browser_fill_form(ctx_browser, stub_browser_driver) -> None:
     result = await _browser_fill_form(
-        ctx_browser, BrowserFillFormArgs(fields={"#a": "1", "#b": "2"}),
+        ctx_browser,
+        BrowserFillFormArgs(fields={"#a": "1", "#b": "2"}),
     )
     assert result["result"]["filled"] == 2
 
@@ -231,7 +232,8 @@ async def test_browser_press_key(ctx_browser, stub_browser_driver) -> None:
 
 async def test_browser_select_option(ctx_browser, stub_browser_driver) -> None:
     result = await _browser_select_option(
-        ctx_browser, BrowserSelectOptionArgs(target="#s", value="x"),
+        ctx_browser,
+        BrowserSelectOptionArgs(target="#s", value="x"),
     )
     assert result["result"]["selected"] == ["x"]
 
@@ -248,7 +250,8 @@ async def test_browser_uncheck(ctx_browser, stub_browser_driver) -> None:
 
 async def test_browser_drag_and_drop(ctx_browser, stub_browser_driver) -> None:
     await _browser_drag_and_drop(
-        ctx_browser, BrowserDragAndDropArgs(source="#a", target="#b"),
+        ctx_browser,
+        BrowserDragAndDropArgs(source="#a", target="#b"),
     )
     assert ("drag_and_drop", ("#a", "#b"), {}) in stub_browser_driver.calls
 
@@ -301,14 +304,16 @@ async def test_browser_set_viewport(ctx_browser, stub_browser_driver) -> None:
 
 async def test_browser_wait_for_load_state(ctx_browser, stub_browser_driver) -> None:
     await _browser_wait_for_load_state(
-        ctx_browser, BrowserWaitForLoadStateArgs(state="networkidle"),
+        ctx_browser,
+        BrowserWaitForLoadStateArgs(state="networkidle"),
     )
     assert any(c[0] == "wait_for_load_state" for c in stub_browser_driver.calls)
 
 
 async def test_browser_wait_for_url(ctx_browser, stub_browser_driver) -> None:
     await _browser_wait_for_url(
-        ctx_browser, BrowserWaitForUrlArgs(url_pattern="https://x*"),
+        ctx_browser,
+        BrowserWaitForUrlArgs(url_pattern="https://x*"),
     )
     assert any(c[0] == "wait_for_url" for c in stub_browser_driver.calls)
 
@@ -328,35 +333,40 @@ async def test_browser_dom_snapshot(ctx_browser, stub_browser_driver) -> None:
 
 async def test_browser_text_content(ctx_browser, stub_browser_driver) -> None:
     result = await _browser_text_content(
-        ctx_browser, BrowserTextContentArgs(target="#x"),
+        ctx_browser,
+        BrowserTextContentArgs(target="#x"),
     )
     assert result["result"]["text"] == "Hello"
 
 
 async def test_browser_get_attribute(ctx_browser, stub_browser_driver) -> None:
     result = await _browser_get_attribute(
-        ctx_browser, BrowserGetAttributeArgs(target="#x", name="href"),
+        ctx_browser,
+        BrowserGetAttributeArgs(target="#x", name="href"),
     )
     assert result["result"]["value"] == "attr_value"
 
 
 async def test_browser_evaluate(ctx_browser, stub_browser_driver) -> None:
     result = await _browser_evaluate(
-        ctx_browser, BrowserEvaluateArgs(js_code="1+1"),
+        ctx_browser,
+        BrowserEvaluateArgs(js_code="1+1"),
     )
     assert "result" in result["result"]
 
 
 async def test_browser_query_selector(ctx_browser, stub_browser_driver) -> None:
     result = await _browser_query_selector(
-        ctx_browser, BrowserQuerySelectorArgs(target="#x"),
+        ctx_browser,
+        BrowserQuerySelectorArgs(target="#x"),
     )
     assert result["result"]["found"] is True
 
 
 async def test_browser_query_selector_all(ctx_browser, stub_browser_driver) -> None:
     result = await _browser_query_selector_all(
-        ctx_browser, BrowserQuerySelectorAllArgs(target="div"),
+        ctx_browser,
+        BrowserQuerySelectorAllArgs(target="div"),
     )
     assert result["result"]["count"] == 1
 
@@ -368,7 +378,8 @@ async def test_browser_get_pdf(ctx_browser, stub_browser_driver) -> None:
 
 async def test_browser_screenshot_element(ctx_browser, stub_browser_driver) -> None:
     result = await _browser_screenshot_element(
-        ctx_browser, BrowserScreenshotElementArgs(target="#x"),
+        ctx_browser,
+        BrowserScreenshotElementArgs(target="#x"),
     )
     assert result["result"]["bytes_size"] > 0
 
@@ -380,7 +391,8 @@ async def test_browser_get_html(ctx_browser, stub_browser_driver) -> None:
 
 async def test_browser_get_console_logs(ctx_browser, stub_browser_driver) -> None:
     result = await _browser_get_console_logs(
-        ctx_browser, BrowserGetConsoleLogsArgs(),
+        ctx_browser,
+        BrowserGetConsoleLogsArgs(),
     )
     assert result["result"]["count"] == 1
 
@@ -428,7 +440,8 @@ async def test_browser_cookies_get(ctx_browser, stub_browser_driver) -> None:
 
 async def test_browser_cookies_set(ctx_browser, stub_browser_driver) -> None:
     await _browser_cookies_set(
-        ctx_browser, BrowserCookiesSetArgs(cookies=[{"name": "x", "value": "1"}]),
+        ctx_browser,
+        BrowserCookiesSetArgs(cookies=[{"name": "x", "value": "1"}]),
     )
     assert any(c[0] == "cookies_set" for c in stub_browser_driver.calls)
 
@@ -440,21 +453,24 @@ async def test_browser_cookies_clear(ctx_browser, stub_browser_driver) -> None:
 
 async def test_browser_local_storage_get(ctx_browser, stub_browser_driver) -> None:
     result = await _browser_local_storage_get(
-        ctx_browser, BrowserLocalStorageGetArgs(key="x"),
+        ctx_browser,
+        BrowserLocalStorageGetArgs(key="x"),
     )
     assert result["result"]["value"] == "stored"
 
 
 async def test_browser_local_storage_set(ctx_browser, stub_browser_driver) -> None:
     await _browser_local_storage_set(
-        ctx_browser, BrowserLocalStorageSetArgs(key="x", value="v"),
+        ctx_browser,
+        BrowserLocalStorageSetArgs(key="x", value="v"),
     )
     assert any(c[0] == "local_storage_set" for c in stub_browser_driver.calls)
 
 
 async def test_browser_local_storage_clear(ctx_browser, stub_browser_driver) -> None:
     await _browser_local_storage_clear(
-        ctx_browser, BrowserLocalStorageClearArgs(),
+        ctx_browser,
+        BrowserLocalStorageClearArgs(),
     )
     assert ("local_storage_clear", (), {}) in stub_browser_driver.calls
 
@@ -464,14 +480,16 @@ async def test_browser_local_storage_clear(ctx_browser, stub_browser_driver) -> 
 
 async def test_browser_set_user_agent(ctx_browser, stub_browser_driver) -> None:
     await _browser_set_user_agent(
-        ctx_browser, BrowserSetUserAgentArgs(user_agent="UA/1"),
+        ctx_browser,
+        BrowserSetUserAgentArgs(user_agent="UA/1"),
     )
     assert ("set_user_agent", ("UA/1",), {}) in stub_browser_driver.calls
 
 
 async def test_browser_set_extra_headers(ctx_browser, stub_browser_driver) -> None:
     await _browser_set_extra_headers(
-        ctx_browser, BrowserSetExtraHeadersArgs(headers={"X": "Y"}),
+        ctx_browser,
+        BrowserSetExtraHeadersArgs(headers={"X": "Y"}),
     )
     assert any(c[0] == "set_extra_headers" for c in stub_browser_driver.calls)
 
@@ -483,7 +501,8 @@ async def test_browser_enable_stealth(ctx_browser, stub_browser_driver) -> None:
 
 async def test_browser_set_proxy(ctx_browser, stub_browser_driver) -> None:
     await _browser_set_proxy(
-        ctx_browser, BrowserSetProxyArgs(server="http://proxy:8080"),
+        ctx_browser,
+        BrowserSetProxyArgs(server="http://proxy:8080"),
     )
     assert any(c[0] == "set_proxy" for c in stub_browser_driver.calls)
 
@@ -498,35 +517,40 @@ async def test_browser_clear_cache(ctx_browser, stub_browser_driver) -> None:
 
 async def test_browser_intercept_request(ctx_browser, stub_browser_driver) -> None:
     await _browser_intercept_request(
-        ctx_browser, BrowserInterceptRequestArgs(url_pattern="**/*"),
+        ctx_browser,
+        BrowserInterceptRequestArgs(url_pattern="**/*"),
     )
     assert any(c[0] == "intercept_request" for c in stub_browser_driver.calls)
 
 
 async def test_browser_mock_response(ctx_browser, stub_browser_driver) -> None:
     await _browser_mock_response(
-        ctx_browser, BrowserMockResponseArgs(url_pattern="**/api/*", body="{}"),
+        ctx_browser,
+        BrowserMockResponseArgs(url_pattern="**/api/*", body="{}"),
     )
     assert any(c[0] == "mock_response" for c in stub_browser_driver.calls)
 
 
 async def test_browser_block_url_pattern(ctx_browser, stub_browser_driver) -> None:
     await _browser_block_url_pattern(
-        ctx_browser, BrowserBlockUrlPatternArgs(url_pattern="**/ads/*"),
+        ctx_browser,
+        BrowserBlockUrlPatternArgs(url_pattern="**/ads/*"),
     )
     assert any(c[0] == "block_url_pattern" for c in stub_browser_driver.calls)
 
 
 async def test_browser_wait_for_response(ctx_browser, stub_browser_driver) -> None:
     result = await _browser_wait_for_response(
-        ctx_browser, BrowserWaitForResponseArgs(url_pattern="**/api/*"),
+        ctx_browser,
+        BrowserWaitForResponseArgs(url_pattern="**/api/*"),
     )
     assert result["result"]["status"] == 200
 
 
 async def test_browser_get_network_log(ctx_browser, stub_browser_driver) -> None:
     result = await _browser_get_network_log(
-        ctx_browser, BrowserGetNetworkLogArgs(),
+        ctx_browser,
+        BrowserGetNetworkLogArgs(),
     )
     assert result["result"]["count"] == 1
 
@@ -536,14 +560,16 @@ async def test_browser_get_network_log(ctx_browser, stub_browser_driver) -> None
 
 async def test_browser_emulate_device(ctx_browser, stub_browser_driver) -> None:
     await _browser_emulate_device(
-        ctx_browser, BrowserEmulateDeviceArgs(device_name="iPhone 15"),
+        ctx_browser,
+        BrowserEmulateDeviceArgs(device_name="iPhone 15"),
     )
     assert ("emulate_device", ("iPhone 15",), {}) in stub_browser_driver.calls
 
 
 async def test_browser_set_geolocation(ctx_browser, stub_browser_driver) -> None:
     await _browser_set_geolocation(
-        ctx_browser, BrowserSetGeolocationArgs(latitude=40.0, longitude=-3.7),
+        ctx_browser,
+        BrowserSetGeolocationArgs(latitude=40.0, longitude=-3.7),
     )
     assert any(c[0] == "set_geolocation" for c in stub_browser_driver.calls)
 
@@ -555,14 +581,16 @@ async def test_browser_set_locale(ctx_browser, stub_browser_driver) -> None:
 
 async def test_browser_set_timezone(ctx_browser, stub_browser_driver) -> None:
     await _browser_set_timezone(
-        ctx_browser, BrowserSetTimezoneArgs(timezone_id="Europe/Istanbul"),
+        ctx_browser,
+        BrowserSetTimezoneArgs(timezone_id="Europe/Istanbul"),
     )
     assert ("set_timezone", ("Europe/Istanbul",), {}) in stub_browser_driver.calls
 
 
 async def test_browser_set_color_scheme(ctx_browser, stub_browser_driver) -> None:
     await _browser_set_color_scheme(
-        ctx_browser, BrowserSetColorSchemeArgs(scheme="dark"),
+        ctx_browser,
+        BrowserSetColorSchemeArgs(scheme="dark"),
     )
     assert ("set_color_scheme", ("dark",), {}) in stub_browser_driver.calls
 
@@ -577,21 +605,24 @@ async def test_browser_act_unwired(ctx_browser, stub_browser_driver) -> None:
 
 async def test_browser_extract_unwired(ctx_browser, stub_browser_driver) -> None:
     result = await _browser_extract(
-        ctx_browser, BrowserExtractArgs(extraction_schema={"title": "page title"}),
+        ctx_browser,
+        BrowserExtractArgs(extraction_schema={"title": "page title"}),
     )
     assert result["result"]["status"] == "unwired"
 
 
 async def test_browser_observe_unwired(ctx_browser, stub_browser_driver) -> None:
     result = await _browser_observe(
-        ctx_browser, BrowserObserveArgs(description="the login form"),
+        ctx_browser,
+        BrowserObserveArgs(description="the login form"),
     )
     assert result["result"]["status"] == "unwired"
 
 
 async def test_browser_agent_unwired(ctx_browser, stub_browser_driver) -> None:
     result = await _browser_agent(
-        ctx_browser, BrowserAgentArgs(goal="navigate to /login", max_steps=2),
+        ctx_browser,
+        BrowserAgentArgs(goal="navigate to /login", max_steps=2),
     )
     assert result["result"]["status"] == "unwired"
 
@@ -599,7 +630,8 @@ async def test_browser_agent_unwired(ctx_browser, stub_browser_driver) -> None:
 async def test_browser_smart_locator_no_llm(ctx_browser, stub_browser_driver) -> None:
     """smart_locator works without LLM via DOM heuristic."""
     result = await _browser_smart_locator(
-        ctx_browser, BrowserSmartLocatorArgs(description="Submit"),
+        ctx_browser,
+        BrowserSmartLocatorArgs(description="Submit"),
     )
     assert result["result"]["count"] >= 1
 

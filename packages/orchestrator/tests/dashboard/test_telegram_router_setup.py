@@ -153,14 +153,8 @@ def test_setup_webhook_mode_calls_telegram_api(tmp_path: Path) -> None:
         )
 
     assert r.status_code == 200
-    assert (
-        captured["url"]
-        == "https://api.telegram.org/bot123:abc/setWebhook"
-    )
-    assert (
-        captured["json"]["url"]
-        == "https://selffork.example.com/api/telegram/webhook"
-    )
+    assert captured["url"] == "https://api.telegram.org/bot123:abc/setWebhook"
+    assert captured["json"]["url"] == "https://selffork.example.com/api/telegram/webhook"
     assert captured["json"]["secret_token"] == "secret123"
     on_disk = yaml.safe_load(yaml_path.read_text())
     assert on_disk["mode"] == "webhook"
@@ -302,9 +296,7 @@ def test_setup_with_chat_id_merges_into_operators_json(
     assert 98765 in body["chat_ids"]
 
 
-def test_setup_chat_id_non_numeric_no_op(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_setup_chat_id_non_numeric_no_op(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Non-numeric chat_id skips the allowlist merge (defensive)."""
     monkeypatch.setenv("HOME", str(tmp_path))
     client, _store, _yaml = _build(tmp_path)
@@ -336,9 +328,7 @@ def test_setup_chat_id_preserves_existing_operators(
     import json as _json
 
     operators_path.write_text(
-        _json.dumps(
-            {"chat_ids": [111, 222], "default_project_slug": "demo"}
-        ),
+        _json.dumps({"chat_ids": [111, 222], "default_project_slug": "demo"}),
         encoding="utf-8",
     )
     client, _store, _yaml = _build(tmp_path)
@@ -387,9 +377,7 @@ def test_settings_telegram_get_yaml_env_precedence(
     # Env-only: YAML absent, env vars fall back.
     monkeypatch.setenv("SELFFORK_TELEGRAM_BOT_TOKEN", "env-token")
     monkeypatch.setenv("SELFFORK_TELEGRAM_MODE", "webhook")
-    monkeypatch.setenv(
-        "SELFFORK_TELEGRAM_WEBHOOK_URL", "https://env.example/w"
-    )
+    monkeypatch.setenv("SELFFORK_TELEGRAM_WEBHOOK_URL", "https://env.example/w")
     r1 = client.get("/api/settings/telegram")
     assert r1.status_code == 200
     body1 = r1.json()

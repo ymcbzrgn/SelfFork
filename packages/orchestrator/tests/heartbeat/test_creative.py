@@ -56,17 +56,13 @@ def test_scope_gate_short_text_is_small() -> None:
 
 
 def test_scope_gate_medium_word_count() -> None:
-    gate = CreativeScopeGate(
-        medium_word_count=10, large_word_count=20
-    )
+    gate = CreativeScopeGate(medium_word_count=10, large_word_count=20)
     text = " ".join(["word"] * 15)
     assert gate.classify(text) is IdeaSize.MEDIUM
 
 
 def test_scope_gate_large_word_count() -> None:
-    gate = CreativeScopeGate(
-        medium_word_count=10, large_word_count=20
-    )
+    gate = CreativeScopeGate(medium_word_count=10, large_word_count=20)
     text = " ".join(["word"] * 25)
     assert gate.classify(text) is IdeaSize.LARGE
 
@@ -135,9 +131,7 @@ def test_record_idea_filename_includes_size(tmp_path: Path) -> None:
 
 def test_record_idea_title_first_line(tmp_path: Path) -> None:
     manager = IdeationManager(lab_root=tmp_path)
-    record = manager.record_idea(
-        text="My grand idea\nwith more details on subsequent lines"
-    )
+    record = manager.record_idea(text="My grand idea\nwith more details on subsequent lines")
     assert record.title == "My grand idea"
 
 
@@ -194,9 +188,7 @@ async def test_ideate_without_manager_defers() -> None:
 
 @pytest.mark.asyncio
 async def test_ideate_empty_reasoning_skips(tmp_path: Path) -> None:
-    executor = ActionExecutor(
-        ideation_manager=IdeationManager(lab_root=tmp_path)
-    )
+    executor = ActionExecutor(ideation_manager=IdeationManager(lab_root=tmp_path))
     result = await executor.execute(_decision(""), _state())
     assert result.outcome == "skipped"
 
@@ -205,9 +197,7 @@ async def test_ideate_empty_reasoning_skips(tmp_path: Path) -> None:
 async def test_ideate_records_idea_and_returns_metadata(
     tmp_path: Path,
 ) -> None:
-    executor = ActionExecutor(
-        ideation_manager=IdeationManager(lab_root=tmp_path)
-    )
+    executor = ActionExecutor(ideation_manager=IdeationManager(lab_root=tmp_path))
     result = await executor.execute(
         _decision("Magic-link auth flow düşünüyorum"),
         _state(last_active_workspace="auth-proj"),
@@ -222,9 +212,7 @@ async def test_ideate_records_idea_and_returns_metadata(
 
 @pytest.mark.asyncio
 async def test_ideate_large_keyword_size_reflected(tmp_path: Path) -> None:
-    executor = ActionExecutor(
-        ideation_manager=IdeationManager(lab_root=tmp_path)
-    )
+    executor = ActionExecutor(ideation_manager=IdeationManager(lab_root=tmp_path))
     result = await executor.execute(
         _decision("new project: tamamen yeniden mimari"),
         _state(),

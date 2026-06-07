@@ -119,7 +119,8 @@ async def test_require_android_driver_rejects_ios(ctx_ios) -> None:
 
 
 async def test_require_android_driver_accepts_composite(
-    ctx_composite, stub_composite_driver,
+    ctx_composite,
+    stub_composite_driver,
 ) -> None:
     drv = _require_android_driver(ctx_composite)
     assert drv is stub_composite_driver.android
@@ -170,7 +171,8 @@ async def test_android_clear_text(ctx_android, stub_android_driver) -> None:
 
 async def test_android_swipe(ctx_android, stub_android_driver) -> None:
     await _android_swipe(
-        ctx_android, AndroidSwipeArgs(start_x=0, start_y=0, end_x=10, end_y=20),
+        ctx_android,
+        AndroidSwipeArgs(start_x=0, start_y=0, end_x=10, end_y=20),
     )
     assert any(c[0] == "swipe" for c in stub_android_driver.calls)
 
@@ -261,7 +263,8 @@ async def test_android_get_orientation(ctx_android, stub_android_driver) -> None
 
 async def test_android_set_orientation(ctx_android, stub_android_driver) -> None:
     await _android_set_orientation(
-        ctx_android, AndroidSetOrientationArgs(orientation="LANDSCAPE"),
+        ctx_android,
+        AndroidSetOrientationArgs(orientation="LANDSCAPE"),
     )
     assert ("set_orientation", ("LANDSCAPE",), {}) in stub_android_driver.calls
 
@@ -278,14 +281,16 @@ async def test_android_set_clipboard(ctx_android, stub_android_driver) -> None:
 
 async def test_android_get_property(ctx_android, stub_android_driver) -> None:
     result = await _android_get_property(
-        ctx_android, AndroidGetPropertyArgs(key="ro.build.version.sdk"),
+        ctx_android,
+        AndroidGetPropertyArgs(key="ro.build.version.sdk"),
     )
     assert result["result"]["value"] == "value"
 
 
 async def test_android_set_property(ctx_android, stub_android_driver) -> None:
     await _android_set_property(
-        ctx_android, AndroidSetPropertyArgs(key="debug.x", value="1"),
+        ctx_android,
+        AndroidSetPropertyArgs(key="debug.x", value="1"),
     )
     assert ("set_property", ("debug.x", "1"), {}) in stub_android_driver.calls
 
@@ -313,21 +318,24 @@ async def test_android_intent(ctx_android, stub_android_driver) -> None:
 
 async def test_android_broadcast(ctx_android, stub_android_driver) -> None:
     result = await _android_broadcast(
-        ctx_android, AndroidBroadcastArgs(action="X.ACTION"),
+        ctx_android,
+        AndroidBroadcastArgs(action="X.ACTION"),
     )
     assert result["status"] == "ok"
 
 
 async def test_android_deeplink(ctx_android, stub_android_driver) -> None:
     result = await _android_deeplink(
-        ctx_android, AndroidDeeplinkArgs(url="myapp://route"),
+        ctx_android,
+        AndroidDeeplinkArgs(url="myapp://route"),
     )
     assert result["status"] == "ok"
 
 
 async def test_android_press_button(ctx_android, stub_android_driver) -> None:
     await _android_press_button(
-        ctx_android, AndroidPressButtonArgs(button="recent"),
+        ctx_android,
+        AndroidPressButtonArgs(button="recent"),
     )
     # Handler delegates to drv.press_button (stub records it under that name);
     # the real AndroidDriver.press_button translates "recent" → "app_switch"
@@ -354,14 +362,16 @@ async def test_android_shell(ctx_android, stub_android_driver) -> None:
 
 async def test_android_pull(ctx_android, stub_android_driver) -> None:
     await _android_pull(
-        ctx_android, AndroidPullArgs(remote="/sdcard/x", local="/tmp/x"),
+        ctx_android,
+        AndroidPullArgs(remote="/sdcard/x", local="/tmp/x"),
     )
     assert any(c[0] == "pull" for c in stub_android_driver.calls)
 
 
 async def test_android_push(ctx_android, stub_android_driver) -> None:
     await _android_push(
-        ctx_android, AndroidPushArgs(local="/tmp/x", remote="/sdcard/x"),
+        ctx_android,
+        AndroidPushArgs(local="/tmp/x", remote="/sdcard/x"),
     )
     assert any(c[0] == "push" for c in stub_android_driver.calls)
 
@@ -378,14 +388,16 @@ async def test_android_dumpsys(ctx_android, stub_android_driver) -> None:
 
 async def test_android_screenrecord_start(ctx_android, stub_android_driver) -> None:
     await _android_screenrecord_start(
-        ctx_android, AndroidScreenrecordStartArgs(output_path="/tmp/v.mp4"),
+        ctx_android,
+        AndroidScreenrecordStartArgs(output_path="/tmp/v.mp4"),
     )
     assert any(c[0] == "screenrecord_start" for c in stub_android_driver.calls)
 
 
 async def test_android_screenrecord_stop(ctx_android, stub_android_driver) -> None:
     result = await _android_screenrecord_stop(
-        ctx_android, AndroidScreenrecordStopArgs(),
+        ctx_android,
+        AndroidScreenrecordStopArgs(),
     )
     assert result["result"]["output_path"].endswith(".mp4")
 
@@ -400,6 +412,7 @@ async def test_android_device_list(ctx_android, stub_android_driver) -> None:
 
 async def test_android_set_geolocation(ctx_android, stub_android_driver) -> None:
     await _android_set_geolocation(
-        ctx_android, AndroidSetGeolocationArgs(latitude=40.0, longitude=-3.7),
+        ctx_android,
+        AndroidSetGeolocationArgs(latitude=40.0, longitude=-3.7),
     )
     assert any(c[0] == "set_geolocation" for c in stub_android_driver.calls)

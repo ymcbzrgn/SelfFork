@@ -40,9 +40,7 @@ def test_sticky_cli_and_model(tmp_path: Path) -> None:
 
 
 def test_sticky_survives_reopen(tmp_path: Path) -> None:
-    _store(tmp_path).set(
-        workspace="alpha", cli="codex", model="gpt-5.5", sticky=True
-    )
+    _store(tmp_path).set(workspace="alpha", cli="codex", model="gpt-5.5", sticky=True)
     peeked = _store(tmp_path).peek("alpha")
     assert peeked is not None
     assert peeked.cli == "codex"

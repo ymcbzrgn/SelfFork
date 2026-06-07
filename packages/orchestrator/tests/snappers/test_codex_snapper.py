@@ -1,4 +1,5 @@
 """Tests for :class:`CodexSnapper` (rollout JSONL → QuotaSnapshot)."""
+
 from __future__ import annotations
 
 import json
@@ -33,11 +34,7 @@ def _write_rollout(
     events: list[dict[str, object]],
 ) -> Path:
     sessions = (
-        codex_home
-        / "sessions"
-        / f"{when.year:04d}"
-        / f"{when.month:02d}"
-        / f"{when.day:02d}"
+        codex_home / "sessions" / f"{when.year:04d}" / f"{when.month:02d}" / f"{when.day:02d}"
     )
     sessions.mkdir(parents=True)
     rollout = sessions / "rollout-test.jsonl"

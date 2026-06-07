@@ -45,9 +45,7 @@ __all__ = [
 ]
 
 
-MatchLevel = Literal[
-    "project_leaf", "global_task", "global_cli_model", "global_cli", "prior"
-]
+MatchLevel = Literal["project_leaf", "global_task", "global_cli_model", "global_cli", "prior"]
 """Deepest backoff level that carried real observations for a score.
 
 ``project_leaf`` = ``(workspace, task, cli, model)``; ``global_task`` =

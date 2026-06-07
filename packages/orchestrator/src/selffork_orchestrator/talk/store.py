@@ -64,10 +64,8 @@ CREATE TABLE IF NOT EXISTS messages (
 _INDICES: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at "
     "ON conversations(last_message_at);",
-    "CREATE INDEX IF NOT EXISTS idx_conversations_workspace_slug "
-    "ON conversations(workspace_slug);",
-    "CREATE INDEX IF NOT EXISTS idx_messages_conversation_id "
-    "ON messages(conversation_id);",
+    "CREATE INDEX IF NOT EXISTS idx_conversations_workspace_slug ON conversations(workspace_slug);",
+    "CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);",
 )
 
 
@@ -145,9 +143,7 @@ class TalkStore:
         )
         async with self._lock:
             self._require_open()
-            await anyio.to_thread.run_sync(
-                self._insert_conversation, conversation
-            )
+            await anyio.to_thread.run_sync(self._insert_conversation, conversation)
         return conversation
 
     def _insert_conversation(self, conversation: Conversation) -> None:
@@ -185,9 +181,7 @@ class TalkStore:
         """
         async with self._lock:
             self._require_open()
-            row = await anyio.to_thread.run_sync(
-                self._last_active_workspace_row
-            )
+            row = await anyio.to_thread.run_sync(self._last_active_workspace_row)
         if row is None:
             return None
         slug = row[0]
@@ -209,9 +203,7 @@ class TalkStore:
         """Return every conversation, most-recently-active first."""
         async with self._lock:
             self._require_open()
-            rows = await anyio.to_thread.run_sync(
-                self._list_conversation_rows
-            )
+            rows = await anyio.to_thread.run_sync(self._list_conversation_rows)
         return [self._row_to_conversation(r) for r in rows]
 
     def _list_conversation_rows(self) -> list[tuple[object, ...]]:
@@ -228,9 +220,7 @@ class TalkStore:
     ) -> Conversation | None:
         async with self._lock:
             self._require_open()
-            row = await anyio.to_thread.run_sync(
-                self._fetch_conversation, conversation_id
-            )
+            row = await anyio.to_thread.run_sync(self._fetch_conversation, conversation_id)
         return self._row_to_conversation(row) if row is not None else None
 
     def _fetch_conversation(
@@ -316,8 +306,7 @@ class TalkStore:
             next_seq = cast(
                 "int",
                 cur.execute(
-                    "SELECT COALESCE(MAX(seq), 0) + 1 FROM messages "
-                    "WHERE conversation_id = ?",
+                    "SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE conversation_id = ?",
                     (str(conversation_id),),
                 ).fetchone()[0],
             )
@@ -353,9 +342,7 @@ class TalkStore:
         """Return a conversation's messages in ``seq`` order (oldest first)."""
         async with self._lock:
             self._require_open()
-            rows = await anyio.to_thread.run_sync(
-                self._list_message_rows, conversation_id, limit
-            )
+            rows = await anyio.to_thread.run_sync(self._list_message_rows, conversation_id, limit)
         return [self._row_to_message(r) for r in rows]
 
     def _list_message_rows(

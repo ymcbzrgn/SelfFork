@@ -5,6 +5,7 @@
 - ``notify_telegram``: push to the operator (Order 5 wires the bridge)
 - ``compact_context``: trigger a Mind compaction strategy
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -44,10 +45,7 @@ def _rotate_to_handler(
     if args.cli_id not in _CLI_AGENTS:
         return {
             "rotation_requested": False,
-            "error": (
-                f"unknown cli_id {args.cli_id!r}; expected one of "
-                f"{sorted(_CLI_AGENTS)}"
-            ),
+            "error": (f"unknown cli_id {args.cli_id!r}; expected one of {sorted(_CLI_AGENTS)}"),
         }
     if args.cli_id == ctx.cli_agent_name:
         return {
@@ -74,7 +72,12 @@ class _SleepUntilArgs(ToolArgs):
     epoch_seconds: int = Field(..., gt=0, description="UTC Unix epoch seconds.")
     reason: str = Field(default="", max_length=400)
     kind: Literal[
-        "five_hour", "seven_day", "daily", "per_minute", "rolling", "unknown",
+        "five_hour",
+        "seven_day",
+        "daily",
+        "per_minute",
+        "rolling",
+        "unknown",
     ] = Field(default="unknown")
 
 
@@ -218,9 +221,7 @@ def _compact_context_handler(
         "strategy": args.strategy,
         "reason": args.reason,
         "session_id": ctx.session_id,
-        "deferred": (
-            "compactor execution pending MindStore.list_recent + driver wire"
-        ),
+        "deferred": ("compactor execution pending MindStore.list_recent + driver wire"),
     }
 
 

@@ -85,6 +85,7 @@ def test_cleanup_removes_old_screenshots(store: ScreenshotStore) -> None:
     # Backdate mtime to 30 days ago
     old_ts = (datetime.now(UTC) - timedelta(days=30)).timestamp()
     import os
+
     os.utime(ref.path, (old_ts, old_ts))
     fresh = store.write(_png_bytes(b"z"), "s")
     removed = store.cleanup(retention_days=7)

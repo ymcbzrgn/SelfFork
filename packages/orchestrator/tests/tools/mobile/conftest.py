@@ -42,11 +42,11 @@ class StubMobileDriver:
         return (
             '<XCUIElementTypeApplication name="Demo" visible="true" enabled="true" '
             'focused="true" selected="true" checked="true">\n'
-            '  <XCUIElementTypeButton '
+            "  <XCUIElementTypeButton "
             'name="Submit" displayed="true">Submit</XCUIElementTypeButton>\n'
-            '  <XCUIElementTypeStaticText '
+            "  <XCUIElementTypeStaticText "
             'name="Welcome">Welcome to SelfFork</XCUIElementTypeStaticText>\n'
-            '</XCUIElementTypeApplication>'
+            "</XCUIElementTypeApplication>"
         )
 
     async def double_click(self, x, y):
@@ -165,15 +165,26 @@ class StubMobileDriver:
     async def record_video_stop(self):
         self._record("record_video_stop", (), {})
         from pathlib import Path
+
         return Path("/tmp/recording.mp4")
 
     async def status_bar_override(
-        self, time=None, battery_state=None, cellular_bars=None, wifi_bars=None,
+        self,
+        time=None,
+        battery_state=None,
+        cellular_bars=None,
+        wifi_bars=None,
     ):
-        self._record("status_bar_override", (), {
-            "time": time, "battery_state": battery_state,
-            "cellular_bars": cellular_bars, "wifi_bars": wifi_bars,
-        })
+        self._record(
+            "status_bar_override",
+            (),
+            {
+                "time": time,
+                "battery_state": battery_state,
+                "cellular_bars": cellular_bars,
+                "wifi_bars": wifi_bars,
+            },
+        )
 
     async def set_appearance(self, appearance):
         self._record("set_appearance", (appearance,), {})
@@ -212,9 +223,15 @@ class StubMobileDriver:
         return {"level": "85", "status": "Charging"}
 
     async def intent(self, action, *, extras=None, component=None, data=None):
-        self._record("intent", (action,), {
-            "extras": extras, "component": component, "data": data,
-        })
+        self._record(
+            "intent",
+            (action,),
+            {
+                "extras": extras,
+                "component": component,
+                "data": data,
+            },
+        )
         return "Starting intent"
 
     async def broadcast(self, action, *, extras=None):
@@ -234,9 +251,15 @@ class StubMobileDriver:
         return "dumpsys " + service
 
     async def logcat(self, *, tag_filter=None, max_lines=200, clear=False):
-        self._record("logcat", (), {
-            "tag_filter": tag_filter, "max_lines": max_lines, "clear": clear,
-        })
+        self._record(
+            "logcat",
+            (),
+            {
+                "tag_filter": tag_filter,
+                "max_lines": max_lines,
+                "clear": clear,
+            },
+        )
         return "log " * 5
 
     async def push(self, local, remote):
@@ -257,6 +280,7 @@ class StubMobileDriver:
     async def screenrecord_stop(self):
         self._record("screenrecord_stop", (), {})
         from pathlib import Path
+
         return Path("/tmp/screenrecord.mp4")
 
 

@@ -172,9 +172,7 @@ class TheaterStore:
         try:
             model_cls.model_validate(payload)
         except ValidationError as exc:
-            raise ConfigError(
-                f"malformed payload for theater event {kind!r}: {exc}"
-            ) from exc
+            raise ConfigError(f"malformed payload for theater event {kind!r}: {exc}") from exc
         event_id = uuid4()
         created_at = datetime.now(UTC)
         payload_json = json.dumps(payload)
@@ -215,8 +213,7 @@ class TheaterStore:
             next_seq = cast(
                 "int",
                 cur.execute(
-                    "SELECT COALESCE(MAX(seq), 0) + 1 FROM theater_events "
-                    "WHERE workspace_slug = ?",
+                    "SELECT COALESCE(MAX(seq), 0) + 1 FROM theater_events WHERE workspace_slug = ?",
                     (workspace_slug,),
                 ).fetchone()[0],
             )
@@ -249,9 +246,7 @@ class TheaterStore:
         """Return a workspace's events in ``seq`` order (oldest first)."""
         async with self._lock:
             self._require_open()
-            rows = await anyio.to_thread.run_sync(
-                self._list_event_rows, workspace_slug, limit
-            )
+            rows = await anyio.to_thread.run_sync(self._list_event_rows, workspace_slug, limit)
         return [self._row_to_event(r) for r in rows]
 
     def _list_event_rows(
@@ -447,9 +442,7 @@ class TheaterStore:
         """
         async with self._lock:
             self._require_open()
-            row = await anyio.to_thread.run_sync(
-                self._fetch_active_loop, stale_after_seconds
-            )
+            row = await anyio.to_thread.run_sync(self._fetch_active_loop, stale_after_seconds)
         return self._row_to_loop(row) if row is not None else None
 
     def _fetch_active_loop(
@@ -457,9 +450,7 @@ class TheaterStore:
         stale_after_seconds: int,
     ) -> tuple[object, ...] | None:
         assert self._conn is not None  # noqa: S101
-        threshold = datetime.now(UTC) - timedelta(
-            seconds=stale_after_seconds
-        )
+        threshold = datetime.now(UTC) - timedelta(seconds=stale_after_seconds)
         cur = self._conn.execute(
             "SELECT session_id, workspace_slug, workspace_name, cli, turn, "
             "started_at, updated_at, last_thought FROM active_loops "
@@ -490,9 +481,7 @@ class TheaterStore:
         stale_after_seconds: int,
     ) -> tuple[object, ...] | None:
         assert self._conn is not None  # noqa: S101
-        threshold = datetime.now(UTC) - timedelta(
-            seconds=stale_after_seconds
-        )
+        threshold = datetime.now(UTC) - timedelta(seconds=stale_after_seconds)
         cur = self._conn.execute(
             "SELECT session_id, workspace_slug, workspace_name, cli, turn, "
             "started_at, updated_at, last_thought FROM active_loops "
@@ -515,9 +504,7 @@ class TheaterStore:
             session_id=cast("str | None", row[2]),
             seq=cast("int", row[3]),
             kind=cast("TheaterEventKind", row[4]),
-            payload=cast(
-                "dict[str, object]", json.loads(cast("str", row[5]))
-            ),
+            payload=cast("dict[str, object]", json.loads(cast("str", row[5]))),
             created_at=datetime.fromisoformat(cast("str", row[6])),
         )
 

@@ -172,9 +172,7 @@ def build_theater_router(*, projects_root: Path, db_path: Path) -> APIRouter:
     async def snapshot(slug: str) -> TheaterSnapshot:
         """One-shot snapshot of the theater state for the first paint."""
         if not _workspace_exists(slug):
-            raise HTTPException(
-                status_code=404, detail=f"workspace {slug} not found"
-            )
+            raise HTTPException(status_code=404, detail=f"workspace {slug} not found")
         store = await handle.store()
         snap, _ = await _build_snapshot(store, slug)
         return snap
@@ -190,9 +188,7 @@ def build_theater_router(*, projects_root: Path, db_path: Path) -> APIRouter:
         """
         await websocket.accept()
         if not _workspace_exists(slug):
-            await websocket.close(
-                code=4404, reason=f"workspace {slug} not found"
-            )
+            await websocket.close(code=4404, reason=f"workspace {slug} not found")
             return
         store = await handle.store()
 
@@ -228,12 +224,8 @@ def build_theater_router(*, projects_root: Path, db_path: Path) -> APIRouter:
                 seq_counter=seq_counter,
                 session_id=slug,
             ):
-                async for event in _tail_theater(
-                    store, slug, after_seq=cursor
-                ):
-                    envelope = _event_to_envelope(
-                        event, seq=next_seq(seq_counter)
-                    )
+                async for event in _tail_theater(store, slug, after_seq=cursor):
+                    envelope = _event_to_envelope(event, seq=next_seq(seq_counter))
                     replay_buffer.append(envelope)
                     await websocket.send_text(envelope.model_dump_json())
         except WebSocketDisconnect:
@@ -243,9 +235,7 @@ def build_theater_router(*, projects_root: Path, db_path: Path) -> APIRouter:
         except Exception as exc:
             _log.exception("theater_ws_failed", slug=slug)
             with contextlib.suppress(Exception):
-                await websocket.send_text(
-                    json.dumps({"error": f"{type(exc).__name__}: {exc}"})
-                )
+                await websocket.send_text(json.dumps({"error": f"{type(exc).__name__}: {exc}"}))
 
     return router
 
@@ -290,21 +280,15 @@ def _duration_seconds(loop: ActiveLoopRecord) -> int:
 
 def _event_to_cli_chunk(event: TheaterEvent) -> CLIOutputChunk:
     payload = CliOutputPayload.model_validate(event.payload)
-    return CLIOutputChunk(
-        id=str(event.id), kind=payload.kind, text=payload.text
-    )
+    return CLIOutputChunk(id=str(event.id), kind=payload.kind, text=payload.text)
 
 
 def _event_to_thought(event: TheaterEvent) -> JrThought:
     payload = ThoughtPayload.model_validate(event.payload)
-    return JrThought(
-        id=str(event.id), summary=payload.summary, raw=payload.raw
-    )
+    return JrThought(id=str(event.id), summary=payload.summary, raw=payload.raw)
 
 
-async def _build_snapshot(
-    store: TheaterStore, slug: str
-) -> tuple[TheaterSnapshot, int]:
+async def _build_snapshot(store: TheaterStore, slug: str) -> tuple[TheaterSnapshot, int]:
     """Build the theater snapshot + return the high-water event ``seq``.
 
     The ``seq`` is the cursor the WS tails from so the live stream never
@@ -312,20 +296,14 @@ async def _build_snapshot(
     """
     events = await store.list_events(slug)
     loop = await store.loop_for_workspace(slug)
-    output = [
-        _event_to_cli_chunk(e) for e in events if e.kind == "cli_output"
-    ]
-    thoughts = [
-        _event_to_thought(e) for e in events if e.kind == "thought"
-    ]
+    output = [_event_to_cli_chunk(e) for e in events if e.kind == "cli_output"]
+    thoughts = [_event_to_thought(e) for e in events if e.kind == "thought"]
     cursor = events[-1].seq if events else 0
     snapshot = TheaterSnapshot(
         active=loop is not None,
         cli=loop.cli if loop is not None else None,
         turn=loop.turn if loop is not None else 0,
-        duration_seconds=(
-            _duration_seconds(loop) if loop is not None else 0
-        ),
+        duration_seconds=(_duration_seconds(loop) if loop is not None else 0),
         output=output,
         screenshots=[],
         thoughts=thoughts,

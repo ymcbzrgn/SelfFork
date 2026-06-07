@@ -124,9 +124,7 @@ def make_task_starter(
         # spawned session. No router ⇒ the CLI's own config defaults.
         if cli_router is not None:
             try:
-                selection = await cli_router.select_cli(
-                    workspace=project, task_type=None
-                )
+                selection = await cli_router.select_cli(workspace=project, task_type=None)
             except QuotaExhaustedAcrossFleetError as exc:
                 _log.warning(
                     "heartbeat_task_start_quota_exhausted",
@@ -176,9 +174,7 @@ def make_kanban_card_creator(
     asymmetry.
     """
 
-    async def _kanban_card_creator(
-        project: str, title: str, body: str
-    ) -> str:
+    async def _kanban_card_creator(project: str, title: str, body: str) -> str:
         def _add() -> str:
             store = ProjectStore(root=projects_root)
             card = store.add_card(project, title=title, body=body)

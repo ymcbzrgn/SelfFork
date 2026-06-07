@@ -20,6 +20,7 @@ Lifecycle:
 Or use as a daemon entry point: ``await runner.serve()`` blocks forever
 (or until another task signals ``runner.stop()``).
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -169,9 +170,7 @@ class SnapperRunner:
 
 
 def _resolve_default_interval() -> float:
-    raw = os.environ.get(
-        "SELFFORK_SNAPPER_RUNNER_DEFAULT_INTERVAL_SECONDS", ""
-    ).strip()
+    raw = os.environ.get("SELFFORK_SNAPPER_RUNNER_DEFAULT_INTERVAL_SECONDS", "").strip()
     if not raw:
         return DEFAULT_SIDECAR_INTERVAL_SECONDS
     try:
@@ -207,9 +206,7 @@ def build_default_snapper_runner() -> SnapperRunner | None:
     state dir by ``SELFFORK_SNAPPER_RUNNER_STATE_DIR`` (default
     ``~/.selffork/cli-state/``).
     """
-    enabled_raw = os.environ.get(
-        "SELFFORK_SNAPPER_RUNNER_ENABLED", ""
-    ).strip().lower()
+    enabled_raw = os.environ.get("SELFFORK_SNAPPER_RUNNER_ENABLED", "").strip().lower()
     if enabled_raw in {"false", "0", "no"}:
         return None
     snappers = build_default_snappers()

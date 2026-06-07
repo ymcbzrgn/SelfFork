@@ -215,7 +215,10 @@ class IosDriver:
             await self.simulator.open_url(url)
 
     async def set_geolocation(
-        self, latitude: float, longitude: float, altitude: float = 0.0,
+        self,
+        latitude: float,
+        longitude: float,
+        altitude: float = 0.0,
     ) -> None:
         try:
             await self._ready_appium().set_geolocation(latitude, longitude, altitude=altitude)
@@ -240,7 +243,9 @@ class IosDriver:
         await self.simulator.erase_specific(udid)
 
     async def get_logs(
-        self, predicate: str | None = None, last: str | None = None,
+        self,
+        predicate: str | None = None,
+        last: str | None = None,
     ) -> str:
         return await self.simulator.get_logs(predicate=predicate, last=last)
 

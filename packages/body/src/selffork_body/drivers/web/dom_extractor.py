@@ -95,9 +95,7 @@ async def extract_dom_tree(page: Any) -> list[dict[str, Any]]:
     return result
 
 
-def summarise_dom_tree(
-    rows: list[dict[str, Any]], *, limit: int = 60
-) -> str:
+def summarise_dom_tree(rows: list[dict[str, Any]], *, limit: int = 60) -> str:
     """Render a compact, prompt-friendly summary of DOM rows.
 
     One line per element: ``[idx] <tag> "text" (id/class/role/aria) bbox=[x,y,w,h]``.
@@ -114,9 +112,7 @@ def summarise_dom_tree(
         attr_str = " ".join(attr_bits)
         bbox = row.get("bbox") or []
         text = (row.get("text") or "").replace("\n", " ").strip()
-        out.append(
-            f"[{row['index']}] <{row['tag']}> \"{text}\" {attr_str} bbox={bbox}"
-        )
+        out.append(f'[{row["index"]}] <{row["tag"]}> "{text}" {attr_str} bbox={bbox}')
     if len(rows) > limit:
         out.append(f"... ({len(rows) - limit} more rows truncated)")
     return "\n".join(out)

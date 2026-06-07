@@ -142,9 +142,7 @@ def _detect_gemini(home: Path) -> ProviderAuthStatus:
     expiry_ms = data.get("expiry_date")
     if isinstance(expiry_ms, int | float) and not isinstance(expiry_ms, bool):
         expires_at = datetime.fromtimestamp(expiry_ms / 1000, tz=UTC)
-        status: AuthStatusValue = (
-            "expired" if expires_at < datetime.now(UTC) else "connected"
-        )
+        status: AuthStatusValue = "expired" if expires_at < datetime.now(UTC) else "connected"
         return ProviderAuthStatus(status, expires_at=expires_at, detail=str(path))
     return ProviderAuthStatus("connected", detail=str(path))
 
@@ -188,9 +186,7 @@ def detect_all(
     resolved_user = user or _current_user()
     probe = keychain_probe or default_keychain_probe
     return {
-        "claude_pro": _detect_claude_pro(
-            resolved_home, user=resolved_user, keychain_probe=probe
-        ),
+        "claude_pro": _detect_claude_pro(resolved_home, user=resolved_user, keychain_probe=probe),
         "codex": _detect_codex(resolved_home),
         "gemini": _detect_gemini(resolved_home),
         "opencode": _detect_opencode(resolved_home),

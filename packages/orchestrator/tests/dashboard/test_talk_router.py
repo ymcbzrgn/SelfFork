@@ -194,9 +194,7 @@ def _wait_for_messages(
     deadline = time.monotonic() + timeout_seconds
     last_messages: list[dict[str, object]] = []
     while time.monotonic() < deadline:
-        thread = client.get(
-            f"/api/talk/conversations/{conversation_id}"
-        ).json()
+        thread = client.get(f"/api/talk/conversations/{conversation_id}").json()
         last_messages = thread["messages"]
         if len(last_messages) >= expected_count:
             return last_messages
@@ -243,9 +241,7 @@ def _drain_until_event(
 
 
 class TestSend:
-    def test_send_returns_streaming_immediately(
-        self, make_client: ClientFactory
-    ) -> None:
+    def test_send_returns_streaming_immediately(self, make_client: ClientFactory) -> None:
         """POST returns before the background generation persists."""
         client = make_client(_EchoSpeaker())
         r = client.post("/api/talk/send", json={"text": "hello jr"})
@@ -261,14 +257,10 @@ class TestSend:
         assert isinstance(body["generation_id"], str)
         assert len(body["generation_id"]) > 0
 
-    def test_reply_persists_via_background_task(
-        self, make_client: ClientFactory
-    ) -> None:
+    def test_reply_persists_via_background_task(self, make_client: ClientFactory) -> None:
         """The streamed reply eventually lands on disk."""
         client = make_client(_EchoSpeaker())
-        cid = client.post(
-            "/api/talk/send", json={"text": "hello jr"}
-        ).json()["conversation_id"]
+        cid = client.post("/api/talk/send", json={"text": "hello jr"}).json()["conversation_id"]
         messages = _wait_for_messages(client, cid, expected_count=2)
         assert [m["content"] for m in messages] == [
             "hello jr",
@@ -277,13 +269,9 @@ class TestSend:
         assert messages[1]["role"] == "self_jr"
         assert messages[1]["seq"] == 2
 
-    def test_continues_existing_conversation(
-        self, make_client: ClientFactory
-    ) -> None:
+    def test_continues_existing_conversation(self, make_client: ClientFactory) -> None:
         client = make_client(_EchoSpeaker())
-        cid = client.post(
-            "/api/talk/send", json={"text": "one"}
-        ).json()["conversation_id"]
+        cid = client.post("/api/talk/send", json={"text": "one"}).json()["conversation_id"]
         _wait_for_messages(client, cid, expected_count=2)
         client.post(
             "/api/talk/send",
@@ -309,9 +297,7 @@ class TestSend:
         )
         assert r.status_code == 404
 
-    def test_invalid_conversation_id_400(
-        self, make_client: ClientFactory
-    ) -> None:
+    def test_invalid_conversation_id_400(self, make_client: ClientFactory) -> None:
         client = make_client(_EchoSpeaker())
         r = client.post(
             "/api/talk/send",
@@ -348,9 +334,7 @@ class TestSend:
         # Only the operator message — no fabricated reply.
         assert [m["content"] for m in thread["messages"]] == ["anyone there"]
 
-    def test_no_speaker_reports_not_configured(
-        self, make_client: ClientFactory
-    ) -> None:
+    def test_no_speaker_reports_not_configured(self, make_client: ClientFactory) -> None:
         client = make_client(None)
         body = client.post("/api/talk/send", json={"text": "hi"}).json()
         assert body["reply"] is None
@@ -381,9 +365,7 @@ class TestConversations:
 
     def test_get_thread(self, make_client: ClientFactory) -> None:
         client = make_client(_EchoSpeaker())
-        cid = client.post(
-            "/api/talk/send", json={"text": "ping"}
-        ).json()["conversation_id"]
+        cid = client.post("/api/talk/send", json={"text": "ping"}).json()["conversation_id"]
         _wait_for_messages(client, cid, expected_count=2)
         r = client.get(f"/api/talk/conversations/{cid}")
         assert r.status_code == 200
@@ -411,14 +393,10 @@ class TestConversations:
 
 
 class TestStream:
-    def test_token_envelopes_then_message(
-        self, make_client: ClientFactory
-    ) -> None:
+    def test_token_envelopes_then_message(self, make_client: ClientFactory) -> None:
         """Each chunk is a ``talk.token`` framed by the final ``talk.message``."""
         client = make_client(_EchoSpeaker())
-        cid = client.post(
-            "/api/talk/send", json={"text": "stream test"}
-        ).json()["conversation_id"]
+        cid = client.post("/api/talk/send", json={"text": "stream test"}).json()["conversation_id"]
         with client.websocket_connect(f"/api/talk/{cid}/stream") as ws:
             # Replay: operator message first.
             op_env = json.loads(ws.receive_text())
@@ -438,17 +416,11 @@ class TestStream:
             # Every token carries the same generation_id as the final
             # message — lets the cockpit dedup across reconnect.
             gid = str(message_env["payload"]["generation_id"])
-            assert all(
-                str(t["payload"]["generation_id"]) == gid for t in tokens
-            )
+            assert all(str(t["payload"]["generation_id"]) == gid for t in tokens)
 
-    def test_speaker_offline_emits_error_envelope(
-        self, make_client: ClientFactory
-    ) -> None:
+    def test_speaker_offline_emits_error_envelope(self, make_client: ClientFactory) -> None:
         client = make_client(_OfflineSpeaker())
-        cid = client.post(
-            "/api/talk/send", json={"text": "ring ring"}
-        ).json()["conversation_id"]
+        cid = client.post("/api/talk/send", json={"text": "ring ring"}).json()["conversation_id"]
         with client.websocket_connect(f"/api/talk/{cid}/stream") as ws:
             # Operator message first.
             op_env = json.loads(ws.receive_text())
@@ -458,13 +430,11 @@ class TestStream:
             assert error_env["payload"]["kind"] == "unhealthy"
             assert "unreachable" in str(error_env["payload"]["detail"])
 
-    def test_speaker_stalled_emits_stalled_error(
-        self, make_client: ClientFactory
-    ) -> None:
+    def test_speaker_stalled_emits_stalled_error(self, make_client: ClientFactory) -> None:
         client = make_client(_StalledSpeaker())
-        cid = client.post(
-            "/api/talk/send", json={"text": "watchdog test"}
-        ).json()["conversation_id"]
+        cid = client.post("/api/talk/send", json={"text": "watchdog test"}).json()[
+            "conversation_id"
+        ]
         with client.websocket_connect(f"/api/talk/{cid}/stream") as ws:
             # Operator message + the half token + then talk.error(stalled).
             op_env = json.loads(ws.receive_text())
@@ -473,16 +443,12 @@ class TestStream:
             assert any(t["event_type"] == "talk.token" for t in tokens)
             assert error_env["payload"]["kind"] == "stalled"
 
-    def test_cancel_emits_cancelled_envelope(
-        self, make_client: ClientFactory
-    ) -> None:
+    def test_cancel_emits_cancelled_envelope(self, make_client: ClientFactory) -> None:
         """A cancel call cancels the task + emits ``talk.cancelled``."""
         client = make_client(
             _SlowSpeaker(per_token_seconds=0.03, token_count=40),
         )
-        send_resp = client.post(
-            "/api/talk/send", json={"text": "slow ping"}
-        ).json()
+        send_resp = client.post("/api/talk/send", json={"text": "slow ping"}).json()
         cid = send_resp["conversation_id"]
         gid = send_resp["generation_id"]
         with client.websocket_connect(f"/api/talk/{cid}/stream") as ws:
@@ -495,9 +461,7 @@ class TestStream:
                     break
             else:  # pragma: no cover — should never happen with _SlowSpeaker
                 raise AssertionError("no talk.token observed before cancel")
-            cancel_resp = client.post(
-                f"/api/talk/conversations/{cid}/cancel-generation/{gid}"
-            )
+            cancel_resp = client.post(f"/api/talk/conversations/{cid}/cancel-generation/{gid}")
             assert cancel_resp.status_code == 200
             assert cancel_resp.json()["cancelled"] is True
             assert cancel_resp.json()["reason"] == "cancelled"
@@ -512,36 +476,24 @@ class TestStream:
             assert persisted["role"] == "self_jr"
             assert "x" in str(persisted["content"])
 
-    def test_cancel_unknown_generation_returns_reason(
-        self, make_client: ClientFactory
-    ) -> None:
+    def test_cancel_unknown_generation_returns_reason(self, make_client: ClientFactory) -> None:
         client = make_client(_EchoSpeaker())
-        cid = client.post(
-            "/api/talk/send", json={"text": "done quickly"}
-        ).json()["conversation_id"]
+        cid = client.post("/api/talk/send", json={"text": "done quickly"}).json()["conversation_id"]
         _wait_for_messages(client, cid, expected_count=2)
         # Cancel a non-existent generation_id — the past one has already
         # settled and removed itself from the active map.
-        r = client.post(
-            f"/api/talk/conversations/{cid}/cancel-generation/deadbeef"
-        )
+        r = client.post(f"/api/talk/conversations/{cid}/cancel-generation/deadbeef")
         assert r.status_code == 200
         body = r.json()
         assert body["cancelled"] is False
         assert body["reason"] == "unknown_generation"
 
-    def test_cancel_invalid_conversation_id_400(
-        self, make_client: ClientFactory
-    ) -> None:
+    def test_cancel_invalid_conversation_id_400(self, make_client: ClientFactory) -> None:
         client = make_client(_EchoSpeaker())
-        r = client.post(
-            "/api/talk/conversations/not-a-uuid/cancel-generation/x"
-        )
+        r = client.post("/api/talk/conversations/not-a-uuid/cancel-generation/x")
         assert r.status_code == 400
 
-    def test_unknown_conversation_closes(
-        self, make_client: ClientFactory
-    ) -> None:
+    def test_unknown_conversation_closes(self, make_client: ClientFactory) -> None:
         client = make_client(_EchoSpeaker())
         with (
             pytest.raises(WebSocketDisconnect),
@@ -551,9 +503,7 @@ class TestStream:
         ):
             ws.receive_text()
 
-    def test_invalid_conversation_id_closes(
-        self, make_client: ClientFactory
-    ) -> None:
+    def test_invalid_conversation_id_closes(self, make_client: ClientFactory) -> None:
         client = make_client(_EchoSpeaker())
         with (
             pytest.raises(WebSocketDisconnect),
@@ -561,14 +511,10 @@ class TestStream:
         ):
             ws.receive_text()
 
-    def test_reconnect_replays_buffer(
-        self, make_client: ClientFactory
-    ) -> None:
+    def test_reconnect_replays_buffer(self, make_client: ClientFactory) -> None:
         """Replay buffer survives reconnect within the same registry."""
         client = make_client(_EchoSpeaker())
-        cid = client.post(
-            "/api/talk/send", json={"text": "first"}
-        ).json()["conversation_id"]
+        cid = client.post("/api/talk/send", json={"text": "first"}).json()["conversation_id"]
         _wait_for_messages(client, cid, expected_count=2)
         # First connect drains everything emitted so far.
         with client.websocket_connect(f"/api/talk/{cid}/stream") as ws:
@@ -580,20 +526,9 @@ class TestStream:
             # Pull up to a few frames; we expect at least one talk.message.
             for _ in range(10):
                 envelopes.append(json.loads(ws.receive_text()))
-                if (
-                    sum(
-                        1
-                        for e in envelopes
-                        if e["event_type"] == "talk.message"
-                    )
-                    >= 2
-                ):
+                if sum(1 for e in envelopes if e["event_type"] == "talk.message") >= 2:
                     break
-        roles_seen = [
-            e["payload"]["role"]
-            for e in envelopes
-            if e["event_type"] == "talk.message"
-        ]
+        roles_seen = [e["payload"]["role"] for e in envelopes if e["event_type"] == "talk.message"]
         assert "operator" in roles_seen
         assert "self_jr" in roles_seen
 

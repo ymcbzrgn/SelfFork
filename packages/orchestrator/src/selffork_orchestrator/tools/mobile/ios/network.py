@@ -57,7 +57,8 @@ async def _ios_open_url(ctx: ToolContext, args: IosOpenUrlArgs) -> dict[str, Any
 
 
 async def _ios_set_geolocation(
-    ctx: ToolContext, args: IosSetGeolocationArgs,
+    ctx: ToolContext,
+    args: IosSetGeolocationArgs,
 ) -> dict[str, Any]:
     drv = _require_ios_driver(ctx)
     return await _invoke_mobile(
@@ -70,13 +71,16 @@ async def _ios_set_geolocation(
             "altitude": args.altitude,
         },
         coro_factory=lambda: drv.set_geolocation(
-            args.latitude, args.longitude, altitude=args.altitude,
+            args.latitude,
+            args.longitude,
+            altitude=args.altitude,
         ),
     )
 
 
 async def _ios_get_geolocation(
-    ctx: ToolContext, args: IosGetGeolocationArgs,
+    ctx: ToolContext,
+    args: IosGetGeolocationArgs,
 ) -> dict[str, Any]:
     drv = _require_ios_driver(ctx)
 
@@ -93,7 +97,8 @@ async def _ios_get_geolocation(
 
 
 async def _ios_record_video_start(
-    ctx: ToolContext, args: IosRecordVideoStartArgs,
+    ctx: ToolContext,
+    args: IosRecordVideoStartArgs,
 ) -> dict[str, Any]:
     drv = _require_ios_driver(ctx)
     return await _invoke_mobile(
@@ -106,7 +111,8 @@ async def _ios_record_video_start(
 
 
 async def _ios_record_video_stop(
-    ctx: ToolContext, args: IosRecordVideoStopArgs,
+    ctx: ToolContext,
+    args: IosRecordVideoStopArgs,
 ) -> dict[str, Any]:
     drv = _require_ios_driver(ctx)
 

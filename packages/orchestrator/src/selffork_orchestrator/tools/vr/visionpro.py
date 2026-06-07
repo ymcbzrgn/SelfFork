@@ -64,7 +64,8 @@ class VisionProClickAtArgs(ToolArgs):
 
 
 async def _visionpro_simulator_list(
-    ctx: ToolContext, args: VisionProSimulatorListArgs,
+    ctx: ToolContext,
+    args: VisionProSimulatorListArgs,
 ) -> dict[str, Any]:
     drv = _require_visionpro_driver(ctx)
 
@@ -73,13 +74,17 @@ async def _visionpro_simulator_list(
         return {"count": len(devices), "devices": devices[:50]}
 
     return await _invoke_vr(
-        ctx, action_type="visionpro.simulator_list",
-        target_uri=None, args_summary={}, coro_factory=_list,
+        ctx,
+        action_type="visionpro.simulator_list",
+        target_uri=None,
+        args_summary={},
+        coro_factory=_list,
     )
 
 
 async def _visionpro_simulator_boot(
-    ctx: ToolContext, args: VisionProSimulatorBootArgs,
+    ctx: ToolContext,
+    args: VisionProSimulatorBootArgs,
 ) -> dict[str, Any]:
     drv = _require_visionpro_driver(ctx)
 
@@ -88,7 +93,8 @@ async def _visionpro_simulator_boot(
         return {"udid": udid}
 
     return await _invoke_vr(
-        ctx, action_type="visionpro.simulator_boot",
+        ctx,
+        action_type="visionpro.simulator_boot",
         target_uri=f"vp-sim:{args.udid}",
         args_summary={"udid": args.udid},
         coro_factory=_boot,
@@ -96,11 +102,13 @@ async def _visionpro_simulator_boot(
 
 
 async def _visionpro_simulator_shutdown(
-    ctx: ToolContext, args: VisionProSimulatorShutdownArgs,
+    ctx: ToolContext,
+    args: VisionProSimulatorShutdownArgs,
 ) -> dict[str, Any]:
     drv = _require_visionpro_driver(ctx)
     return await _invoke_vr(
-        ctx, action_type="visionpro.simulator_shutdown",
+        ctx,
+        action_type="visionpro.simulator_shutdown",
         target_uri=f"vp-sim:{args.udid}",
         args_summary={"udid": args.udid},
         coro_factory=lambda: drv.simulator_shutdown(args.udid),
@@ -108,7 +116,8 @@ async def _visionpro_simulator_shutdown(
 
 
 async def _visionpro_screenshot(
-    ctx: ToolContext, args: VisionProScreenshotArgs,
+    ctx: ToolContext,
+    args: VisionProScreenshotArgs,
 ) -> dict[str, Any]:
     drv = _require_visionpro_driver(ctx)
 
@@ -119,7 +128,9 @@ async def _visionpro_screenshot(
         if store is not None:
             try:
                 ref_obj = store.write(
-                    png, session_id=ctx.session_id, project_slug=ctx.project_slug,
+                    png,
+                    session_id=ctx.session_id,
+                    project_slug=ctx.project_slug,
                 )
                 ref = {
                     "path": str(ref_obj.path),
@@ -131,17 +142,22 @@ async def _visionpro_screenshot(
         return {"bytes_size": len(png), "ref": ref}
 
     return await _invoke_vr(
-        ctx, action_type="visionpro.screenshot",
-        target_uri=None, args_summary={}, coro_factory=_shot,
+        ctx,
+        action_type="visionpro.screenshot",
+        target_uri=None,
+        args_summary={},
+        coro_factory=_shot,
     )
 
 
 async def _visionpro_app_launch(
-    ctx: ToolContext, args: VisionProAppLaunchArgs,
+    ctx: ToolContext,
+    args: VisionProAppLaunchArgs,
 ) -> dict[str, Any]:
     drv = _require_visionpro_driver(ctx)
     return await _invoke_vr(
-        ctx, action_type="visionpro.app_launch",
+        ctx,
+        action_type="visionpro.app_launch",
         target_uri=f"vp-app:{args.bundle_id}",
         args_summary={"bundle_id": args.bundle_id},
         coro_factory=lambda: drv.app_launch(args.bundle_id),
@@ -149,7 +165,8 @@ async def _visionpro_app_launch(
 
 
 async def _visionpro_get_logs(
-    ctx: ToolContext, args: VisionProGetLogsArgs,
+    ctx: ToolContext,
+    args: VisionProGetLogsArgs,
 ) -> dict[str, Any]:
     drv = _require_visionpro_driver(ctx)
 
@@ -158,7 +175,8 @@ async def _visionpro_get_logs(
         return {"text_len": len(text), "preview": text[:8192]}
 
     return await _invoke_vr(
-        ctx, action_type="visionpro.get_logs",
+        ctx,
+        action_type="visionpro.get_logs",
         target_uri=None,
         args_summary={"predicate": args.predicate, "last": args.last},
         coro_factory=_grab,
@@ -166,7 +184,8 @@ async def _visionpro_get_logs(
 
 
 async def _visionpro_find_text(
-    ctx: ToolContext, args: VisionProFindTextArgs,
+    ctx: ToolContext,
+    args: VisionProFindTextArgs,
 ) -> dict[str, Any]:
     """LLM-driven OCR: screenshot + ask vision_runtime to locate text bbox.
 
@@ -202,7 +221,8 @@ async def _visionpro_find_text(
         return {"status": "ok", "result": data}
 
     return await _invoke_vr(
-        ctx, action_type="visionpro.find_text",
+        ctx,
+        action_type="visionpro.find_text",
         target_uri=None,
         args_summary={"needle_len": len(args.needle)},
         coro_factory=_find,
@@ -210,11 +230,13 @@ async def _visionpro_find_text(
 
 
 async def _visionpro_click_at(
-    ctx: ToolContext, args: VisionProClickAtArgs,
+    ctx: ToolContext,
+    args: VisionProClickAtArgs,
 ) -> dict[str, Any]:
     drv = _require_visionpro_driver(ctx)
     return await _invoke_vr(
-        ctx, action_type="visionpro.click_at",
+        ctx,
+        action_type="visionpro.click_at",
         target_uri=f"coords:{args.x},{args.y}",
         args_summary={"x": args.x, "y": args.y},
         coro_factory=lambda: drv.click_at(args.x, args.y),
@@ -228,19 +250,22 @@ def build_visionpro_tools() -> list[ToolSpec[Any]]:
             name="visionpro_simulator_list",
             description="List visionOS simulators (filtered by runtime).",
             args_model=VisionProSimulatorListArgs,
-            handler=_visionpro_simulator_list, defer_loading=True,
+            handler=_visionpro_simulator_list,
+            defer_loading=True,
         ),
         ToolSpec(
             name="visionpro_simulator_boot",
             description="Boot a visionOS simulator by UDID.",
             args_model=VisionProSimulatorBootArgs,
-            handler=_visionpro_simulator_boot, defer_loading=True,
+            handler=_visionpro_simulator_boot,
+            defer_loading=True,
         ),
         ToolSpec(
             name="visionpro_simulator_shutdown",
             description="Shut down a visionOS simulator by UDID.",
             args_model=VisionProSimulatorShutdownArgs,
-            handler=_visionpro_simulator_shutdown, defer_loading=True,
+            handler=_visionpro_simulator_shutdown,
+            defer_loading=True,
         ),
         ToolSpec(
             name="visionpro_screenshot",
@@ -249,19 +274,22 @@ def build_visionpro_tools() -> list[ToolSpec[Any]]:
                 "persists to ScreenshotStore when wired."
             ),
             args_model=VisionProScreenshotArgs,
-            handler=_visionpro_screenshot, defer_loading=True,
+            handler=_visionpro_screenshot,
+            defer_loading=True,
         ),
         ToolSpec(
             name="visionpro_app_launch",
             description="Launch a visionOS app by bundle ID (simctl launch).",
             args_model=VisionProAppLaunchArgs,
-            handler=_visionpro_app_launch, defer_loading=True,
+            handler=_visionpro_app_launch,
+            defer_loading=True,
         ),
         ToolSpec(
             name="visionpro_get_logs",
             description="Read visionOS unified logs (filterable by predicate + window).",
             args_model=VisionProGetLogsArgs,
-            handler=_visionpro_get_logs, defer_loading=True,
+            handler=_visionpro_get_logs,
+            defer_loading=True,
         ),
         ToolSpec(
             name="visionpro_find_text",
@@ -270,7 +298,8 @@ def build_visionpro_tools() -> list[ToolSpec[Any]]:
                 "(requires vision_runtime; returns 'unwired' otherwise)."
             ),
             args_model=VisionProFindTextArgs,
-            handler=_visionpro_find_text, defer_loading=True,
+            handler=_visionpro_find_text,
+            defer_loading=True,
         ),
         ToolSpec(
             name="visionpro_click_at",
@@ -279,6 +308,7 @@ def build_visionpro_tools() -> list[ToolSpec[Any]]:
                 "simulator window; operator must keep the sim window focused."
             ),
             args_model=VisionProClickAtArgs,
-            handler=_visionpro_click_at, defer_loading=True,
+            handler=_visionpro_click_at,
+            defer_loading=True,
         ),
     ]

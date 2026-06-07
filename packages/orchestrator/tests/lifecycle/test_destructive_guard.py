@@ -70,9 +70,7 @@ def whitelist() -> DestructiveWhitelist:
                 id="file_destructive",
                 description="rm -rf",
                 confirm_window_hours=4,
-                match_any=(
-                    MatchRule(tool="rm", args_contains=("-rf",)),
-                ),
+                match_any=(MatchRule(tool="rm", args_contains=("-rf",)),),
             ),
         )
     )

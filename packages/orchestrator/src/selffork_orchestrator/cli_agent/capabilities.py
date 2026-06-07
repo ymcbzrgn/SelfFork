@@ -86,9 +86,7 @@ class CliCapability:
     def has_model(self, model: str) -> bool:
         return model in self.models
 
-    def model_args(
-        self, *, model: str | None, effort: str | None
-    ) -> list[str]:
+    def model_args(self, *, model: str | None, effort: str | None) -> list[str]:
         """CLI args injecting ``model`` + ``effort`` (flag/config_kv only).
 
         ``settings_file`` effort (gemini thinking) and ``none`` effort
@@ -208,9 +206,7 @@ CAPABILITIES: dict[str, CliCapability] = {
         models=("MiniMax-M2.7", "MiniMax-M2.7-highspeed"),
         default_model="MiniMax-M2.7",
         model_flag="--model",
-        effort=EffortSpec(
-            apply="none", levels=(), default=None, param=None
-        ),
+        effort=EffortSpec(apply="none", levels=(), default=None, param=None),
         per_model_quota=False,
     ),
 }
@@ -238,10 +234,6 @@ def candidate_pairs(
         cap = CAPABILITIES.get(cli)
         if cap is None:
             continue
-        models = (
-            models_override.get(cli, cap.models)
-            if models_override is not None
-            else cap.models
-        )
+        models = models_override.get(cli, cap.models) if models_override is not None else cap.models
         pairs.extend((cli, model) for model in models)
     return pairs

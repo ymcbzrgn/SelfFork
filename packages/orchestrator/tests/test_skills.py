@@ -55,9 +55,7 @@ def test_list_skills_returns_subdirs_sorted_and_ignores_files(
     canonical = tmp_path / "skills"
     _seed_canonical(canonical, ["beta", "alpha", "gamma"])
     (canonical / "README.md").write_text("not a skill", encoding="utf-8")
-    installer = SkillInstaller(
-        canonical_dir=canonical, target_dirs=[tmp_path / "t1"]
-    )
+    installer = SkillInstaller(canonical_dir=canonical, target_dirs=[tmp_path / "t1"])
     names = [p.name for p in installer.list_skills()]
     assert names == ["alpha", "beta", "gamma"]
 
@@ -166,9 +164,7 @@ def test_sync_does_not_overwrite_existing_correct_link_or_conflict(
     t_bad.mkdir()
     (t_bad / "s1").write_text("blocker", encoding="utf-8")
     t_ok = tmp_path / "target-ok"
-    installer = SkillInstaller(
-        canonical_dir=canonical, target_dirs=[t_bad, t_ok]
-    )
+    installer = SkillInstaller(canonical_dir=canonical, target_dirs=[t_bad, t_ok])
     report = installer.sync_all()
     assert "s1" in report.conflicts  # t_bad
     assert "s1" in report.installed  # t_ok succeeded

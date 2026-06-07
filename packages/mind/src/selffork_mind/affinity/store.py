@@ -125,15 +125,11 @@ class CliAffinityStore(Protocol):
         one outcome, persist, and return the updated record."""
         ...
 
-    async def get(
-        self, *, task_type: str | None, cli: str, model: str
-    ) -> AffinityRecord | None:
+    async def get(self, *, task_type: str | None, cli: str, model: str) -> AffinityRecord | None:
         """Fetch one exact ``(task_type, cli, model)`` cell, or ``None``."""
         ...
 
-    async def aggregate_cli_model(
-        self, *, cli: str, model: str
-    ) -> AffinityRecord | None:
+    async def aggregate_cli_model(self, *, cli: str, model: str) -> AffinityRecord | None:
         """Sum every ``task_type`` row for ``(cli, model)`` (``task_type``
         + ``None`` marker), or ``None`` when unseen."""
         ...
@@ -203,17 +199,11 @@ class InMemoryCliAffinityStore:
         self._rows[key] = record
         return record
 
-    async def get(
-        self, *, task_type: str | None, cli: str, model: str
-    ) -> AffinityRecord | None:
+    async def get(self, *, task_type: str | None, cli: str, model: str) -> AffinityRecord | None:
         return self._rows.get((_to_sentinel(task_type), cli, model))
 
-    async def aggregate_cli_model(
-        self, *, cli: str, model: str
-    ) -> AffinityRecord | None:
-        matched = [
-            r for (_, c, m), r in self._rows.items() if c == cli and m == model
-        ]
+    async def aggregate_cli_model(self, *, cli: str, model: str) -> AffinityRecord | None:
+        matched = [r for (_, c, m), r in self._rows.items() if c == cli and m == model]
         if not matched:
             return None
         return self._fold(matched, cli=cli, model=model)
@@ -227,9 +217,7 @@ class InMemoryCliAffinityStore:
     async def list_records(self) -> list[AffinityRecord]:
         return list(self._rows.values())
 
-    def _fold(
-        self, rows: list[AffinityRecord], *, cli: str, model: str | None
-    ) -> AffinityRecord:
+    def _fold(self, rows: list[AffinityRecord], *, cli: str, model: str | None) -> AffinityRecord:
         last_used = max(
             (r.last_used for r in rows if r.last_used is not None),
             default=None,
@@ -304,14 +292,16 @@ class DuckDBCliAffinityStore:
         stored_task = _to_sentinel(task_type)
         async with self._lock:
             self._require_open()
-            existing = await anyio.to_thread.run_sync(
-                self._fetch_counts, stored_task, cli, model
-            )
-            old_s, old_f, old_t, old_o = existing if existing else (
-                0.0,
-                0.0,
-                0.0,
-                0.0,
+            existing = await anyio.to_thread.run_sync(self._fetch_counts, stored_task, cli, model)
+            old_s, old_f, old_t, old_o = (
+                existing
+                if existing
+                else (
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                )
             )
             new_s, new_f, new_t, new_o = _decayed(
                 old_success=old_s,
@@ -345,15 +335,11 @@ class DuckDBCliAffinityStore:
             last_used=moment,
         )
 
-    async def get(
-        self, *, task_type: str | None, cli: str, model: str
-    ) -> AffinityRecord | None:
+    async def get(self, *, task_type: str | None, cli: str, model: str) -> AffinityRecord | None:
         stored_task = _to_sentinel(task_type)
         async with self._lock:
             self._require_open()
-            counts = await anyio.to_thread.run_sync(
-                self._fetch_full, stored_task, cli, model
-            )
+            counts = await anyio.to_thread.run_sync(self._fetch_full, stored_task, cli, model)
         if counts is None:
             return None
         success, failure, turns, observations, last_used = counts
@@ -369,14 +355,10 @@ class DuckDBCliAffinityStore:
             last_used=last_used,
         )
 
-    async def aggregate_cli_model(
-        self, *, cli: str, model: str
-    ) -> AffinityRecord | None:
+    async def aggregate_cli_model(self, *, cli: str, model: str) -> AffinityRecord | None:
         async with self._lock:
             self._require_open()
-            agg = await anyio.to_thread.run_sync(
-                self._fetch_aggregate_cli_model, cli, model
-            )
+            agg = await anyio.to_thread.run_sync(self._fetch_aggregate_cli_model, cli, model)
         if agg is None:
             return None
         success, failure, turns, observations, last_used = agg

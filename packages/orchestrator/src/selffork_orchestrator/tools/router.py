@@ -114,10 +114,7 @@ def _set_cli_override_handler(
     if args.model is not None and not cap.has_model(args.model):
         return {
             "applied": False,
-            "error": (
-                f"cli {args.cli!r} has no model {args.model!r}; "
-                f"models: {list(cap.models)}"
-            ),
+            "error": (f"cli {args.cli!r} has no model {args.model!r}; models: {list(cap.models)}"),
         }
     override = store.set(
         workspace=args.workspace,
@@ -246,9 +243,7 @@ def _cli_config_handler(
     cfg = store.read()
     return {
         "efforts": dict(cfg.efforts),
-        "enabled_models": {
-            cli: list(models) for cli, models in cfg.enabled_models.items()
-        },
+        "enabled_models": {cli: list(models) for cli, models in cfg.enabled_models.items()},
         "resolved_efforts": {cli: store.effort_for(cli) for cli in CAPABILITIES},
     }
 

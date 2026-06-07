@@ -170,9 +170,7 @@ class InboundRouter:
         voice_backend: VoiceBackend | None = None,
         audit_writer: AuditWriter | None = None,
         structured_question_store: (
-            PendingStructuredQuestionStore
-            | SqlitePendingStructuredQuestionStore
-            | None
+            PendingStructuredQuestionStore | SqlitePendingStructuredQuestionStore | None
         ) = None,
     ) -> None:
         self._allowlist = allowlist
@@ -181,16 +179,12 @@ class InboundRouter:
         self._drafts = drafts_store
         self._pause = pause_signal
         self._extend_hours = extend_hours
-        self._conversation_factory = (
-            conversation_factory or self._default_conversation_factory
-        )
+        self._conversation_factory = conversation_factory or self._default_conversation_factory
         self._cli_override = cli_override_store
         # S-Bridge: voice inbound STT backend. ``None`` ⇒ NullVoiceBackend
         # (Telegram voice messages reply with a friendly "not configured"
         # hint instead of silently dropping). Real STT plugs in here.
-        self._voice = (
-            voice_backend if voice_backend is not None else NullVoiceBackend()
-        )
+        self._voice = voice_backend if voice_backend is not None else NullVoiceBackend()
         # S-Bridge: ``/correct`` Telegram command writes a
         # :class:`Correction` row next to the heartbeat audit log. ``None``
         # disables the command cleanly (test contexts that don't need
@@ -243,9 +237,7 @@ class InboundRouter:
         action, confirmation_id = parsed
         return await self._apply_callback(action, confirmation_id)
 
-    async def _apply_callback(
-        self, action: CallbackAction, cid: str
-    ) -> CallbackOutcome:
+    async def _apply_callback(self, action: CallbackAction, cid: str) -> CallbackOutcome:
         if action == "approve":
             entry = self._pending.approve(cid, by="operator-telegram")
             return CallbackOutcome(
@@ -263,15 +255,9 @@ class InboundRouter:
                 handled=entry is not None,
             )
         if action == "extend":
-            entry = self._pending.extend(
-                cid, hours=self._extend_hours, by="operator-telegram"
-            )
+            entry = self._pending.extend(cid, hours=self._extend_hours, by="operator-telegram")
             return CallbackOutcome(
-                ack=(
-                    f"⏳ Extended by {self._extend_hours}h"
-                    if entry
-                    else "(not found)"
-                ),
+                ack=(f"⏳ Extended by {self._extend_hours}h" if entry else "(not found)"),
                 entry=entry,
                 action=action,
                 handled=entry is not None,
@@ -307,9 +293,7 @@ class InboundRouter:
     ) -> CommandOutcome:
         """Translate ``/command arg1 arg2`` into a store mutation."""
         if not self.is_allowed(chat_id):
-            return CommandOutcome(
-                reply="⛔ not authorised", command=command, handled=False
-            )
+            return CommandOutcome(reply="⛔ not authorised", command=command, handled=False)
         norm = command.lstrip("/").lower()
         if norm == "pause":
             self._pause.request_pause(reason="telegram")
@@ -320,9 +304,7 @@ class InboundRouter:
             )
         if norm == "resume":
             self._pause.clear()
-            return CommandOutcome(
-                reply="▶️ Pause cleared.", command=norm, handled=True
-            )
+            return CommandOutcome(reply="▶️ Pause cleared.", command=norm, handled=True)
         if norm == "workspace":
             if not args:
                 return CommandOutcome(
@@ -332,9 +314,7 @@ class InboundRouter:
                 )
             slug = args[0]
             reply = await self._set_active_workspace(slug)
-            return CommandOutcome(
-                reply=reply, command=norm, handled=True
-            )
+            return CommandOutcome(reply=reply, command=norm, handled=True)
         if norm == "cli":
             return await self._handle_cli_override(args)
         if norm == "correct":
@@ -352,9 +332,7 @@ class InboundRouter:
                 )
             cid = args[0]
             cb = await self._apply_callback(norm, cid)  # type: ignore[arg-type]
-            return CommandOutcome(
-                reply=cb.ack, command=norm, handled=cb.handled
-            )
+            return CommandOutcome(reply=cb.ack, command=norm, handled=cb.handled)
         if norm == "extend":
             if not args:
                 return CommandOutcome(
@@ -373,15 +351,9 @@ class InboundRouter:
                         command=norm,
                         handled=False,
                     )
-            entry = self._pending.extend(
-                cid, hours=hours, by="operator-telegram"
-            )
+            entry = self._pending.extend(cid, hours=hours, by="operator-telegram")
             return CommandOutcome(
-                reply=(
-                    f"⏳ Extended by {hours}h"
-                    if entry
-                    else "(not found)"
-                ),
+                reply=(f"⏳ Extended by {hours}h" if entry else "(not found)"),
                 command=norm,
                 handled=entry is not None,
             )
@@ -420,10 +392,7 @@ class InboundRouter:
             )
         if len(args) < 2:
             return CommandOutcome(
-                reply=(
-                    "Usage: /correct <audit_idempotency_key> "
-                    "<correction text>"
-                ),
+                reply=("Usage: /correct <audit_idempotency_key> <correction text>"),
                 command="correct",
                 handled=False,
             )
@@ -454,10 +423,7 @@ class InboundRouter:
                 extra={"key": key, "reason": str(exc)},
             )
             return CommandOutcome(
-                reply=(
-                    "📝 /correct: write failed — check disk space "
-                    "and audit log permissions."
-                ),
+                reply=("📝 /correct: write failed — check disk space and audit log permissions."),
                 command="correct",
                 handled=False,
             )
@@ -521,15 +487,15 @@ class InboundRouter:
             )
         return CommandOutcome(
             reply=(
-                f"✓ Answer recorded for {correlation_id}. Self Jr will "
-                "resume on its next round."
+                f"✓ Answer recorded for {correlation_id}. Self Jr will resume on its next round."
             ),
             command="answer",
             handled=True,
         )
 
     async def _handle_cancel_question(
-        self, args: list[str],
+        self,
+        args: list[str],
     ) -> CommandOutcome:
         """Cancel a pending structured question (Self Jr unblocks with no answer).
 
@@ -564,8 +530,7 @@ class InboundRouter:
             )
         return CommandOutcome(
             reply=(
-                f"✓ Cancelled {correlation_id}. Self Jr will proceed "
-                "without an operator answer."
+                f"✓ Cancelled {correlation_id}. Self Jr will proceed without an operator answer."
             ),
             command="cancelq",
             handled=True,
@@ -622,10 +587,7 @@ class InboundRouter:
             # instead of silently dropping it.
             if not cap.has_model(rest[0]):
                 return CommandOutcome(
-                    reply=(
-                        f"cli {cli!r} has no model {rest[0]!r}; "
-                        f"models: {list(cap.models)}"
-                    ),
+                    reply=(f"cli {cli!r} has no model {rest[0]!r}; models: {list(cap.models)}"),
                     command="cli",
                     handled=False,
                 )
@@ -643,19 +605,10 @@ class InboundRouter:
                 command="cli",
                 handled=False,
             )
-        override = store.set(
-            workspace=workspace, cli=cli, model=model, sticky=True
-        )
-        label = (
-            override.cli
-            if override.model is None
-            else f"{override.cli} ({override.model})"
-        )
+        override = store.set(workspace=workspace, cli=cli, model=model, sticky=True)
+        label = override.cli if override.model is None else f"{override.cli} ({override.model})"
         return CommandOutcome(
-            reply=(
-                f"📌 {workspace}: {label} (sticky). "
-                "Applies to the next selection."
-            ),
+            reply=(f"📌 {workspace}: {label} (sticky). Applies to the next selection."),
             command="cli",
             handled=True,
         )
@@ -689,9 +642,7 @@ class InboundRouter:
         if self._talk is None:
             msg = "_default_conversation_factory: TalkStore is not configured"
             raise RuntimeError(msg)
-        return await self._talk.create_conversation(
-            workspace_slug=workspace_slug, title=title
-        )
+        return await self._talk.create_conversation(workspace_slug=workspace_slug, title=title)
 
     # ── voice messages (S-Bridge — Telegram-voice-only modality) ──────
 
@@ -763,10 +714,7 @@ class InboundRouter:
             return MessageOutcome(
                 target="dropped",
                 workspace_slug=None,
-                reply=(
-                    "🎙️ Empty transcription — the clip might be "
-                    "silent. Try again."
-                ),
+                reply=("🎙️ Empty transcription — the clip might be silent. Try again."),
             )
         # Delegate to the existing text path; same workspace routing +
         # Talk-store ingest + drafts fallback come along for free.
@@ -813,10 +761,7 @@ class InboundRouter:
             return MessageOutcome(
                 target="drafts",
                 workspace_slug=None,
-                reply=(
-                    "📝 No active workspace — saved as draft, "
-                    "I'll surface it in Talk."
-                ),
+                reply=("📝 No active workspace — saved as draft, I'll surface it in Talk."),
             )
         conversations = await self._talk.list_conversations()
         target_conv = next(
@@ -824,9 +769,7 @@ class InboundRouter:
             None,
         )
         if target_conv is None:
-            target_conv = await self._conversation_factory(
-                slug, f"Telegram: {slug}"
-            )
+            target_conv = await self._conversation_factory(slug, f"Telegram: {slug}")
         await self._talk.append_message(
             conversation_id=target_conv.id,
             role="operator",

@@ -159,14 +159,10 @@ class TestActivityEndpoint:
             ],
         )
         rows = client.get("/api/activity").json()["rows"]
-        req = next(
-            r for r in rows if r["event_kind"] == "destructive_confirm_requested"
-        )
+        req = next(r for r in rows if r["event_kind"] == "destructive_confirm_requested")
         assert req["severity"] == "warn"
         assert "rm -rf build" in req["summary"]
-        assert any(
-            r["event_kind"] == "destructive_confirm_resolved" for r in rows
-        )
+        assert any(r["event_kind"] == "destructive_confirm_resolved" for r in rows)
 
     def test_heartbeat_tick_row(self, tmp_path: Path) -> None:
         client, config = _client(tmp_path)
@@ -213,9 +209,7 @@ class TestActivityEndpoint:
                 ),
             ],
         )
-        rows = client.get("/api/activity", params={"event_kind": "tool_call"}).json()[
-            "rows"
-        ]
+        rows = client.get("/api/activity", params={"event_kind": "tool_call"}).json()["rows"]
         assert rows
         assert all(r["event_kind"] == "tool_call" for r in rows)
 

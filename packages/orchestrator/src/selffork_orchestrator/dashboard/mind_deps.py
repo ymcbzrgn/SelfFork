@@ -96,10 +96,7 @@ def build_provenance(
         return None
     if project_slug is not None:
         log_path = (
-            Path("~/.selffork/projects").expanduser()
-            / project_slug
-            / "mind"
-            / "provenance.jsonl"
+            Path("~/.selffork/projects").expanduser() / project_slug / "mind" / "provenance.jsonl"
         )
     else:
         log_path = Path(config.provenance_path).expanduser()
@@ -115,12 +112,7 @@ def build_projection(
     if not config.projection_root:
         return None
     if project_slug is not None:
-        root = (
-            Path("~/.selffork/projects").expanduser()
-            / project_slug
-            / "mind"
-            / "markdown"
-        )
+        root = Path("~/.selffork/projects").expanduser() / project_slug / "mind" / "markdown"
     else:
         root = Path(config.projection_root).expanduser()
     return MarkdownProjection(MarkdownProjectionConfig(root=root))

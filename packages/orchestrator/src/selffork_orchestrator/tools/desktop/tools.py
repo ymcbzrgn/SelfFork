@@ -53,7 +53,8 @@ class DesktopTypeArgs(ToolArgs):
 
 class DesktopPressKeyArgs(ToolArgs):
     key_combo: str = Field(
-        min_length=1, max_length=128,
+        min_length=1,
+        max_length=128,
         description="e.g. 'cmd+t', 'enter', 'cmd+shift+4'",
     )
 
@@ -109,7 +110,8 @@ class DesktopSayArgs(ToolArgs):
 async def _desktop_click(ctx: ToolContext, args: DesktopClickArgs) -> dict[str, Any]:
     drv = _require_macos_driver(ctx)
     return await _invoke_desktop(
-        ctx, action_type="desktop.click",
+        ctx,
+        action_type="desktop.click",
         target_uri=f"coords:{args.x},{args.y}",
         args_summary={"x": args.x, "y": args.y},
         coro_factory=lambda: drv.click("", bbox=(args.x, args.y, 1, 1)),
@@ -119,7 +121,8 @@ async def _desktop_click(ctx: ToolContext, args: DesktopClickArgs) -> dict[str, 
 async def _desktop_double_click(ctx: ToolContext, args: DesktopDoubleClickArgs) -> dict[str, Any]:
     drv = _require_macos_driver(ctx)
     return await _invoke_desktop(
-        ctx, action_type="desktop.double_click",
+        ctx,
+        action_type="desktop.double_click",
         target_uri=f"coords:{args.x},{args.y}",
         args_summary={"x": args.x, "y": args.y},
         coro_factory=lambda: drv.double_click(args.x, args.y),
@@ -129,7 +132,8 @@ async def _desktop_double_click(ctx: ToolContext, args: DesktopDoubleClickArgs) 
 async def _desktop_right_click(ctx: ToolContext, args: DesktopRightClickArgs) -> dict[str, Any]:
     drv = _require_macos_driver(ctx)
     return await _invoke_desktop(
-        ctx, action_type="desktop.right_click",
+        ctx,
+        action_type="desktop.right_click",
         target_uri=f"coords:{args.x},{args.y}",
         args_summary={"x": args.x, "y": args.y},
         coro_factory=lambda: drv.right_click(args.x, args.y),
@@ -139,7 +143,8 @@ async def _desktop_right_click(ctx: ToolContext, args: DesktopRightClickArgs) ->
 async def _desktop_type(ctx: ToolContext, args: DesktopTypeArgs) -> dict[str, Any]:
     drv = _require_macos_driver(ctx)
     return await _invoke_desktop(
-        ctx, action_type="desktop.type",
+        ctx,
+        action_type="desktop.type",
         target_uri=None,
         args_summary={"text_len": len(args.text)},
         coro_factory=lambda: drv.type_text(args.text),
@@ -149,7 +154,8 @@ async def _desktop_type(ctx: ToolContext, args: DesktopTypeArgs) -> dict[str, An
 async def _desktop_press_key(ctx: ToolContext, args: DesktopPressKeyArgs) -> dict[str, Any]:
     drv = _require_macos_driver(ctx)
     return await _invoke_desktop(
-        ctx, action_type="desktop.press_key",
+        ctx,
+        action_type="desktop.press_key",
         target_uri=None,
         args_summary={"key_combo": args.key_combo},
         coro_factory=lambda: drv.press_key(args.key_combo),
@@ -166,7 +172,9 @@ async def _desktop_screenshot(ctx: ToolContext, args: DesktopScreenshotArgs) -> 
         if store is not None:
             try:
                 ref_obj = store.write(
-                    png, session_id=ctx.session_id, project_slug=ctx.project_slug,
+                    png,
+                    session_id=ctx.session_id,
+                    project_slug=ctx.project_slug,
                 )
                 ref = {
                     "path": str(ref_obj.path),
@@ -178,13 +186,17 @@ async def _desktop_screenshot(ctx: ToolContext, args: DesktopScreenshotArgs) -> 
         return {"bytes_size": len(png), "ref": ref}
 
     return await _invoke_desktop(
-        ctx, action_type="desktop.screenshot",
-        target_uri=None, args_summary={}, coro_factory=_shot,
+        ctx,
+        action_type="desktop.screenshot",
+        target_uri=None,
+        args_summary={},
+        coro_factory=_shot,
     )
 
 
 async def _desktop_screenshot_region(
-    ctx: ToolContext, args: DesktopScreenshotRegionArgs,
+    ctx: ToolContext,
+    args: DesktopScreenshotRegionArgs,
 ) -> dict[str, Any]:
     drv = _require_macos_driver(ctx)
 
@@ -193,17 +205,22 @@ async def _desktop_screenshot_region(
         return {"bytes_size": len(png)}
 
     return await _invoke_desktop(
-        ctx, action_type="desktop.screenshot_region",
+        ctx,
+        action_type="desktop.screenshot_region",
         target_uri=None,
         args_summary={
-            "x": args.x, "y": args.y, "width": args.width, "height": args.height,
+            "x": args.x,
+            "y": args.y,
+            "width": args.width,
+            "height": args.height,
         },
         coro_factory=_shot,
     )
 
 
 async def _desktop_get_active_app(
-    ctx: ToolContext, args: DesktopGetActiveAppArgs,
+    ctx: ToolContext,
+    args: DesktopGetActiveAppArgs,
 ) -> dict[str, Any]:
     drv = _require_macos_driver(ctx)
 
@@ -212,8 +229,11 @@ async def _desktop_get_active_app(
         return {"app": info}
 
     return await _invoke_desktop(
-        ctx, action_type="desktop.get_active_app",
-        target_uri=None, args_summary={}, coro_factory=_get,
+        ctx,
+        action_type="desktop.get_active_app",
+        target_uri=None,
+        args_summary={},
+        coro_factory=_get,
     )
 
 
@@ -225,13 +245,17 @@ async def _desktop_list_apps(ctx: ToolContext, args: DesktopListAppsArgs) -> dic
         return {"count": len(apps), "apps": apps[:200]}
 
     return await _invoke_desktop(
-        ctx, action_type="desktop.list_apps",
-        target_uri=None, args_summary={}, coro_factory=_list,
+        ctx,
+        action_type="desktop.list_apps",
+        target_uri=None,
+        args_summary={},
+        coro_factory=_list,
     )
 
 
 async def _desktop_list_windows(
-    ctx: ToolContext, args: DesktopListWindowsArgs,
+    ctx: ToolContext,
+    args: DesktopListWindowsArgs,
 ) -> dict[str, Any]:
     drv = _require_macos_driver(ctx)
 
@@ -240,7 +264,8 @@ async def _desktop_list_windows(
         return {"count": len(wins), "windows": wins[:200]}
 
     return await _invoke_desktop(
-        ctx, action_type="desktop.list_windows",
+        ctx,
+        action_type="desktop.list_windows",
         target_uri=args.app_name,
         args_summary={"app_name": args.app_name},
         coro_factory=_list,
@@ -248,11 +273,13 @@ async def _desktop_list_windows(
 
 
 async def _desktop_focus_window(
-    ctx: ToolContext, args: DesktopFocusWindowArgs,
+    ctx: ToolContext,
+    args: DesktopFocusWindowArgs,
 ) -> dict[str, Any]:
     drv = _require_macos_driver(ctx)
     return await _invoke_desktop(
-        ctx, action_type="desktop.focus_window",
+        ctx,
+        action_type="desktop.focus_window",
         target_uri=args.app_name,
         args_summary={"app_name": args.app_name, "window_title": args.window_title},
         coro_factory=lambda: drv.focus_window(args.app_name, args.window_title),
@@ -260,7 +287,8 @@ async def _desktop_focus_window(
 
 
 async def _desktop_get_clipboard(
-    ctx: ToolContext, args: DesktopGetClipboardArgs,
+    ctx: ToolContext,
+    args: DesktopGetClipboardArgs,
 ) -> dict[str, Any]:
     drv = _require_macos_driver(ctx)
 
@@ -269,17 +297,22 @@ async def _desktop_get_clipboard(
         return {"text": text, "len": len(text)}
 
     return await _invoke_desktop(
-        ctx, action_type="desktop.get_clipboard",
-        target_uri=None, args_summary={}, coro_factory=_get,
+        ctx,
+        action_type="desktop.get_clipboard",
+        target_uri=None,
+        args_summary={},
+        coro_factory=_get,
     )
 
 
 async def _desktop_set_clipboard(
-    ctx: ToolContext, args: DesktopSetClipboardArgs,
+    ctx: ToolContext,
+    args: DesktopSetClipboardArgs,
 ) -> dict[str, Any]:
     drv = _require_macos_driver(ctx)
     return await _invoke_desktop(
-        ctx, action_type="desktop.set_clipboard",
+        ctx,
+        action_type="desktop.set_clipboard",
         target_uri=None,
         args_summary={"text_len": len(args.text)},
         coro_factory=lambda: drv.set_clipboard(args.text),
@@ -287,14 +320,17 @@ async def _desktop_set_clipboard(
 
 
 async def _desktop_notification(
-    ctx: ToolContext, args: DesktopNotificationArgs,
+    ctx: ToolContext,
+    args: DesktopNotificationArgs,
 ) -> dict[str, Any]:
     drv = _require_macos_driver(ctx)
     return await _invoke_desktop(
-        ctx, action_type="desktop.notification",
+        ctx,
+        action_type="desktop.notification",
         target_uri=None,
         args_summary={
-            "title_len": len(args.title), "body_len": len(args.body),
+            "title_len": len(args.title),
+            "body_len": len(args.body),
             "has_subtitle": args.subtitle is not None,
         },
         coro_factory=lambda: drv.notification(args.title, args.body, args.subtitle),
@@ -304,10 +340,13 @@ async def _desktop_notification(
 async def _desktop_say(ctx: ToolContext, args: DesktopSayArgs) -> dict[str, Any]:
     drv = _require_macos_driver(ctx)
     return await _invoke_desktop(
-        ctx, action_type="desktop.say",
+        ctx,
+        action_type="desktop.say",
         target_uri=None,
         args_summary={
-            "text_len": len(args.text), "voice": args.voice, "rate": args.rate,
+            "text_len": len(args.text),
+            "voice": args.voice,
+            "rate": args.rate,
         },
         coro_factory=lambda: drv.say(args.text, voice=args.voice, rate=args.rate),
     )
@@ -319,100 +358,109 @@ def build_desktop_tools_inner() -> list[ToolSpec[Any]]:
         ToolSpec(
             name="desktop_click",
             description="Click at pixel (x, y) on the macOS desktop.",
-            args_model=DesktopClickArgs, handler=_desktop_click, defer_loading=False,
+            args_model=DesktopClickArgs,
+            handler=_desktop_click,
+            defer_loading=False,
         ),
         ToolSpec(
             name="desktop_type",
             description="Type text on the active macOS focus.",
-            args_model=DesktopTypeArgs, handler=_desktop_type, defer_loading=False,
+            args_model=DesktopTypeArgs,
+            handler=_desktop_type,
+            defer_loading=False,
         ),
         ToolSpec(
             name="desktop_screenshot",
             description=(
-                "Capture full-screen macOS screenshot; persists to "
-                "ScreenshotStore when wired."
+                "Capture full-screen macOS screenshot; persists to ScreenshotStore when wired."
             ),
-            args_model=DesktopScreenshotArgs, handler=_desktop_screenshot,
+            args_model=DesktopScreenshotArgs,
+            handler=_desktop_screenshot,
             defer_loading=False,
         ),
         ToolSpec(
             name="desktop_press_key",
-            description=(
-                "Press a key combo on macOS (e.g. 'cmd+t', 'enter', "
-                "'cmd+shift+4')."
-            ),
-            args_model=DesktopPressKeyArgs, handler=_desktop_press_key,
+            description=("Press a key combo on macOS (e.g. 'cmd+t', 'enter', 'cmd+shift+4')."),
+            args_model=DesktopPressKeyArgs,
+            handler=_desktop_press_key,
             defer_loading=False,
         ),
         ToolSpec(
             name="desktop_get_active_app",
             description="Read the frontmost macOS app (name + bundle ID).",
-            args_model=DesktopGetActiveAppArgs, handler=_desktop_get_active_app,
+            args_model=DesktopGetActiveAppArgs,
+            handler=_desktop_get_active_app,
             defer_loading=False,
         ),
         # Deferred (10)
         ToolSpec(
             name="desktop_double_click",
             description="Double-click at pixel (x, y).",
-            args_model=DesktopDoubleClickArgs, handler=_desktop_double_click,
+            args_model=DesktopDoubleClickArgs,
+            handler=_desktop_double_click,
             defer_loading=True,
         ),
         ToolSpec(
             name="desktop_right_click",
             description="Right-click (context menu) at pixel (x, y).",
-            args_model=DesktopRightClickArgs, handler=_desktop_right_click,
+            args_model=DesktopRightClickArgs,
+            handler=_desktop_right_click,
             defer_loading=True,
         ),
         ToolSpec(
             name="desktop_screenshot_region",
             description="Capture a screen rect (x, y, w, h) as PNG bytes.",
-            args_model=DesktopScreenshotRegionArgs, handler=_desktop_screenshot_region,
+            args_model=DesktopScreenshotRegionArgs,
+            handler=_desktop_screenshot_region,
             defer_loading=True,
         ),
         ToolSpec(
             name="desktop_list_apps",
             description="List all running (non-background) macOS apps with bundle IDs.",
-            args_model=DesktopListAppsArgs, handler=_desktop_list_apps,
+            args_model=DesktopListAppsArgs,
+            handler=_desktop_list_apps,
             defer_loading=True,
         ),
         ToolSpec(
             name="desktop_list_windows",
             description="List windows of the active app (or a specified app by name).",
-            args_model=DesktopListWindowsArgs, handler=_desktop_list_windows,
+            args_model=DesktopListWindowsArgs,
+            handler=_desktop_list_windows,
             defer_loading=True,
         ),
         ToolSpec(
             name="desktop_focus_window",
             description="Focus a specific app window (cua-style AXRaise; no modal steal).",
-            args_model=DesktopFocusWindowArgs, handler=_desktop_focus_window,
+            args_model=DesktopFocusWindowArgs,
+            handler=_desktop_focus_window,
             defer_loading=True,
         ),
         ToolSpec(
             name="desktop_get_clipboard",
             description="Read the macOS clipboard (pbpaste).",
-            args_model=DesktopGetClipboardArgs, handler=_desktop_get_clipboard,
+            args_model=DesktopGetClipboardArgs,
+            handler=_desktop_get_clipboard,
             defer_loading=True,
         ),
         ToolSpec(
             name="desktop_set_clipboard",
             description="Write the macOS clipboard (pbcopy).",
-            args_model=DesktopSetClipboardArgs, handler=_desktop_set_clipboard,
+            args_model=DesktopSetClipboardArgs,
+            handler=_desktop_set_clipboard,
             defer_loading=True,
         ),
         ToolSpec(
             name="desktop_notification",
-            description=(
-                "Display a macOS notification with title + body (+optional subtitle)."
-            ),
-            args_model=DesktopNotificationArgs, handler=_desktop_notification,
+            description=("Display a macOS notification with title + body (+optional subtitle)."),
+            args_model=DesktopNotificationArgs,
+            handler=_desktop_notification,
             defer_loading=True,
         ),
         ToolSpec(
             name="desktop_say",
-            description=(
-                "Speak text via macOS `say` (optional voice / rate)."
-            ),
-            args_model=DesktopSayArgs, handler=_desktop_say,
+            description=("Speak text via macOS `say` (optional voice / rate)."),
+            args_model=DesktopSayArgs,
+            handler=_desktop_say,
             defer_loading=True,
         ),
     ]

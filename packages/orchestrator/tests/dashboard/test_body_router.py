@@ -59,9 +59,7 @@ def test_get_session_not_found(client: TestClient) -> None:
 def test_stop_session_kills(client: TestClient, watchdog: BodyWatchdog) -> None:
     warden = PermissionWarden(mode=WardenMode.WORKSPACE_WRITE)
     watchdog.register(session_id="sess-B", warden=warden)
-    response = client.post(
-        "/api/body/sessions/sess-B/stop", json={"reason": "ui_button"}
-    )
+    response = client.post("/api/body/sessions/sess-B/stop", json={"reason": "ui_button"})
     assert response.status_code == 202
     assert response.json() == {"status": "killed"}
 
@@ -70,17 +68,13 @@ def test_stop_session_already_killed(client: TestClient, watchdog: BodyWatchdog)
     warden = PermissionWarden(mode=WardenMode.WORKSPACE_WRITE)
     watchdog.register(session_id="sess-C", warden=warden)
     watchdog.kill_session("sess-C", "first")
-    response = client.post(
-        "/api/body/sessions/sess-C/stop", json={"reason": "second"}
-    )
+    response = client.post("/api/body/sessions/sess-C/stop", json={"reason": "second"})
     assert response.status_code == 202
     assert response.json() == {"status": "already_killed"}
 
 
 def test_stop_session_not_found_returns_404(client: TestClient) -> None:
-    response = client.post(
-        "/api/body/sessions/nope/stop", json={"reason": "x"}
-    )
+    response = client.post("/api/body/sessions/nope/stop", json={"reason": "x"})
     assert response.status_code == 404
 
 
@@ -90,9 +84,7 @@ def test_decide_permission_approves_pending_request() -> None:
     watchdog.register(session_id="sess-D", warden=warden)
     registry = {"sess-D": warden}
     fresh_app = FastAPI()
-    fresh_app.include_router(
-        build_body_router(watchdog=watchdog, warden_registry=registry)
-    )
+    fresh_app.include_router(build_body_router(watchdog=watchdog, warden_registry=registry))
     client = TestClient(fresh_app)
 
     req = build_request(

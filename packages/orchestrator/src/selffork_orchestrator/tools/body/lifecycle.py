@@ -41,7 +41,8 @@ class BodyStorageStateLoadArgs(ToolArgs):
 
 
 async def _body_app_launch(
-    ctx: ToolContext, args: BodyAppLaunchArgs,
+    ctx: ToolContext,
+    args: BodyAppLaunchArgs,
 ) -> dict[str, Any]:
     driver = _require_driver(ctx)
     return await _invoke(
@@ -54,14 +55,16 @@ async def _body_app_launch(
 
 
 async def _body_storage_state_save(
-    ctx: ToolContext, args: BodyStorageStateSaveArgs,
+    ctx: ToolContext,
+    args: BodyStorageStateSaveArgs,
 ) -> dict[str, Any]:
     driver = _require_driver(ctx)
     project = args.project_slug or ctx.project_slug
 
     async def _do() -> dict[str, Any]:
         result = await driver.storage_state_save(
-            provider=args.provider, project_slug=project,
+            provider=args.provider,
+            project_slug=project,
         )
         return {"path": str(result)} if result is not None else {}
 
@@ -75,14 +78,16 @@ async def _body_storage_state_save(
 
 
 async def _body_storage_state_load(
-    ctx: ToolContext, args: BodyStorageStateLoadArgs,
+    ctx: ToolContext,
+    args: BodyStorageStateLoadArgs,
 ) -> dict[str, Any]:
     driver = _require_driver(ctx)
     project = args.project_slug or ctx.project_slug
 
     async def _do() -> dict[str, Any]:
         result = await driver.storage_state_load(
-            provider=args.provider, project_slug=project,
+            provider=args.provider,
+            project_slug=project,
         )
         return {"loaded": bool(result)}
 
@@ -100,25 +105,19 @@ def build_lifecycle_tools() -> list[ToolSpec[Any]]:
     return [
         ToolSpec(
             name="body_app_launch",
-            description=(
-                "Launch a native app by bundle/package id (T2)."
-            ),
+            description=("Launch a native app by bundle/package id (T2)."),
             args_model=BodyAppLaunchArgs,
             handler=_body_app_launch,
         ),
         ToolSpec(
             name="body_storage_state_save",
-            description=(
-                "Persist provider auth storage_state for later sessions (T1)."
-            ),
+            description=("Persist provider auth storage_state for later sessions (T1)."),
             args_model=BodyStorageStateSaveArgs,
             handler=_body_storage_state_save,
         ),
         ToolSpec(
             name="body_storage_state_load",
-            description=(
-                "Load a previously saved provider storage_state (T1)."
-            ),
+            description=("Load a previously saved provider storage_state (T1)."),
             args_model=BodyStorageStateLoadArgs,
             handler=_body_storage_state_load,
         ),

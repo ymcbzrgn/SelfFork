@@ -46,9 +46,7 @@ class TheaterProducer(Protocol):
         """Register the loop as active (theater header + Live Loop hero)."""
         ...
 
-    async def cli_output(
-        self, text: str, *, kind: CliOutputKind = "stdout"
-    ) -> None:
+    async def cli_output(self, text: str, *, kind: CliOutputKind = "stdout") -> None:
         """Append one CLI output / jr-prompt chunk to the theater stream."""
         ...
 
@@ -67,9 +65,7 @@ class NullTheaterProducer:
     async def loop_started(self) -> None:
         return None
 
-    async def cli_output(
-        self, text: str, *, kind: CliOutputKind = "stdout"
-    ) -> None:
+    async def cli_output(self, text: str, *, kind: CliOutputKind = "stdout") -> None:
         return None
 
     async def thought(self, reply: str, *, turn: int) -> None:
@@ -114,9 +110,7 @@ class StoreTheaterProducer:
         except Exception as exc:  # best-effort observability
             _log.warning("theater_loop_started_failed", error=str(exc))
 
-    async def cli_output(
-        self, text: str, *, kind: CliOutputKind = "stdout"
-    ) -> None:
+    async def cli_output(self, text: str, *, kind: CliOutputKind = "stdout") -> None:
         try:
             await self._store.append_event(
                 workspace_slug=self._workspace_slug,
@@ -135,9 +129,7 @@ class StoreTheaterProducer:
             await self._store.touch_loop(
                 session_id=self._session_id,
                 turn=turn,
-                last_thought=(
-                    parsed.summary if parsed is not None else None
-                ),
+                last_thought=(parsed.summary if parsed is not None else None),
             )
             if parsed is not None:
                 await self._store.append_event(

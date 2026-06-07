@@ -22,15 +22,11 @@ def category() -> DestructiveCategory:
         id="prod_deploy",
         description="PROD push",
         confirm_window_hours=4,
-        match_any=(
-            MatchRule(tool="git", args_contains=("push", "origin", "main")),
-        ),
+        match_any=(MatchRule(tool="git", args_contains=("push", "origin", "main")),),
     )
 
 
-def test_reload_skips_known_lines(
-    tmp_path: Path, category: DestructiveCategory
-) -> None:
+def test_reload_skips_known_lines(tmp_path: Path, category: DestructiveCategory) -> None:
     """A second reload after one append only parses the new line."""
     audit_path = tmp_path / "pending.jsonl"
     producer = PendingConfirmationStore(audit_path=audit_path)
@@ -61,9 +57,7 @@ def test_reload_skips_known_lines(
     assert consumer._audit_file_offset > offset_after_first  # type: ignore[attr-defined]
 
 
-def test_reload_detects_truncation(
-    tmp_path: Path, category: DestructiveCategory
-) -> None:
+def test_reload_detects_truncation(tmp_path: Path, category: DestructiveCategory) -> None:
     """If the JSONL file shrinks (rotation), the consumer full-resets."""
     audit_path = tmp_path / "pending.jsonl"
     producer = PendingConfirmationStore(audit_path=audit_path)
@@ -109,9 +103,7 @@ def test_reload_detects_truncation(
     assert consumer.get("rot-xyz") is not None
 
 
-def test_reload_ignores_corrupt_lines(
-    tmp_path: Path, category: DestructiveCategory
-) -> None:
+def test_reload_ignores_corrupt_lines(tmp_path: Path, category: DestructiveCategory) -> None:
     """A JSONL line with invalid JSON / missing fields is skipped, but
     the offset still advances so the consumer doesn't loop forever."""
     audit_path = tmp_path / "pending.jsonl"

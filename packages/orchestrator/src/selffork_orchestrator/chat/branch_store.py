@@ -182,9 +182,7 @@ class BranchStore:
     async def list_branches(self, session_id: str) -> list[Branch]:
         async with self._lock:
             self._require_open()
-            rows = await anyio.to_thread.run_sync(
-                self._list_branch_rows, session_id
-            )
+            rows = await anyio.to_thread.run_sync(self._list_branch_rows, session_id)
         return [self._row_to_branch(r) for r in rows]
 
     def _list_branch_rows(self, session_id: str) -> list[tuple[object, ...]]:
@@ -217,9 +215,7 @@ class BranchStore:
     async def get_active_branch(self, session_id: str) -> Branch | None:
         async with self._lock:
             self._require_open()
-            row = await anyio.to_thread.run_sync(
-                self._fetch_active_row, session_id
-            )
+            row = await anyio.to_thread.run_sync(self._fetch_active_row, session_id)
         return self._row_to_branch(row) if row is not None else None
 
     def _fetch_active_row(self, session_id: str) -> tuple[object, ...] | None:
@@ -245,9 +241,7 @@ class BranchStore:
         """
         async with self._lock:
             self._require_open()
-            updated = await anyio.to_thread.run_sync(
-                self._update_active, session_id, branch_id
-            )
+            updated = await anyio.to_thread.run_sync(self._update_active, session_id, branch_id)
         if updated is None:
             raise ConfigError(
                 f"branch {branch_id!s} not found in session {session_id!r}",
@@ -327,9 +321,7 @@ class BranchStore:
                     str(message.branch_id),
                     message.role,
                     message.content,
-                    str(message.parent_message_id)
-                    if message.parent_message_id
-                    else None,
+                    str(message.parent_message_id) if message.parent_message_id else None,
                     message.created_at.isoformat(),
                 ),
             )
@@ -346,9 +338,7 @@ class BranchStore:
     ) -> list[ChatMessage]:
         async with self._lock:
             self._require_open()
-            rows = await anyio.to_thread.run_sync(
-                self._list_message_rows, branch_id, limit
-            )
+            rows = await anyio.to_thread.run_sync(self._list_message_rows, branch_id, limit)
         return [self._row_to_message(r) for r in rows]
 
     async def list_messages_after(
@@ -369,7 +359,10 @@ class BranchStore:
         async with self._lock:
             self._require_open()
             rows = await anyio.to_thread.run_sync(
-                self._list_messages_after_rows, branch_id, after, limit,
+                self._list_messages_after_rows,
+                branch_id,
+                after,
+                limit,
             )
         return [self._row_to_message(r) for r in rows]
 
@@ -422,9 +415,7 @@ class BranchStore:
     async def get_message(self, message_id: UUID) -> ChatMessage | None:
         async with self._lock:
             self._require_open()
-            row = await anyio.to_thread.run_sync(
-                self._fetch_message, message_id
-            )
+            row = await anyio.to_thread.run_sync(self._fetch_message, message_id)
         return self._row_to_message(row) if row is not None else None
 
     def _fetch_message(
@@ -518,12 +509,8 @@ class BranchStore:
         return Branch(
             id=UUID(cast("str", row[0])),
             session_id=cast("str", row[1]),
-            parent_branch_id=(
-                UUID(cast("str", row[2])) if row[2] is not None else None
-            ),
-            fork_message_id=(
-                UUID(cast("str", row[3])) if row[3] is not None else None
-            ),
+            parent_branch_id=(UUID(cast("str", row[2])) if row[2] is not None else None),
+            fork_message_id=(UUID(cast("str", row[3])) if row[3] is not None else None),
             label=cast("str", row[4]),
             is_active=bool(row[5]),
             created_at=datetime.fromisoformat(cast("str", row[6])),
@@ -535,9 +522,7 @@ class BranchStore:
             branch_id=UUID(cast("str", row[1])),
             role=cast("MessageRole", row[2]),
             content=cast("str", row[3]),
-            parent_message_id=(
-                UUID(cast("str", row[4])) if row[4] is not None else None
-            ),
+            parent_message_id=(UUID(cast("str", row[4])) if row[4] is not None else None),
             created_at=datetime.fromisoformat(cast("str", row[5])),
         )
 

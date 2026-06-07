@@ -1,4 +1,5 @@
 """Tests for :class:`ZaiSnapper`."""
+
 from __future__ import annotations
 
 import json

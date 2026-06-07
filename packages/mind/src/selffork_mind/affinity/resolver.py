@@ -49,9 +49,7 @@ __all__ = [
 ]
 
 
-def project_affinity_db_path(
-    project_slug: str, *, home: Path | None = None
-) -> Path:
+def project_affinity_db_path(project_slug: str, *, home: Path | None = None) -> Path:
     """``~/.selffork/projects/<slug>/mind/cli_affinity.duckdb``."""
     return default_project_pool_root(project_slug, home=home) / "cli_affinity.duckdb"
 
@@ -61,9 +59,7 @@ def global_affinity_db_path(*, home: Path | None = None) -> Path:
     return default_global_pool_root(home=home) / "cli_affinity.duckdb"
 
 
-def _rate_and_obs(
-    record: AffinityRecord | None, config: AffinityConfig
-) -> tuple[float, float]:
+def _rate_and_obs(record: AffinityRecord | None, config: AffinityConfig) -> tuple[float, float]:
     """``(laplace_rate, observations)`` for a level, or ``(0.5, 0)``.
 
     An empty level contributes ``observations == 0`` so :func:`shrink`
@@ -155,9 +151,7 @@ class CliAffinityResolver:
             now=now,
         )
 
-    async def score(
-        self, *, task_type: str | None, cli: str, model: str
-    ) -> AffinityScore:
+    async def score(self, *, task_type: str | None, cli: str, model: str) -> AffinityScore:
         """Hierarchical, smoothed success-rate for one ``(cli, model)``."""
         cfg = self.config
         # Level 4 (coarsest): GLOBAL aggregate over all models for cli.
@@ -165,22 +159,16 @@ class CliAffinityResolver:
         rate_c, obs_c = _rate_and_obs(global_cli, cfg)
         score_cli = shrink(rate_c, obs_c, 0.5, cfg)
         # Level 3: GLOBAL aggregate over all tasks for (cli, model).
-        global_cli_model = await self.global_store.aggregate_cli_model(
-            cli=cli, model=model
-        )
+        global_cli_model = await self.global_store.aggregate_cli_model(cli=cli, model=model)
         rate_cm, obs_cm = _rate_and_obs(global_cli_model, cfg)
         score_cli_model = shrink(rate_cm, obs_cm, score_cli, cfg)
         # Level 2: GLOBAL (task, cli, model).
-        global_task = await self.global_store.get(
-            task_type=task_type, cli=cli, model=model
-        )
+        global_task = await self.global_store.get(task_type=task_type, cli=cli, model=model)
         rate_t, obs_t = _rate_and_obs(global_task, cfg)
         score_task = shrink(rate_t, obs_t, score_cli_model, cfg)
         # Level 1 (leaf): PROJECT (task, cli, model).
         project_leaf = (
-            await self.project_store.get(
-                task_type=task_type, cli=cli, model=model
-            )
+            await self.project_store.get(task_type=task_type, cli=cli, model=model)
             if self.project_store is not None
             else None
         )
@@ -203,8 +191,7 @@ class CliAffinityResolver:
     ) -> list[AffinityScore]:
         """Score every ``(cli, model)`` candidate (router argmax input)."""
         return [
-            await self.score(task_type=task_type, cli=cli, model=model)
-            for cli, model in candidates
+            await self.score(task_type=task_type, cli=cli, model=model) for cli, model in candidates
         ]
 
 

@@ -26,8 +26,11 @@ class StubQuestDriver:
 
     # ---- Inherited Android surface ------------------------------------
 
-    async def start(self) -> None: self._record("start", (), {})
-    async def stop(self) -> None: self._record("stop", (), {})
+    async def start(self) -> None:
+        self._record("start", (), {})
+
+    async def stop(self) -> None:
+        self._record("stop", (), {})
 
     async def app_launch(self, package):
         self._record("app_launch", (package,), {})
@@ -50,9 +53,15 @@ class StubQuestDriver:
         return b"\x89PNG\r\n\x1a\nQUEST"
 
     async def logcat(self, *, tag_filter=None, max_lines=200, clear=False):
-        self._record("logcat", (), {
-            "tag_filter": tag_filter, "max_lines": max_lines, "clear": clear,
-        })
+        self._record(
+            "logcat",
+            (),
+            {
+                "tag_filter": tag_filter,
+                "max_lines": max_lines,
+                "clear": clear,
+            },
+        )
         return "QUEST_LOG\n"
 
     # ---- VR-specific extensions ---------------------------------------
@@ -120,17 +129,22 @@ class StubVisionProDriver:
     def _record(self, name: str, args: tuple, kwargs: dict) -> None:
         self.calls.append((name, args, dict(kwargs)))
 
-    async def start(self) -> None: self._record("start", (), {})
-    async def stop(self) -> None: self._record("stop", (), {})
+    async def start(self) -> None:
+        self._record("start", (), {})
+
+    async def stop(self) -> None:
+        self._record("stop", (), {})
 
     async def simulator_list(self):
         self._record("simulator_list", (), {})
-        return [{
-            "name": "Apple Vision Pro",
-            "udid": "A" * 36,
-            "state": "Shutdown",
-            "runtime": "visionOS 1.0",
-        }]
+        return [
+            {
+                "name": "Apple Vision Pro",
+                "udid": "A" * 36,
+                "state": "Shutdown",
+                "runtime": "visionOS 1.0",
+            }
+        ]
 
     async def simulator_boot(self, udid):
         self._record("simulator_boot", (udid,), {})
@@ -155,7 +169,10 @@ class StubVisionProDriver:
 
 
 def make_ctx(
-    *, driver=None, vision_runtime=None, session_id="sess-test",
+    *,
+    driver=None,
+    vision_runtime=None,
+    session_id="sess-test",
     project_slug=None,
 ) -> ToolContext:
     warden = PermissionWarden(mode=WardenMode.DANGER_FULL_ACCESS)

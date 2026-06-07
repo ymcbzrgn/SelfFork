@@ -106,14 +106,10 @@ class CliOverrideStore:
             data = self.sticky_store.read_or_default()
             overrides = dict(data.overrides)
             overrides[workspace] = target
-            self.sticky_store.write(
-                data.model_copy(update={"overrides": overrides})
-            )
+            self.sticky_store.write(data.model_copy(update={"overrides": overrides}))
         else:
             self._single_turn[workspace] = target
-        return CliOverride(
-            workspace=workspace, cli=cli, model=model, sticky=sticky
-        )
+        return CliOverride(workspace=workspace, cli=cli, model=model, sticky=sticky)
 
     def peek(self, workspace: str) -> CliOverride | None:
         """Return the active override **without** consuming a one-shot."""
@@ -146,9 +142,7 @@ class CliOverrideStore:
         if workspace in data.overrides:
             overrides = dict(data.overrides)
             del overrides[workspace]
-            self.sticky_store.write(
-                data.model_copy(update={"overrides": overrides})
-            )
+            self.sticky_store.write(data.model_copy(update={"overrides": overrides}))
             removed = True
         return removed
 

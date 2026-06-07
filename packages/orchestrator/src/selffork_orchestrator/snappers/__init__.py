@@ -17,6 +17,7 @@ See ``project_provider_usage_source.md`` for the audit-log derivation discipline
 the proactive snapper layer complements (does not replace) audit-log derivation;
 when a snapper signal is stale or unavailable, callers fall back to audit logs.
 """
+
 from __future__ import annotations
 
 from selffork_orchestrator.snappers.base import (

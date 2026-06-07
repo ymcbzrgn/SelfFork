@@ -59,7 +59,8 @@ class AndroidGetBatteryArgs(ToolArgs):
 
 
 async def _android_get_orientation(
-    ctx: ToolContext, args: AndroidGetOrientationArgs,
+    ctx: ToolContext,
+    args: AndroidGetOrientationArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
 
@@ -76,7 +77,8 @@ async def _android_get_orientation(
 
 
 async def _android_set_orientation(
-    ctx: ToolContext, args: AndroidSetOrientationArgs,
+    ctx: ToolContext,
+    args: AndroidSetOrientationArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
     return await _invoke_mobile(
@@ -89,7 +91,8 @@ async def _android_set_orientation(
 
 
 async def _android_get_clipboard(
-    ctx: ToolContext, args: AndroidGetClipboardArgs,
+    ctx: ToolContext,
+    args: AndroidGetClipboardArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
 
@@ -107,7 +110,8 @@ async def _android_get_clipboard(
 
 
 async def _android_set_clipboard(
-    ctx: ToolContext, args: AndroidSetClipboardArgs,
+    ctx: ToolContext,
+    args: AndroidSetClipboardArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
     return await _invoke_mobile(
@@ -120,7 +124,8 @@ async def _android_set_clipboard(
 
 
 async def _android_get_property(
-    ctx: ToolContext, args: AndroidGetPropertyArgs,
+    ctx: ToolContext,
+    args: AndroidGetPropertyArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
 
@@ -138,7 +143,8 @@ async def _android_get_property(
 
 
 async def _android_set_property(
-    ctx: ToolContext, args: AndroidSetPropertyArgs,
+    ctx: ToolContext,
+    args: AndroidSetPropertyArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
     return await _invoke_mobile(
@@ -162,7 +168,8 @@ async def _android_reboot(ctx: ToolContext, args: AndroidRebootArgs) -> dict[str
 
 
 async def _android_get_battery(
-    ctx: ToolContext, args: AndroidGetBatteryArgs,
+    ctx: ToolContext,
+    args: AndroidGetBatteryArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
 

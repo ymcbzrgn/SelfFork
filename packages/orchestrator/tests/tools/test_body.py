@@ -257,9 +257,7 @@ async def test_screenshot_returns_bytes_size() -> None:
     from selffork_orchestrator.tools.body import BodyScreenshotArgs, _body_screenshot
 
     driver = _StubDriver()
-    result = await _body_screenshot(
-        _ctx(driver=driver), BodyScreenshotArgs(rect=None)
-    )
+    result = await _body_screenshot(_ctx(driver=driver), BodyScreenshotArgs(rect=None))
     assert result["status"] == "ok"
     assert result["result"]["bytes_size"] > 0
     # Path None when no screenshot_store wired.

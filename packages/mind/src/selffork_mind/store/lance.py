@@ -183,8 +183,7 @@ class LanceDBVectorStore:
     def _entry_to_row(self, entry: VectorEntry) -> dict[str, object]:
         if len(entry.vector) != self._embedding_dim:
             raise ValueError(
-                f"vector dim mismatch: got {len(entry.vector)}, "
-                f"expected {self._embedding_dim}",
+                f"vector dim mismatch: got {len(entry.vector)}, expected {self._embedding_dim}",
             )
         return {
             "note_id": str(entry.note_id),
@@ -201,7 +200,9 @@ class LanceDBVectorStore:
         assert self._table is not None  # noqa: S101
         # LanceDB merge_insert uses the ``note_id`` as the conflict key; this
         # mirrors DuckDB's ON CONFLICT (id) DO UPDATE.
-        self._table.merge_insert("note_id").when_matched_update_all().when_not_matched_insert_all().execute(rows)  # type: ignore[attr-defined]
+        self._table.merge_insert(
+            "note_id"
+        ).when_matched_update_all().when_not_matched_insert_all().execute(rows)  # type: ignore[attr-defined]
 
     async def delete(self, note_id: UUID) -> None:
         async with self._lock:

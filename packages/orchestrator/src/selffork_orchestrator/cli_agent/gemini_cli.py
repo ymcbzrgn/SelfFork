@@ -157,9 +157,7 @@ def _write_gemini_thinking_settings(
     raw_mc = settings.get("modelConfigs")
     model_configs: dict[str, object] = raw_mc if isinstance(raw_mc, dict) else {}
     raw_overrides = model_configs.get("customOverrides")
-    overrides: list[object] = (
-        list(raw_overrides) if isinstance(raw_overrides, list) else []
-    )
+    overrides: list[object] = list(raw_overrides) if isinstance(raw_overrides, list) else []
     overrides = [o for o in overrides if not _matches_model(o, model)]
     overrides.append(
         {
@@ -288,9 +286,7 @@ class GeminiCliAgent(CLIAgent):
                 thinking = {"thinkingBudget": budget}
         if thinking is None:
             return  # level not supported/verified for this model family
-        _write_gemini_thinking_settings(
-            Path(workspace), model=model, thinking=thinking
-        )
+        _write_gemini_thinking_settings(Path(workspace), model=model, thinking=thinking)
 
     def build_env(self, base_env: Mapping[str, str]) -> dict[str, str]:
         env = dict(base_env)

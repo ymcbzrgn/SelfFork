@@ -58,9 +58,7 @@ def test_normalize_domain(raw: str, expected: str) -> None:
         (WardenMode.DANGER_FULL_ACCESS, "screenshot", True),
     ],
 )
-async def test_auto_decision_matrix(
-    mode: WardenMode, action: str, expected_approved: bool
-) -> None:
+async def test_auto_decision_matrix(mode: WardenMode, action: str, expected_approved: bool) -> None:
     warden = PermissionWarden(mode=mode, default_timeout_sec=0.1)
     req = build_request(request_id="r-1", session_id="s-1", action_type=action)
     decision = await warden.request(req)
@@ -69,9 +67,7 @@ async def test_auto_decision_matrix(
 
 async def test_workspace_write_t2_requires_operator_and_times_out() -> None:
     warden = PermissionWarden(mode=WardenMode.WORKSPACE_WRITE, default_timeout_sec=0.05)
-    req = build_request(
-        request_id="r-1", session_id="s-1", action_type="shell_exec"
-    )
+    req = build_request(request_id="r-1", session_id="s-1", action_type="shell_exec")
     decision = await warden.request(req)
     assert decision.approved is False
     assert "timeout" in decision.reason
@@ -94,12 +90,8 @@ async def test_workspace_write_t2_operator_approves() -> None:
 
 
 async def test_danger_t3_requires_operator_and_denies_on_timeout() -> None:
-    warden = PermissionWarden(
-        mode=WardenMode.DANGER_FULL_ACCESS, default_timeout_sec=0.05
-    )
-    req = build_request(
-        request_id="r-1", session_id="s-1", action_type="payment_form_submit"
-    )
+    warden = PermissionWarden(mode=WardenMode.DANGER_FULL_ACCESS, default_timeout_sec=0.05)
+    req = build_request(request_id="r-1", session_id="s-1", action_type="payment_form_submit")
     decision = await warden.request(req)
     assert decision.approved is False
 
@@ -121,9 +113,7 @@ async def test_danger_t3_requires_operator_and_denies_on_timeout() -> None:
         ({"example.com"}, "https://example.com:8443", True),  # port stripped
     ],
 )
-async def test_domain_allowlist(
-    allowed: set[str], target: str, should_allow: bool
-) -> None:
+async def test_domain_allowlist(allowed: set[str], target: str, should_allow: bool) -> None:
     warden = PermissionWarden(
         mode=WardenMode.WORKSPACE_WRITE,
         allowed_domains=allowed,

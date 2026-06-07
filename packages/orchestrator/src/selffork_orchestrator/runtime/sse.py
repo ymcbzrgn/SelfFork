@@ -90,9 +90,7 @@ async def stream_openai_sse(
     """
     chunks: list[str] = []
     finish_reason: str | None = None
-    async for line in stalling_aiter(
-        response.aiter_lines(), stall_seconds=stall_seconds
-    ):
+    async for line in stalling_aiter(response.aiter_lines(), stall_seconds=stall_seconds):
         token_text, done, frame_finish = parse_sse_line(line)
         if frame_finish is not None:
             finish_reason = frame_finish
@@ -128,9 +126,7 @@ async def stalling_aiter(
             if stall_seconds is None:
                 line = await iterator.__anext__()
             else:
-                line = await asyncio.wait_for(
-                    iterator.__anext__(), timeout=stall_seconds
-                )
+                line = await asyncio.wait_for(iterator.__anext__(), timeout=stall_seconds)
         except StopAsyncIteration:
             return
         except TimeoutError as exc:
@@ -165,13 +161,9 @@ def parse_sse_line(line: str) -> tuple[str, bool, str | None]:
     try:
         frame = json.loads(payload)
     except json.JSONDecodeError as exc:
-        raise RuntimeUnhealthyError(
-            f"SSE frame malformed: {exc}; payload={payload[:200]}"
-        ) from exc
+        raise RuntimeUnhealthyError(f"SSE frame malformed: {exc}; payload={payload[:200]}") from exc
     if not isinstance(frame, dict):
-        raise RuntimeUnhealthyError(
-            f"SSE frame not an object: {type(frame).__name__}"
-        )
+        raise RuntimeUnhealthyError(f"SSE frame not an object: {type(frame).__name__}")
     choices = frame.get("choices")
     if not isinstance(choices, list) or not choices:
         return "", False, None
@@ -180,9 +172,7 @@ def parse_sse_line(line: str) -> tuple[str, bool, str | None]:
         return "", False, None
     delta = first.get("delta")
     finish_reason_raw = first.get("finish_reason")
-    finish_reason: str | None = (
-        finish_reason_raw if isinstance(finish_reason_raw, str) else None
-    )
+    finish_reason: str | None = finish_reason_raw if isinstance(finish_reason_raw, str) else None
     if not isinstance(delta, dict):
         return "", False, finish_reason
     content = delta.get("content")

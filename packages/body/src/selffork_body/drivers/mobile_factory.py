@@ -164,7 +164,8 @@ class CompositeMobileDriver:
         await self._primary.type_text(text, target=target)
 
     async def screenshot(
-        self, rect: tuple[int, int, int, int] | None = None,
+        self,
+        rect: tuple[int, int, int, int] | None = None,
     ) -> bytes:
         return await self._primary.screenshot(rect)  # type: ignore[no-any-return]
 
@@ -180,7 +181,11 @@ class CompositeMobileDriver:
         duration_ms: int = 250,
     ) -> None:
         await self._primary.swipe(
-            start_x, start_y, end_x, end_y, duration_ms=duration_ms,
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+            duration_ms=duration_ms,
         )
 
     async def app_launch(self, bundle_id: str) -> None:
@@ -193,17 +198,23 @@ class CompositeMobileDriver:
         return await self._primary.ax_tree(bundle_id=bundle_id)
 
     async def storage_state_save(
-        self, provider: str, project_slug: str | None = None,
+        self,
+        provider: str,
+        project_slug: str | None = None,
     ) -> Any:
         return await self._primary.storage_state_save(
-            provider, project_slug=project_slug,
+            provider,
+            project_slug=project_slug,
         )
 
     async def storage_state_load(
-        self, provider: str, project_slug: str | None = None,
+        self,
+        provider: str,
+        project_slug: str | None = None,
     ) -> Any:
         return await self._primary.storage_state_load(
-            provider, project_slug=project_slug,
+            provider,
+            project_slug=project_slug,
         )
 
 
@@ -273,19 +284,21 @@ def build_default_body_driver(
         return IosDriver(
             runtime="sim",
             device_id=ios_device or os.environ.get("SELFFORK_BODY_IOS_DEVICE"),
-            ios_version=ios_version or os.environ.get(
-                "SELFFORK_BODY_IOS_VERSION", "17.2",
+            ios_version=ios_version
+            or os.environ.get(
+                "SELFFORK_BODY_IOS_VERSION",
+                "17.2",
             ),
         )
 
     if resolved == "android":
         runtime_choice: Literal["docker", "physical"] = (
-            android_runtime
-            or _resolve_android_runtime()
+            android_runtime or _resolve_android_runtime()
         )
         return AndroidDriver(
             runtime=runtime_choice,
-            device_serial=android_device_serial or os.environ.get(
+            device_serial=android_device_serial
+            or os.environ.get(
                 "SELFFORK_BODY_ANDROID_DEVICE",
             ),
         )
@@ -294,14 +307,17 @@ def build_default_body_driver(
     ios = IosDriver(
         runtime="sim",
         device_id=ios_device or os.environ.get("SELFFORK_BODY_IOS_DEVICE"),
-        ios_version=ios_version or os.environ.get(
-            "SELFFORK_BODY_IOS_VERSION", "17.2",
+        ios_version=ios_version
+        or os.environ.get(
+            "SELFFORK_BODY_IOS_VERSION",
+            "17.2",
         ),
     )
     runtime_choice = android_runtime or _resolve_android_runtime()
     android = AndroidDriver(
         runtime=runtime_choice,
-        device_serial=android_device_serial or os.environ.get(
+        device_serial=android_device_serial
+        or os.environ.get(
             "SELFFORK_BODY_ANDROID_DEVICE",
         ),
     )

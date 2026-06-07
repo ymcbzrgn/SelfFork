@@ -588,10 +588,7 @@ class TestMindProvenanceStream:
         tmp_path: Path,
         fake_home: Path,
     ) -> None:
-        log_path = (
-            fake_home / ".selffork" / "projects" / "calc" / "mind"
-            / "provenance.jsonl"
-        )
+        log_path = fake_home / ".selffork" / "projects" / "calc" / "mind" / "provenance.jsonl"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         # Pre-existing entries.
         for i in range(2):

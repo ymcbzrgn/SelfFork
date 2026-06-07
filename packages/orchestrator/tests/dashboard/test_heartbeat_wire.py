@@ -78,16 +78,12 @@ async def test_kanban_card_creator_adds_real_card(tmp_path: Path) -> None:
     store.create(name="Test", description="t", slug="test-proj")
 
     creator = make_kanban_card_creator(projects_root=tmp_path)
-    card_id = await creator(
-        "test-proj", "From Self Jr", "Heartbeat says: ship it."
-    )
+    card_id = await creator("test-proj", "From Self Jr", "Heartbeat says: ship it.")
     assert isinstance(card_id, str) and card_id
 
     # Roundtrip via the store to confirm persistence
     board = store.load_board("test-proj")
-    match = next(
-        (card for card in board.cards if card.id == card_id), None
-    )
+    match = next((card for card in board.cards if card.id == card_id), None)
     assert match is not None
     assert match.title == "From Self Jr"
     assert "ship it" in match.body
@@ -127,9 +123,7 @@ async def test_build_default_heartbeat_accepts_callables(
     ):
         monkeypatch.delenv(key, raising=False)
     # Redirect the autonomy YAML to tmp_path so no operator file leaks in.
-    monkeypatch.setenv(
-        "HOME", str(tmp_path)
-    )  # AutonomyStore.default() expands ``~``.
+    monkeypatch.setenv("HOME", str(tmp_path))  # AutonomyStore.default() expands ``~``.
 
     captured_bridge = object()
 

@@ -110,17 +110,15 @@ async def _ax_text(drv: Any) -> str:
 
 
 async def _ui_verify_a11y_tree(
-    ctx: ToolContext, args: UiVerifyA11yTreeArgs,
+    ctx: ToolContext,
+    args: UiVerifyA11yTreeArgs,
 ) -> dict[str, Any]:
     drv = _require_mobile_driver(ctx)
 
     async def _dump() -> dict[str, Any]:
         text = await _ax_text(drv)
         if args.selector:
-            matches = [
-                line for line in text.splitlines()
-                if args.selector in line
-            ]
+            matches = [line for line in text.splitlines() if args.selector in line]
             return {
                 "matched": len(matches),
                 "preview": "\n".join(matches[:200]),
@@ -138,7 +136,8 @@ async def _ui_verify_a11y_tree(
 
 
 async def _ui_verify_text_visible(
-    ctx: ToolContext, args: UiVerifyTextVisibleArgs,
+    ctx: ToolContext,
+    args: UiVerifyTextVisibleArgs,
 ) -> dict[str, Any]:
     drv = _require_mobile_driver(ctx)
 
@@ -161,7 +160,8 @@ async def _ui_verify_text_visible(
 
 
 async def _ui_verify_element_exists(
-    ctx: ToolContext, args: UiVerifyElementExistsArgs,
+    ctx: ToolContext,
+    args: UiVerifyElementExistsArgs,
 ) -> dict[str, Any]:
     drv = _require_mobile_driver(ctx)
 
@@ -179,7 +179,8 @@ async def _ui_verify_element_exists(
 
 
 async def _ui_verify_element_state(
-    ctx: ToolContext, args: UiVerifyElementStateArgs,
+    ctx: ToolContext,
+    args: UiVerifyElementStateArgs,
 ) -> dict[str, Any]:
     drv = _require_mobile_driver(ctx)
 
@@ -189,7 +190,7 @@ async def _ui_verify_element_state(
             return {"matches": False, "reason": "not found"}
         # Heuristic: look for state markers near the selector substring
         idx = text.find(args.selector)
-        window = text[max(0, idx - 256): idx + 256]
+        window = text[max(0, idx - 256) : idx + 256]
         state_markers = {
             "visible": r'(visible="true"|displayed="true"|hidden="false")',
             "enabled": r'(enabled="true")',
@@ -217,7 +218,8 @@ async def _ui_verify_element_state(
 
 
 async def _ui_verify_screenshot_match(
-    ctx: ToolContext, args: UiVerifyScreenshotMatchArgs,
+    ctx: ToolContext,
+    args: UiVerifyScreenshotMatchArgs,
 ) -> dict[str, Any]:
     drv = _require_mobile_driver(ctx)
 
@@ -243,7 +245,8 @@ async def _ui_verify_screenshot_match(
 
 
 async def _ui_verify_ocr_contains(
-    ctx: ToolContext, args: UiVerifyOcrContainsArgs,
+    ctx: ToolContext,
+    args: UiVerifyOcrContainsArgs,
 ) -> dict[str, Any]:
     drv = _require_mobile_driver(ctx)
 
@@ -268,7 +271,8 @@ async def _ui_verify_ocr_contains(
 
 
 async def _ui_verify_color_at(
-    ctx: ToolContext, args: UiVerifyColorAtArgs,
+    ctx: ToolContext,
+    args: UiVerifyColorAtArgs,
 ) -> dict[str, Any]:
     drv = _require_mobile_driver(ctx)
 
@@ -309,7 +313,8 @@ async def _ui_verify_color_at(
         action_type="ui_verify.color_at",
         target_uri=None,
         args_summary={
-            "x": args.x, "y": args.y,
+            "x": args.x,
+            "y": args.y,
             "expected_rgb": list(args.expected_rgb) if args.expected_rgb else None,
         },
         coro_factory=_check,
@@ -317,7 +322,8 @@ async def _ui_verify_color_at(
 
 
 async def _ui_verify_no_overflow(
-    ctx: ToolContext, args: UiVerifyNoOverflowArgs,
+    ctx: ToolContext,
+    args: UiVerifyNoOverflowArgs,
 ) -> dict[str, Any]:
     drv = _require_mobile_driver(ctx)
 
@@ -338,7 +344,8 @@ async def _ui_verify_no_overflow(
 
 
 async def _ui_verify_responsive(
-    ctx: ToolContext, args: UiVerifyResponsiveArgs,
+    ctx: ToolContext,
+    args: UiVerifyResponsiveArgs,
 ) -> dict[str, Any]:
     _require_mobile_driver(ctx)
 
@@ -364,7 +371,8 @@ async def _ui_verify_responsive(
 
 
 async def _ui_verify_focus(
-    ctx: ToolContext, args: UiVerifyFocusArgs,
+    ctx: ToolContext,
+    args: UiVerifyFocusArgs,
 ) -> dict[str, Any]:
     drv = _require_mobile_driver(ctx)
 
@@ -432,8 +440,7 @@ def build_ui_verify_tools() -> list[ToolSpec[Any]]:
         ToolSpec(
             name="ui_verify_ocr_contains",
             description=(
-                "Text contains check via a11y tree (true OCR fallback "
-                "ships in a follow-up wave)."
+                "Text contains check via a11y tree (true OCR fallback ships in a follow-up wave)."
             ),
             args_model=UiVerifyOcrContainsArgs,
             handler=_ui_verify_ocr_contains,
@@ -442,8 +449,7 @@ def build_ui_verify_tools() -> list[ToolSpec[Any]]:
         ToolSpec(
             name="ui_verify_color_at",
             description=(
-                "Sample RGB at (x, y); optionally assert against expected_rgb. "
-                "Requires Pillow."
+                "Sample RGB at (x, y); optionally assert against expected_rgb. Requires Pillow."
             ),
             args_model=UiVerifyColorAtArgs,
             handler=_ui_verify_color_at,

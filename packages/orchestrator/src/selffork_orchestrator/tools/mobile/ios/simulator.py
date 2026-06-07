@@ -105,7 +105,8 @@ async def _ios_simulator_boot(ctx: ToolContext, args: IosSimulatorBootArgs) -> d
 
 
 async def _ios_simulator_shutdown(
-    ctx: ToolContext, args: IosSimulatorShutdownArgs,
+    ctx: ToolContext,
+    args: IosSimulatorShutdownArgs,
 ) -> dict[str, Any]:
     drv = _require_ios_driver(ctx)
     return await _invoke_mobile(
@@ -118,7 +119,8 @@ async def _ios_simulator_shutdown(
 
 
 async def _ios_simulator_erase(
-    ctx: ToolContext, args: IosSimulatorEraseArgs,
+    ctx: ToolContext,
+    args: IosSimulatorEraseArgs,
 ) -> dict[str, Any]:
     drv = _require_ios_driver(ctx)
     return await _invoke_mobile(
@@ -131,7 +133,8 @@ async def _ios_simulator_erase(
 
 
 async def _ios_biometric_match(
-    ctx: ToolContext, args: IosBiometricMatchArgs,
+    ctx: ToolContext,
+    args: IosBiometricMatchArgs,
 ) -> dict[str, Any]:
     drv = _require_ios_driver(ctx)
     return await _invoke_mobile(
@@ -144,7 +147,8 @@ async def _ios_biometric_match(
 
 
 async def _ios_biometric_no_match(
-    ctx: ToolContext, args: IosBiometricNoMatchArgs,
+    ctx: ToolContext,
+    args: IosBiometricNoMatchArgs,
 ) -> dict[str, Any]:
     drv = _require_ios_driver(ctx)
     return await _invoke_mobile(
@@ -173,7 +177,8 @@ async def _ios_get_logs(ctx: ToolContext, args: IosGetLogsArgs) -> dict[str, Any
 
 
 async def _ios_send_push_notification(
-    ctx: ToolContext, args: IosSendPushNotificationArgs,
+    ctx: ToolContext,
+    args: IosSendPushNotificationArgs,
 ) -> dict[str, Any]:
     drv = _require_ios_driver(ctx)
     return await _invoke_mobile(
@@ -185,13 +190,15 @@ async def _ios_send_push_notification(
             "payload_path": args.payload_path,
         },
         coro_factory=lambda: drv.send_push_notification(
-            Path(args.payload_path), args.bundle_id,
+            Path(args.payload_path),
+            args.bundle_id,
         ),
     )
 
 
 async def _ios_status_bar_override(
-    ctx: ToolContext, args: IosStatusBarOverrideArgs,
+    ctx: ToolContext,
+    args: IosStatusBarOverrideArgs,
 ) -> dict[str, Any]:
     drv = _require_ios_driver(ctx)
     return await _invoke_mobile(
@@ -209,7 +216,8 @@ async def _ios_status_bar_override(
 
 
 async def _ios_set_appearance(
-    ctx: ToolContext, args: IosSetAppearanceArgs,
+    ctx: ToolContext,
+    args: IosSetAppearanceArgs,
 ) -> dict[str, Any]:
     drv = _require_ios_driver(ctx)
     return await _invoke_mobile(

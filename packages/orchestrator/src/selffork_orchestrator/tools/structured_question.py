@@ -168,7 +168,9 @@ class PendingStructuredQuestionStore:
             return entry
 
     async def submit_answer(
-        self, correlation_id: str, answer: str,
+        self,
+        correlation_id: str,
+        answer: str,
     ) -> bool:
         """Record the operator's answer and wake the waiting tool.
 
@@ -208,7 +210,10 @@ class PendingStructuredQuestionStore:
             return True
 
     async def wait_for_answer(
-        self, correlation_id: str, *, timeout_seconds: float,
+        self,
+        correlation_id: str,
+        *,
+        timeout_seconds: float,
     ) -> str | None:
         """Await an answer up to ``timeout_seconds``.
 
@@ -221,7 +226,8 @@ class PendingStructuredQuestionStore:
             return None
         try:
             await asyncio.wait_for(
-                entry.event.wait(), timeout=timeout_seconds,
+                entry.event.wait(),
+                timeout=timeout_seconds,
             )
         except TimeoutError:
             return None
@@ -230,7 +236,8 @@ class PendingStructuredQuestionStore:
         return entry.answer
 
     async def get(
-        self, correlation_id: str,
+        self,
+        correlation_id: str,
     ) -> PendingStructuredQuestion | None:
         """Read one entry — does NOT remove it from the store.
 
@@ -258,11 +265,7 @@ class PendingStructuredQuestionStore:
         """
         async with self._lock:
             now = datetime.now(UTC)
-            expired_ids = [
-                cid
-                for cid, entry in self._entries.items()
-                if entry.expires_at < now
-            ]
+            expired_ids = [cid for cid, entry in self._entries.items() if entry.expires_at < now]
             for cid in expired_ids:
                 entry = self._entries[cid]
                 if not entry.event.is_set():
@@ -281,8 +284,7 @@ DEFAULT_CLEANUP_INTERVAL_SECONDS: float = 60.0
 
 
 async def cleanup_loop(
-    store: PendingStructuredQuestionStore
-    | SqlitePendingStructuredQuestionStore,
+    store: PendingStructuredQuestionStore | SqlitePendingStructuredQuestionStore,
     interval_seconds: float = DEFAULT_CLEANUP_INTERVAL_SECONDS,
 ) -> None:
     """Periodically purge expired entries from ``store``.
@@ -335,8 +337,7 @@ CREATE TABLE IF NOT EXISTS pending_structured_questions (
 """
 
 _SQLITE_INDEX_DDL = (
-    "CREATE INDEX IF NOT EXISTS idx_psq_expires_at "
-    "ON pending_structured_questions(expires_at);"
+    "CREATE INDEX IF NOT EXISTS idx_psq_expires_at ON pending_structured_questions(expires_at);"
 )
 
 
@@ -394,7 +395,9 @@ class SqlitePendingStructuredQuestionStore:
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(
-            str(self._db_path), check_same_thread=False, timeout=2.0,
+            str(self._db_path),
+            check_same_thread=False,
+            timeout=2.0,
         )
         conn.execute("PRAGMA journal_mode = WAL;")
         conn.execute(f"PRAGMA busy_timeout = {self._busy_timeout_ms};")
@@ -404,10 +407,7 @@ class SqlitePendingStructuredQuestionStore:
     def _row_to_entry(row: sqlite3.Row) -> PendingStructuredQuestion:
         created_at = datetime.fromisoformat(row["created_at"])
         expires_at = datetime.fromisoformat(row["expires_at"])
-        answered_at = (
-            datetime.fromisoformat(row["answered_at"])
-            if row["answered_at"] else None
-        )
+        answered_at = datetime.fromisoformat(row["answered_at"]) if row["answered_at"] else None
         entry = PendingStructuredQuestion(
             correlation_id=row["correlation_id"],
             payload=json.loads(row["payload_json"]),
@@ -475,7 +475,9 @@ class SqlitePendingStructuredQuestionStore:
         return entry
 
     async def submit_answer(
-        self, correlation_id: str, answer: str,
+        self,
+        correlation_id: str,
+        answer: str,
     ) -> bool:
         await self._ensure_setup()
         answered_at = datetime.now(UTC).isoformat()
@@ -534,7 +536,10 @@ class SqlitePendingStructuredQuestionStore:
         return False
 
     async def wait_for_answer(
-        self, correlation_id: str, *, timeout_seconds: float,
+        self,
+        correlation_id: str,
+        *,
+        timeout_seconds: float,
     ) -> str | None:
         """Poll the row until an answer / cancellation / timeout."""
         await self._ensure_setup()
@@ -553,7 +558,8 @@ class SqlitePendingStructuredQuestionStore:
             await asyncio.sleep(min(self._poll_interval, remaining))
 
     async def get(
-        self, correlation_id: str,
+        self,
+        correlation_id: str,
     ) -> PendingStructuredQuestion | None:
         await self._ensure_setup()
 
@@ -561,8 +567,7 @@ class SqlitePendingStructuredQuestionStore:
             with closing(self._connect()) as conn:
                 conn.row_factory = sqlite3.Row
                 row: sqlite3.Row | None = conn.execute(
-                    "SELECT * FROM pending_structured_questions "
-                    "WHERE correlation_id = ?",
+                    "SELECT * FROM pending_structured_questions WHERE correlation_id = ?",
                     (correlation_id,),
                 ).fetchone()
                 return row
@@ -670,7 +675,8 @@ class AskUserQuestionArgs(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     questions: Annotated[
-        list[AskUserQuestion], Field(min_length=1, max_length=4),
+        list[AskUserQuestion],
+        Field(min_length=1, max_length=4),
     ]
 
 
@@ -680,7 +686,8 @@ class AskUserQuestionArgs(BaseModel):
 def _resolve_timeout_seconds() -> float:
     """Read ``SELFFORK_STRUCTURED_QUESTION_TIMEOUT_SECONDS`` with safe floor."""
     raw = os.environ.get(
-        "SELFFORK_STRUCTURED_QUESTION_TIMEOUT_SECONDS", "",
+        "SELFFORK_STRUCTURED_QUESTION_TIMEOUT_SECONDS",
+        "",
     ).strip()
     if not raw:
         return DEFAULT_STRUCTURED_QUESTION_TIMEOUT_SECONDS
@@ -692,7 +699,8 @@ def _resolve_timeout_seconds() -> float:
 
 
 async def handle_ask_user_question(
-    ctx: ToolContext, args: AskUserQuestionArgs,
+    ctx: ToolContext,
+    args: AskUserQuestionArgs,
 ) -> dict[str, Any]:
     """Register a pending question, surface it, await operator answer.
 
@@ -761,7 +769,8 @@ async def handle_ask_user_question(
             )
 
     answer = await store.wait_for_answer(
-        entry.correlation_id, timeout_seconds=timeout_seconds,
+        entry.correlation_id,
+        timeout_seconds=timeout_seconds,
     )
 
     if answer is not None:

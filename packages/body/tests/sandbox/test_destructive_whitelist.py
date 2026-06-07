@@ -97,9 +97,7 @@ def test_safe_action_does_not_match() -> None:
 def test_word_boundary_avoids_substring_false_positive() -> None:
     """`args_contains=['main']` should not match `args=['domain']`."""
     wl = _default_whitelist()
-    action = CandidateAction(
-        tool="git", args=("push", "origin", "domain-feature")
-    )
+    action = CandidateAction(tool="git", args=("push", "origin", "domain-feature"))
     cat = wl.match(action)
     # prod_deploy needs all of push/origin/main; "domain-feature" is
     # not "main", so prod_deploy must not fire.
@@ -121,9 +119,7 @@ def test_from_raw_parses_custom_yaml_dict() -> None:
     }
     wl = DestructiveWhitelist.from_raw(custom)
     assert len(wl.categories) == 1
-    cat = wl.match(
-        CandidateAction(tool="kubectl", args=("delete", "namespace", "prod"))
-    )
+    cat = wl.match(CandidateAction(tool="kubectl", args=("delete", "namespace", "prod")))
     assert cat is not None
     assert cat.id == "custom"
     assert cat.confirm_window_hours == 2
@@ -142,6 +138,4 @@ def test_empty_rule_does_not_match_anything() -> None:
         ]
     }
     wl = DestructiveWhitelist.from_raw(custom)
-    assert (
-        wl.match(CandidateAction(tool="anything", args=("foo",))) is None
-    )
+    assert wl.match(CandidateAction(tool="anything", args=("foo",))) is None

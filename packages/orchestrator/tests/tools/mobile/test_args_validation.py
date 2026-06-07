@@ -82,11 +82,19 @@ def test_ios_type_rejects_empty() -> None:
 def test_ios_swipe_validates_durations() -> None:
     with pytest.raises(ValidationError):
         ios_interaction.IosSwipeArgs(
-            start_x=0, start_y=0, end_x=10, end_y=10, duration_ms=10,
+            start_x=0,
+            start_y=0,
+            end_x=10,
+            end_y=10,
+            duration_ms=10,
         )
     with pytest.raises(ValidationError):
         ios_interaction.IosSwipeArgs(
-            start_x=0, start_y=0, end_x=10, end_y=10, duration_ms=10_000,
+            start_x=0,
+            start_y=0,
+            end_x=10,
+            end_y=10,
+            duration_ms=10_000,
         )
 
 
@@ -194,7 +202,9 @@ def test_android_system_property_constraints() -> None:
 def test_android_intent_extras_optional() -> None:
     android_intent.AndroidIntentArgs(action="android.intent.action.VIEW")
     android_intent.AndroidIntentArgs(
-        action="X.ACTION", extras={"a": "1"}, component="pkg/.Cls",
+        action="X.ACTION",
+        extras={"a": "1"},
+        component="pkg/.Cls",
     )
 
 

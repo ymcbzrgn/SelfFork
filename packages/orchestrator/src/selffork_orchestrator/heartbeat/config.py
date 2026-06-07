@@ -167,16 +167,12 @@ def build_default_heartbeat_config() -> HeartbeatConfig:
     """
     return HeartbeatConfig(
         enabled=_resolve_enabled(),
-        tick_seconds=_resolve_float(
-            "SELFFORK_HEARTBEAT_TICK_SECONDS", DEFAULT_TICK_SECONDS
-        ),
+        tick_seconds=_resolve_float("SELFFORK_HEARTBEAT_TICK_SECONDS", DEFAULT_TICK_SECONDS),
         reconciliation_seconds=_resolve_float(
             "SELFFORK_HEARTBEAT_RECONCILIATION_SECONDS",
             DEFAULT_RECONCILIATION_SECONDS,
         ),
-        max_concurrency=_resolve_int(
-            "SELFFORK_HEARTBEAT_MAX_CONCURRENCY", DEFAULT_MAX_CONCURRENCY
-        ),
+        max_concurrency=_resolve_int("SELFFORK_HEARTBEAT_MAX_CONCURRENCY", DEFAULT_MAX_CONCURRENCY),
         active_hours=_resolve_active_hours(),
         timezone=_resolve_timezone(),
     )
@@ -253,16 +249,12 @@ def build_default_heartbeat(
     from selffork_orchestrator.talk.speaker import SpeakerClient
     from selffork_orchestrator.telegram.inbound_router import PauseSignal
 
-    speaker_endpoint = os.environ.get(
-        "SELFFORK_TALK_MODEL_ENDPOINT", ""
-    ).strip()
+    speaker_endpoint = os.environ.get("SELFFORK_TALK_MODEL_ENDPOINT", "").strip()
     speaker_model = os.environ.get("SELFFORK_TALK_MODEL", "").strip()
     deliberation: DeliberationLayer | None = None
     if speaker_endpoint and speaker_model:
         deliberation = DeliberationLayer(
-            speaker=SpeakerClient(
-                base_url=speaker_endpoint, model=speaker_model
-            ),
+            speaker=SpeakerClient(base_url=speaker_endpoint, model=speaker_model),
             tick_budget_seconds=_resolve_float(
                 "SELFFORK_HEARTBEAT_DELIBERATION_BUDGET_SECONDS",
                 DEFAULT_DELIBERATION_BUDGET_SECONDS,

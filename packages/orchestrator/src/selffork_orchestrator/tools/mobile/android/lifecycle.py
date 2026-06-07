@@ -59,7 +59,8 @@ class AndroidAppActivateArgs(ToolArgs):
 
 
 async def _android_app_launch(
-    ctx: ToolContext, args: AndroidAppLaunchArgs,
+    ctx: ToolContext,
+    args: AndroidAppLaunchArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
     return await _invoke_mobile(
@@ -72,7 +73,8 @@ async def _android_app_launch(
 
 
 async def _android_app_terminate(
-    ctx: ToolContext, args: AndroidAppTerminateArgs,
+    ctx: ToolContext,
+    args: AndroidAppTerminateArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
     return await _invoke_mobile(
@@ -85,7 +87,8 @@ async def _android_app_terminate(
 
 
 async def _android_app_force_stop(
-    ctx: ToolContext, args: AndroidAppForceStopArgs,
+    ctx: ToolContext,
+    args: AndroidAppForceStopArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
     return await _invoke_mobile(
@@ -98,7 +101,8 @@ async def _android_app_force_stop(
 
 
 async def _android_app_clear_data(
-    ctx: ToolContext, args: AndroidAppClearDataArgs,
+    ctx: ToolContext,
+    args: AndroidAppClearDataArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
     return await _invoke_mobile(
@@ -111,7 +115,8 @@ async def _android_app_clear_data(
 
 
 async def _android_install_app(
-    ctx: ToolContext, args: AndroidInstallAppArgs,
+    ctx: ToolContext,
+    args: AndroidInstallAppArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
     return await _invoke_mobile(
@@ -124,7 +129,8 @@ async def _android_install_app(
 
 
 async def _android_uninstall_app(
-    ctx: ToolContext, args: AndroidUninstallAppArgs,
+    ctx: ToolContext,
+    args: AndroidUninstallAppArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
     return await _invoke_mobile(
@@ -137,7 +143,8 @@ async def _android_uninstall_app(
 
 
 async def _android_list_apps(
-    ctx: ToolContext, args: AndroidListAppsArgs,
+    ctx: ToolContext,
+    args: AndroidListAppsArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
 
@@ -155,7 +162,8 @@ async def _android_list_apps(
 
 
 async def _android_app_activate(
-    ctx: ToolContext, args: AndroidAppActivateArgs,
+    ctx: ToolContext,
+    args: AndroidAppActivateArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
     return await _invoke_mobile(

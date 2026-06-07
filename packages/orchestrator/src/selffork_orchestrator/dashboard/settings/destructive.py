@@ -60,9 +60,7 @@ def resolve_destructive_whitelist_path(
     3. Bundled default (``DEFAULT_CONFIG_PATH``).
     """
     effective_override = (
-        override_path
-        if override_path is not None
-        else DEFAULT_DESTRUCTIVE_OVERRIDE_PATH
+        override_path if override_path is not None else DEFAULT_DESTRUCTIVE_OVERRIDE_PATH
     )
     env = os.environ.get("SELFFORK_DESTRUCTIVE_WHITELIST_PATH")
     if env:
@@ -81,9 +79,7 @@ def destructive_whitelist_source(
     vs ``Default (bundled)`` next to the editor.
     """
     effective_override = (
-        override_path
-        if override_path is not None
-        else DEFAULT_DESTRUCTIVE_OVERRIDE_PATH
+        override_path if override_path is not None else DEFAULT_DESTRUCTIVE_OVERRIDE_PATH
     )
     env = os.environ.get("SELFFORK_DESTRUCTIVE_WHITELIST_PATH")
     if env:
@@ -102,6 +98,4 @@ def load_effective_destructive_whitelist(
     ``selffork_orchestrator.cli._load_destructive_whitelist``; both
     surfaces (warden and dashboard) now share this single resolver.
     """
-    return DestructiveWhitelist.load(
-        resolve_destructive_whitelist_path(override_path)
-    )
+    return DestructiveWhitelist.load(resolve_destructive_whitelist_path(override_path))

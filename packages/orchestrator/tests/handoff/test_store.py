@@ -1,4 +1,5 @@
 """Tests for :class:`HandoffBundleStore`."""
+
 from __future__ import annotations
 
 import time
@@ -62,13 +63,7 @@ def test_save_handles_orphan_session(tmp_path: Path) -> None:
     store = HandoffBundleStore(root=tmp_path)
     bundle = _bundle(project_slug=None)
     path = store.save(bundle)
-    assert path == (
-        tmp_path
-        / "sessions"
-        / "session-1"
-        / "handoff"
-        / "bundle-handoff-1.json"
-    )
+    assert path == (tmp_path / "sessions" / "session-1" / "handoff" / "bundle-handoff-1.json")
 
 
 def test_save_then_load_round_trip(tmp_path: Path) -> None:
@@ -85,10 +80,7 @@ def test_save_then_load_round_trip(tmp_path: Path) -> None:
 
 def test_load_returns_none_when_missing(tmp_path: Path) -> None:
     store = HandoffBundleStore(root=tmp_path)
-    assert (
-        store.load(session_id="session-x", bundle_id="handoff-x", project_slug="demo")
-        is None
-    )
+    assert store.load(session_id="session-x", bundle_id="handoff-x", project_slug="demo") is None
 
 
 def test_load_returns_none_on_invalid_json(tmp_path: Path) -> None:
@@ -96,10 +88,7 @@ def test_load_returns_none_on_invalid_json(tmp_path: Path) -> None:
     bundle = _bundle()
     path = store.save(bundle)
     path.write_text("{broken json", encoding="utf-8")
-    assert (
-        store.load(session_id="session-1", bundle_id="handoff-1", project_slug="demo")
-        is None
-    )
+    assert store.load(session_id="session-1", bundle_id="handoff-1", project_slug="demo") is None
 
 
 def test_list_for_session_orders_by_mtime(tmp_path: Path) -> None:

@@ -129,9 +129,7 @@ def test_filter_pause_overrides_quota_and_concurrency() -> None:
 
 
 def test_filter_outside_active_hours_only_wait() -> None:
-    legal = LegalActionFilter().legal_actions(
-        _healthy_state(within_active_hours=False)
-    )
+    legal = LegalActionFilter().legal_actions(_healthy_state(within_active_hours=False))
     assert legal == frozenset({LegalAction.WAIT})
 
 
@@ -179,9 +177,7 @@ def test_filter_one_cli_healthy_keeps_task_start() -> None:
 
 
 def test_filter_creative_off_drops_ideate() -> None:
-    legal = LegalActionFilter().legal_actions(
-        _healthy_state(creative_mode_enabled=False)
-    )
+    legal = LegalActionFilter().legal_actions(_healthy_state(creative_mode_enabled=False))
     assert LegalAction.IDEATE not in legal
 
 
@@ -200,9 +196,7 @@ def test_filter_body_alive_keeps_body_actions() -> None:
 
 
 def test_filter_body_not_alive_drops_body_actions() -> None:
-    legal = LegalActionFilter().legal_actions(
-        _healthy_state(body_daemon_alive=False)
-    )
+    legal = LegalActionFilter().legal_actions(_healthy_state(body_daemon_alive=False))
     assert LegalAction.BODY_USE not in legal
     assert LegalAction.BODY_REVIEW not in legal
     # Body gate is local to BODY_* — other actions stay legal.
@@ -244,12 +238,8 @@ def test_filter_combined_rules() -> None:
 
 def test_filter_supervised_mode_does_not_alter_set_in_faz_b() -> None:
     """Faz B exposes the marker without acting on it; Faz G wraps the act."""
-    legal_supervised = LegalActionFilter().legal_actions(
-        _healthy_state(supervised_mode=True)
-    )
-    legal_unsupervised = LegalActionFilter().legal_actions(
-        _healthy_state(supervised_mode=False)
-    )
+    legal_supervised = LegalActionFilter().legal_actions(_healthy_state(supervised_mode=True))
+    legal_unsupervised = LegalActionFilter().legal_actions(_healthy_state(supervised_mode=False))
     assert legal_supervised == legal_unsupervised
 
 

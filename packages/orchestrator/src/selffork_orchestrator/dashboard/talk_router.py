@@ -128,9 +128,7 @@ class _TalkBroadcaster:
 
     def __init__(self, *, registry: ReplayRegistry) -> None:
         self._registry = registry
-        self._subscribers: dict[
-            str, set[asyncio.Queue[WsEnvelope]]
-        ] = defaultdict(set)
+        self._subscribers: dict[str, set[asyncio.Queue[WsEnvelope]]] = defaultdict(set)
         self._lock = asyncio.Lock()
 
     @staticmethod
@@ -143,13 +141,9 @@ class _TalkBroadcaster:
     def next_seq(self, conversation_id: str) -> int:
         return next_seq(self._registry.counter(self._stream_key(conversation_id)))
 
-    async def subscribe(
-        self, conversation_id: str
-    ) -> asyncio.Queue[WsEnvelope]:
+    async def subscribe(self, conversation_id: str) -> asyncio.Queue[WsEnvelope]:
         """Register a fresh subscriber; remember to :meth:`unsubscribe`."""
-        queue: asyncio.Queue[WsEnvelope] = asyncio.Queue(
-            maxsize=_SUBSCRIBER_QUEUE_MAX
-        )
+        queue: asyncio.Queue[WsEnvelope] = asyncio.Queue(maxsize=_SUBSCRIBER_QUEUE_MAX)
         async with self._lock:
             self._subscribers[conversation_id].add(queue)
         return queue
@@ -204,9 +198,7 @@ class _TalkRouterState:
         self.broadcaster = _TalkBroadcaster(registry=registry)
         self._store: TalkStore | None = None
         self._lock = asyncio.Lock()
-        self._active_generations: dict[
-            str, dict[str, asyncio.Task[None]]
-        ] = defaultdict(dict)
+        self._active_generations: dict[str, dict[str, asyncio.Task[None]]] = defaultdict(dict)
         self._active_lock = asyncio.Lock()
 
     async def store(self) -> TalkStore:
@@ -378,8 +370,7 @@ async def _stream_speaker_reply(
                         broadcaster,
                         cid_str,
                         event_type="talk.message",
-                        payload=_message_payload(message)
-                        | {"generation_id": generation_id},
+                        payload=_message_payload(message) | {"generation_id": generation_id},
                     )
                     await broadcaster.publish(cid_str, envelope)
                     return
@@ -411,9 +402,7 @@ async def _stream_speaker_reply(
         )
         raise
     except Exception as exc:  # pragma: no cover — defensive
-        _py_log.exception(
-            "talk_stream_unexpected", extra={"conversation_id": cid_str}
-        )
+        _py_log.exception("talk_stream_unexpected", extra={"conversation_id": cid_str})
         await _publish_error(
             broadcaster,
             cid_str,
@@ -595,9 +584,7 @@ def build_talk_router(
         "/conversations/{conversation_id}/cancel-generation/{generation_id}",
         response_model=TalkCancelResponse,
     )
-    async def cancel_generation(
-        conversation_id: str, generation_id: str
-    ) -> TalkCancelResponse:
+    async def cancel_generation(conversation_id: str, generation_id: str) -> TalkCancelResponse:
         # Validate the path-id but never raise — the cancel surface is
         # idempotent and the cockpit may fire-and-forget on Stop.
         try:
@@ -607,9 +594,7 @@ def build_talk_router(
                 status_code=400,
                 detail=f"invalid conversation id {conversation_id!r}",
             ) from exc
-        cancelled, reason = await state.cancel_generation(
-            conversation_id, generation_id
-        )
+        cancelled, reason = await state.cancel_generation(conversation_id, generation_id)
         return TalkCancelResponse(cancelled=cancelled, reason=reason)
 
     # ── WS message stream ────────────────────────────────────────────
@@ -641,9 +626,7 @@ def build_talk_router(
         queue = await state.broadcaster.subscribe(cid_str)
         last_sent_seq = last_seq
         replay_buffer = state.broadcaster.buffer(cid_str)
-        seq_counter = state.broadcaster._registry.counter(
-            f"talk:{cid_str}"
-        )
+        seq_counter = state.broadcaster._registry.counter(f"talk:{cid_str}")
 
         try:
             # Phase 1: replay anything the client missed.
@@ -742,9 +725,7 @@ def _build_prompt(history: Iterable[TalkMessage]) -> list[dict[str, str]]:
     prompt: list[dict[str, str]] = [
         {"role": "system", "content": _SPEAKER_SYSTEM_PROMPT},
     ]
-    prompt.extend(
-        {"role": role_map[m.role], "content": m.content} for m in history
-    )
+    prompt.extend({"role": role_map[m.role], "content": m.content} for m in history)
     return prompt
 
 

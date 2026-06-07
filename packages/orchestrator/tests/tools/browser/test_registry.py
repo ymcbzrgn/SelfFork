@@ -88,7 +88,9 @@ def test_default_registry_includes_browser_fleet() -> None:
     browser = [n for n in names if n.startswith("browser_")]
     assert len(browser) == 63
     eager_browser = sum(
-        1 for n in browser if not registry.get(n).defer_loading  # type: ignore[union-attr]
+        1
+        for n in browser
+        if not registry.get(n).defer_loading  # type: ignore[union-attr]
     )
     assert eager_browser == 10
 
@@ -98,7 +100,8 @@ def test_no_browser_mobile_collision() -> None:
     registry = build_default_registry()
     browser = {n for n in registry.names() if n.startswith("browser_")}
     mobile = {
-        n for n in registry.names()
+        n
+        for n in registry.names()
         if n.startswith(("ios_", "android_", "expo_", "ui_verify_", "crash_"))
     }
     assert len(browser) == 63

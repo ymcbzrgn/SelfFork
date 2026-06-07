@@ -140,9 +140,7 @@ def _build_keyboard(entry: PendingConfirmation) -> InlineKeyboard:
 
 def _html_escape(value: str) -> str:
     """Telegram HTML escape — only the documented entities."""
-    return (
-        value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    )
+    return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _format_expires(entry: PendingConfirmation) -> str:

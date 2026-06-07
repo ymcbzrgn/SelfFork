@@ -40,9 +40,7 @@ def _row(
         "audit_idempotency_key": key,
         "correction_text": text,
         "source": source,
-        "corrected_at": (
-            corrected_at or datetime.now(UTC).isoformat()
-        ),
+        "corrected_at": (corrected_at or datetime.now(UTC).isoformat()),
     }
     if suggested is not None:
         row["suggested_action"] = suggested
@@ -208,9 +206,12 @@ async def test_ingester_skips_malformed_lines(tmp_path: Path) -> None:
         corrections = tmp_path / "corrections.jsonl"
         corrections.write_text(
             "not-json\n"
-            + json.dumps(_row(key="AUD-3", text="valid")) + "\n"
-            + json.dumps({"wrong": "schema"}) + "\n"
-            + json.dumps([1, 2, 3]) + "\n"
+            + json.dumps(_row(key="AUD-3", text="valid"))
+            + "\n"
+            + json.dumps({"wrong": "schema"})
+            + "\n"
+            + json.dumps([1, 2, 3])
+            + "\n"
             + "\n",
             encoding="utf-8",
         )
@@ -333,6 +334,4 @@ def test_checkpoint_path_defaults_next_to_corrections(tmp_path: Path) -> None:
         corrections_path=tmp_path / "corrections.jsonl",
         store=store,
     )
-    assert ingester.checkpoint_path == (
-        tmp_path / "corrections.ingest-checkpoint.json"
-    )
+    assert ingester.checkpoint_path == (tmp_path / "corrections.ingest-checkpoint.json")

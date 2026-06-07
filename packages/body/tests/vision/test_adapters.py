@@ -70,11 +70,13 @@ async def test_mlx_list_models_parses_openai_compat(
         assert request.url.path == "/v1/models"
         return httpx.Response(
             200,
-            json={"data": [
-                {"id": "mlx-community/gemma-4-E2B-it-4bit"},
-                {"id": "mlx-community/gemma-4-E4B-it-4bit"},
-                {"no_id": "skipped"},
-            ]},
+            json={
+                "data": [
+                    {"id": "mlx-community/gemma-4-E2B-it-4bit"},
+                    {"id": "mlx-community/gemma-4-E4B-it-4bit"},
+                    {"no_id": "skipped"},
+                ]
+            },
         )
 
     # Patch httpx.AsyncClient to use the mock transport.
@@ -120,11 +122,13 @@ async def test_ollama_list_models_parses_tags(
         assert request.url.path == "/api/tags"
         return httpx.Response(
             200,
-            json={"models": [
-                {"name": "gemma4:e2b-q4_K_M"},
-                {"name": "gemma4:e4b-q4_K_M"},
-                {"weird": "skipped"},
-            ]},
+            json={
+                "models": [
+                    {"name": "gemma4:e2b-q4_K_M"},
+                    {"name": "gemma4:e4b-q4_K_M"},
+                    {"weird": "skipped"},
+                ]
+            },
         )
 
     real_async_client = httpx.AsyncClient
@@ -183,14 +187,16 @@ class _StubRuntime:
 
 @pytest.mark.asyncio
 async def test_orchestrator_emits_model_id_and_backend_via_init() -> None:
-    runtime = _StubRuntime({
-        "action": "click",
-        "target": "Sign in",
-        "bbox": [10, 20, 80, 32],
-        "args": {},
-        "confidence": 0.91,
-        "reason": "high-confidence top-right button",
-    })
+    runtime = _StubRuntime(
+        {
+            "action": "click",
+            "target": "Sign in",
+            "bbox": [10, 20, 80, 32],
+            "args": {},
+            "confidence": 0.91,
+            "reason": "high-confidence top-right button",
+        }
+    )
     events: list[tuple[str, dict]] = []
     orch = VisionOrchestrator(
         runtime=runtime,
@@ -215,14 +221,16 @@ async def test_orchestrator_backend_inferred_from_runtime_classname() -> None:
     class FakeMlxRuntime(_StubRuntime):
         pass
 
-    runtime = FakeMlxRuntime({
-        "action": "wait",
-        "target": "loading spinner",
-        "bbox": None,
-        "args": {},
-        "confidence": 0.5,
-        "reason": "",
-    })
+    runtime = FakeMlxRuntime(
+        {
+            "action": "wait",
+            "target": "loading spinner",
+            "bbox": None,
+            "args": {},
+            "confidence": 0.5,
+            "reason": "",
+        }
+    )
     events: list[tuple[str, dict]] = []
     orch = VisionOrchestrator(
         runtime=runtime,

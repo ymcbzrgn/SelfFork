@@ -69,8 +69,10 @@ class MobileMcpAdapter:
         r = await client.post(
             f"{self.mcp_url}/swipe",
             json={
-                "start_x": start_x, "start_y": start_y,
-                "end_x": end_x, "end_y": end_y,
+                "start_x": start_x,
+                "start_y": start_y,
+                "end_x": end_x,
+                "end_y": end_y,
                 "duration_ms": duration_ms,
             },
         )
@@ -102,7 +104,8 @@ class MobileMcpAdapter:
     async def uninstall_app(self, package: str) -> None:
         client = self._ensure_client()
         r = await client.post(
-            f"{self.mcp_url}/uninstall_app", json={"package": package},
+            f"{self.mcp_url}/uninstall_app",
+            json={"package": package},
         )
         r.raise_for_status()
 
@@ -114,7 +117,8 @@ class MobileMcpAdapter:
     async def app_terminate(self, package: str) -> None:
         client = self._ensure_client()
         r = await client.post(
-            f"{self.mcp_url}/terminate", json={"package": package},
+            f"{self.mcp_url}/terminate",
+            json={"package": package},
         )
         r.raise_for_status()
 
@@ -159,6 +163,7 @@ class MobileMcpAdapter:
     async def set_orientation(self, orientation: str) -> None:
         client = self._ensure_client()
         r = await client.post(
-            f"{self.mcp_url}/orientation", json={"orientation": orientation},
+            f"{self.mcp_url}/orientation",
+            json={"orientation": orientation},
         )
         r.raise_for_status()

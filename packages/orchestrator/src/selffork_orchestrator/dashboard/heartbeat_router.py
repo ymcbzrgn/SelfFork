@@ -70,9 +70,7 @@ def build_heartbeat_router(
         store.write(payload)
         return payload
 
-    @router.post(
-        "/autonomy/preset/{preset}", response_model=AutonomySettings
-    )
+    @router.post("/autonomy/preset/{preset}", response_model=AutonomySettings)
     def post_preset(preset: str) -> AutonomySettings:
         try:
             tier = AutonomyPreset(preset)
@@ -109,9 +107,7 @@ def build_heartbeat_router(
                 "action": scheduler.last_action_decision.action.value,
                 "reasoning": scheduler.last_action_decision.reasoning,
                 "fallback": scheduler.last_action_decision.fallback,
-                "selected_at": (
-                    scheduler.last_action_decision.selected_at.isoformat()
-                ),
+                "selected_at": (scheduler.last_action_decision.selected_at.isoformat()),
             }
         result_payload: dict[str, Any] | None = None
         if scheduler.last_action_result is not None:

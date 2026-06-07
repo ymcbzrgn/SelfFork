@@ -83,9 +83,7 @@ class TestAppendEvent:
             assert ev.session_id is None
 
     @pytest.mark.anyio
-    async def test_seq_monotonic_per_workspace(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_seq_monotonic_per_workspace(self, tmp_path: Path) -> None:
         async with _store(tmp_path / "t.db") as s:
             e1 = await s.append_event(
                 workspace_slug="px",
@@ -108,9 +106,7 @@ class TestAppendEvent:
             assert [e1.seq, e2.seq, e3.seq] == [1, 2, 3]
 
     @pytest.mark.anyio
-    async def test_seq_independent_across_workspaces(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_seq_independent_across_workspaces(self, tmp_path: Path) -> None:
         async with _store(tmp_path / "t.db") as s:
             await s.append_event(
                 workspace_slug="px",
@@ -206,9 +202,7 @@ class TestListEvents:
 
 class TestValidation:
     @pytest.mark.anyio
-    async def test_empty_workspace_slug_rejected(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_empty_workspace_slug_rejected(self, tmp_path: Path) -> None:
         async with _store(tmp_path / "t.db") as s:
             with pytest.raises(ConfigError):
                 await s.append_event(
@@ -230,9 +224,7 @@ class TestValidation:
                 )
 
     @pytest.mark.anyio
-    async def test_malformed_cli_payload_rejected(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_malformed_cli_payload_rejected(self, tmp_path: Path) -> None:
         async with _store(tmp_path / "t.db") as s:
             with pytest.raises(ConfigError):
                 # missing the required ``text`` field
@@ -244,9 +236,7 @@ class TestValidation:
                 )
 
     @pytest.mark.anyio
-    async def test_malformed_thought_payload_rejected(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_malformed_thought_payload_rejected(self, tmp_path: Path) -> None:
         async with _store(tmp_path / "t.db") as s:
             with pytest.raises(ConfigError):
                 # unknown field — payload models forbid extras
@@ -280,9 +270,7 @@ class TestPersistence:
 
 class TestClosedStoreGuard:
     @pytest.mark.anyio
-    async def test_writes_after_teardown_raise(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_writes_after_teardown_raise(self, tmp_path: Path) -> None:
         s = TheaterStore(db_path=tmp_path / "t.db")
         await s.setup()
         await s.teardown()
@@ -317,9 +305,7 @@ class TestActiveLoop:
             assert active.workspace_name == "Project X"
 
     @pytest.mark.anyio
-    async def test_active_loop_none_when_idle(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_active_loop_none_when_idle(self, tmp_path: Path) -> None:
         async with _store(tmp_path / "t.db") as s:
             assert await s.active_loop() is None
 
@@ -346,17 +332,13 @@ class TestActiveLoop:
                 workspace_name="PX",
                 cli="claude",
             )
-            await s.touch_loop(
-                session_id="s1", turn=1, last_thought="Testing login"
-            )
+            await s.touch_loop(session_id="s1", turn=1, last_thought="Testing login")
             active = await s.active_loop()
             assert active is not None
             assert active.last_thought == "Testing login"
 
     @pytest.mark.anyio
-    async def test_touch_without_thought_keeps_previous(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_touch_without_thought_keeps_previous(self, tmp_path: Path) -> None:
         async with _store(tmp_path / "t.db") as s:
             await s.register_loop(
                 session_id="s1",
@@ -364,9 +346,7 @@ class TestActiveLoop:
                 workspace_name="PX",
                 cli="claude",
             )
-            await s.touch_loop(
-                session_id="s1", turn=1, last_thought="first thought"
-            )
+            await s.touch_loop(session_id="s1", turn=1, last_thought="first thought")
             await s.touch_loop(session_id="s1", turn=2)
             active = await s.active_loop()
             assert active is not None
@@ -398,9 +378,7 @@ class TestActiveLoop:
             assert await s.loop_for_workspace("py") is None
 
     @pytest.mark.anyio
-    async def test_active_loop_picks_latest_touched(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_active_loop_picks_latest_touched(self, tmp_path: Path) -> None:
         async with _store(tmp_path / "t.db") as s:
             await s.register_loop(
                 session_id="s1",
@@ -430,14 +408,10 @@ class TestActiveLoop:
             )
             # Threshold 0 — the row's updated_at is already in the past.
             assert await s.active_loop(stale_after_seconds=0) is None
-            assert (
-                await s.loop_for_workspace("px", stale_after_seconds=0)
-            ) is None
+            assert (await s.loop_for_workspace("px", stale_after_seconds=0)) is None
 
     @pytest.mark.anyio
-    async def test_empty_session_id_rejected(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_empty_session_id_rejected(self, tmp_path: Path) -> None:
         async with _store(tmp_path / "t.db") as s:
             with pytest.raises(ConfigError):
                 await s.register_loop(
@@ -448,9 +422,7 @@ class TestActiveLoop:
                 )
 
     @pytest.mark.anyio
-    async def test_loop_survives_store_reopen(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_loop_survives_store_reopen(self, tmp_path: Path) -> None:
         db = tmp_path / "t.db"
         async with _store(db) as s:
             await s.register_loop(

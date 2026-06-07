@@ -236,9 +236,7 @@ async def test_snapper_translates_each_supported_cli_id() -> None:
         ) -> httpx.Response:
             # Defaults pin loop-scoped values so ruff B023 stays happy.
             _sink.append(request.url.params["provider"])
-            return httpx.Response(
-                200, json=_payload(provider=_expected)
-            )
+            return httpx.Response(200, json=_payload(provider=_expected))
 
         snapper = CodexBarSnapper(
             cli_id=selffork_id,

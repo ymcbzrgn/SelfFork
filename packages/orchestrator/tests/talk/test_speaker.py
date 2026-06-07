@@ -41,9 +41,7 @@ def _sse_frame(content: str = "", *, finish_reason: str | None = None) -> bytes:
     (no delta.content, just the finish marker).
     """
     delta: dict[str, str] = {"content": content} if content else {}
-    payload = json.dumps(
-        {"choices": [{"delta": delta, "finish_reason": finish_reason}]}
-    )
+    payload = json.dumps({"choices": [{"delta": delta, "finish_reason": finish_reason}]})
     return f"data: {payload}\n\n".encode()
 
 
@@ -291,10 +289,7 @@ class TestReplyStream:
                 stall_seconds=0.2,
             ):
                 pass
-        assert (
-            "wedged" in str(info.value).lower()
-            or "stalled" in str(info.value).lower()
-        )
+        assert "wedged" in str(info.value).lower() or "stalled" in str(info.value).lower()
 
     @pytest.mark.anyio
     async def test_stream_watchdog_disabled_runs_unbounded(self) -> None:
@@ -331,20 +326,14 @@ class TestReplyStream:
 
         speaker = _stream_client(handler)
         with pytest.raises(RuntimeUnhealthyError):
-            async for _ in speaker.reply_stream(
-                [{"role": "user", "content": "x"}]
-            ):
+            async for _ in speaker.reply_stream([{"role": "user", "content": "x"}]):
                 pass
 
     @pytest.mark.anyio
     async def test_stream_non_200_raises_unhealthy_with_body(self) -> None:
-        speaker = _stream_client(
-            lambda _req: httpx.Response(503, text="model loading")
-        )
+        speaker = _stream_client(lambda _req: httpx.Response(503, text="model loading"))
         with pytest.raises(RuntimeUnhealthyError) as info:
-            async for _ in speaker.reply_stream(
-                [{"role": "user", "content": "x"}]
-            ):
+            async for _ in speaker.reply_stream([{"role": "user", "content": "x"}]):
                 pass
         assert "503" in str(info.value)
         assert "model loading" in str(info.value)
@@ -392,6 +381,7 @@ class TestReplyStream:
         speaker = _stream_client(_stream_response(gen))
 
         seen = 0
+
         # The whole test must return quickly — bound the iteration by a
         # wall-clock guard so the test author can't trap themselves in
         # an actually-hanging stream.
@@ -462,7 +452,5 @@ class TestReplyStream:
             transport=httpx.MockTransport(_stream_response(gen)),
         )
         with pytest.raises(SpeakerStalledError):
-            async for _ in speaker.reply_stream(
-                [{"role": "user", "content": "x"}]
-            ):
+            async for _ in speaker.reply_stream([{"role": "user", "content": "x"}]):
                 pass

@@ -1,4 +1,5 @@
 """Tests for :class:`HandoffBundle` schema."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timezone
@@ -72,6 +73,7 @@ def test_handoff_bundle_minimal_round_trip() -> None:
 def test_handoff_bundle_normalizes_non_utc_created_at() -> None:
     eastern = timezone.utcoffset.__self__ if False else None  # type: ignore[unreachable]
     from datetime import timedelta
+
     eastern = timezone(timedelta(hours=-5))
     b = _bundle(created_at=datetime(2026, 5, 9, 9, 30, tzinfo=eastern))
     assert b.created_at.tzinfo is UTC

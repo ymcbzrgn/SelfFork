@@ -110,9 +110,7 @@ async def test_cooldown_dedupes_repeated_alerts() -> None:
 async def test_cooldown_is_per_provider() -> None:
     """A different provider isn't blocked by another's cooldown."""
     bridge = _RecordingBridge()
-    monitor = ProviderAuthMonitor(
-        bridge=bridge, cooldown=timedelta(minutes=5)
-    )
+    monitor = ProviderAuthMonitor(bridge=bridge, cooldown=timedelta(minutes=5))
     await monitor.notify_auth_expired("claude_pro", "x")
     second = await monitor.notify_auth_expired("codex", "y")
     assert second.cooldown_skipped is False
@@ -123,9 +121,7 @@ async def test_cooldown_is_per_provider() -> None:
 async def test_cooldown_resets_after_window() -> None:
     """Once the window passes, a fresh alert goes through."""
     bridge = _RecordingBridge()
-    monitor = ProviderAuthMonitor(
-        bridge=bridge, cooldown=timedelta(seconds=0)
-    )
+    monitor = ProviderAuthMonitor(bridge=bridge, cooldown=timedelta(seconds=0))
     await monitor.notify_auth_expired("opencode", "first")
     second = await monitor.notify_auth_expired("opencode", "second")
     assert second.cooldown_skipped is False
@@ -136,9 +132,7 @@ async def test_cooldown_resets_after_window() -> None:
 @pytest.mark.asyncio
 async def test_history_tracks_all_calls() -> None:
     bridge = _RecordingBridge()
-    monitor = ProviderAuthMonitor(
-        bridge=bridge, cooldown=timedelta(minutes=10)
-    )
+    monitor = ProviderAuthMonitor(bridge=bridge, cooldown=timedelta(minutes=10))
     await monitor.notify_auth_expired("claude_pro", "1")
     await monitor.notify_auth_expired("claude_pro", "2")  # cooldown
     await monitor.notify_auth_expired("codex", "3")
@@ -185,18 +179,14 @@ def test_format_alert_uses_plain_text_no_html_tags() -> None:
 @pytest.fixture
 def _client_and_bridge() -> tuple[TestClient, _RecordingBridge]:
     bridge = _RecordingBridge()
-    monitor = ProviderAuthMonitor(
-        bridge=bridge, cooldown=timedelta(seconds=0)
-    )
+    monitor = ProviderAuthMonitor(bridge=bridge, cooldown=timedelta(seconds=0))
     registry = ProviderRegistry()
     app = FastAPI()
     app.include_router(
         # ``creds_detector=dict`` (empty map) keeps these registry-focused
         # tests hermetic — no real keychain subprocess / ~/.codex reads —
         # so list_providers falls back to the in-memory record status.
-        build_provider_router(
-            registry=registry, auth_monitor=monitor, creds_detector=dict
-        ),
+        build_provider_router(registry=registry, auth_monitor=monitor, creds_detector=dict),
     )
     return TestClient(app), bridge
 

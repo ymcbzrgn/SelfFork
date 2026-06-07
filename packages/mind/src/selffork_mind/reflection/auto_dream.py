@@ -106,9 +106,7 @@ class AutoDreamCheckpoint:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "last_dream_at": (
-                self.last_dream_at.isoformat() if self.last_dream_at else None
-            ),
+            "last_dream_at": (self.last_dream_at.isoformat() if self.last_dream_at else None),
             "sessions_since_last_dream": self.sessions_since_last_dream,
             "last_reflections_written": self.last_reflections_written,
         }

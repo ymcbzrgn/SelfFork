@@ -1,4 +1,5 @@
 """Tests for session lifecycle tools (``session_state``, ``mark_done``, ``cancel_pending``)."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock

@@ -82,9 +82,7 @@ class QuotaExhaustedAcrossFleetError(RuntimeError):
 
     def __init__(self, clis: list[str]) -> None:
         self.clis = tuple(clis)
-        super().__init__(
-            f"all candidate CLIs are quota-exhausted: {sorted(set(clis))}"
-        )
+        super().__init__(f"all candidate CLIs are quota-exhausted: {sorted(set(clis))}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,15 +129,11 @@ class CliAffinityProvider:
     home: Path | None = None
     config: AffinityConfig = field(default_factory=AffinityConfig)
     outcome_log_path: Path | None = None
-    _global: DuckDBCliAffinityStore | None = field(
-        default=None, init=False, repr=False
-    )
+    _global: DuckDBCliAffinityStore | None = field(default=None, init=False, repr=False)
     _projects: dict[str, DuckDBCliAffinityStore] = field(
         default_factory=dict, init=False, repr=False
     )
-    _ingester: OutcomeIngester | None = field(
-        default=None, init=False, repr=False
-    )
+    _ingester: OutcomeIngester | None = field(default=None, init=False, repr=False)
 
     async def setup(self) -> None:
         """Open the shared GLOBAL store eagerly (fail-fast on DB issues)."""
@@ -169,9 +163,7 @@ class CliAffinityProvider:
     async def resolver_for(self, workspace: str | None) -> CliAffinityResolver:
         """A dual-pool resolver bound to ``workspace`` (PROJECT) + GLOBAL."""
         global_store = await self._ensure_global()
-        project_store = (
-            await self._ensure_project(workspace) if workspace else None
-        )
+        project_store = await self._ensure_project(workspace) if workspace else None
         return CliAffinityResolver(
             project_store=project_store,
             global_store=global_store,
@@ -278,17 +270,12 @@ class CLIRouter:
                     effort=self.runtime_store.effort_for(override.cli),
                     method="override",
                     sticky=override.sticky,
-                    reasoning=(
-                        f"operator {kind} override ({forced}) → "
-                        f"{override.cli}/{model}"
-                    ),
+                    reasoning=(f"operator {kind} override ({forced}) → {override.cli}/{model}"),
                     eligible=((override.cli, model),),
                 )
 
         # 2. enumerate (cli, model) candidates + quota filter
-        pairs = candidate_pairs(
-            cli_pool, models_override=self.runtime_store.models_override()
-        )
+        pairs = candidate_pairs(cli_pool, models_override=self.runtime_store.models_override())
         await self.affinity.drain()
         eligible, filtered = await self._filter_by_quota(pairs)
         if not eligible:
@@ -296,26 +283,14 @@ class CLIRouter:
 
         # 3. RAG affinity argmax over eligible (cli, model)
         resolver = await self.affinity.resolver_for(workspace)
-        scored = await resolver.score_candidates(
-            task_type=task_type, candidates=eligible
-        )
-        scores_map: dict[str, float] = {
-            _pair_key(s.cli, s.model): s.score for s in scored
-        }
-        levels_map: dict[str, str] = {
-            _pair_key(s.cli, s.model): s.match_level for s in scored
-        }
+        scored = await resolver.score_candidates(task_type=task_type, candidates=eligible)
+        scores_map: dict[str, float] = {_pair_key(s.cli, s.model): s.score for s in scored}
+        levels_map: dict[str, str] = {_pair_key(s.cli, s.model): s.match_level for s in scored}
 
-        if (
-            self.exploration_epsilon > 0.0
-            and self.rng.random() < self.exploration_epsilon
-        ):
+        if self.exploration_epsilon > 0.0 and self.rng.random() < self.exploration_epsilon:
             cli, model = self.rng.choice(eligible)
             method: SelectionMethod = "exploration"
-            reasoning = (
-                f"exploration (epsilon={self.exploration_epsilon}) → "
-                f"{cli}/{model}"
-            )
+            reasoning = f"exploration (epsilon={self.exploration_epsilon}) → {cli}/{model}"
         else:
             best = _argmax(scored)
             cli, model = best.cli, best.model
@@ -382,9 +357,7 @@ class CLIRouter:
         filtered: list[tuple[str, str]] = []
         for cli, model in pairs:
             snapshot = await self.quota_reader(cli, model)
-            if snapshot is not None and snapshot.is_exhausted(
-                self.quota_threshold_pct
-            ):
+            if snapshot is not None and snapshot.is_exhausted(self.quota_threshold_pct):
                 filtered.append((cli, model))
             else:
                 eligible.append((cli, model))

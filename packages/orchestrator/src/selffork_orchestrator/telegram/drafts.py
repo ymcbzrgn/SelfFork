@@ -99,9 +99,7 @@ class TelegramDraftStore:
 
     def count_unclaimed(self) -> int:
         with closing(self._connect()) as conn:
-            row = conn.execute(
-                "SELECT COUNT(*) FROM drafts WHERE claimed = 0"
-            ).fetchone()
+            row = conn.execute("SELECT COUNT(*) FROM drafts WHERE claimed = 0").fetchone()
         return int(row[0]) if row else 0
 
     def claim(self, ids: Iterable[int]) -> int:

@@ -202,9 +202,7 @@ def build_settings_router(
                 detail="config_path not set; persistent updates disabled",
             )
         current = _load_vision()
-        update = {
-            k: v for k, v in payload.model_dump(exclude_none=True).items()
-        }
+        update = {k: v for k, v in payload.model_dump(exclude_none=True).items()}
         merged = current.model_copy(update=update)
         _persist_vision(config_path, merged)
         return merged
@@ -215,9 +213,7 @@ def build_settings_router(
         mlx = MlxVlmAdapter.from_config(cfg)
         ollama = OllamaVisionAdapter.from_config(cfg)
         mlx_ok, mlx_models, mlx_err = await _probe(mlx.list_models)
-        ollama_ok, ollama_models, ollama_err = await _probe(
-            ollama.list_models
-        )
+        ollama_ok, ollama_models, ollama_err = await _probe(ollama.list_models)
         return VisionDetectResponse(
             mlx_available=mlx_ok,
             mlx_models=mlx_models,
@@ -238,9 +234,7 @@ def build_settings_router(
         me_store.write(payload)
         return payload
 
-    @router.post(
-        "/model-endpoint/test", response_model=ModelEndpointHealth
-    )
+    @router.post("/model-endpoint/test", response_model=ModelEndpointHealth)
     async def test_model_endpoint(
         payload: ModelEndpointConfig | None = None,
     ) -> ModelEndpointHealth:
@@ -407,9 +401,7 @@ def _build_destructive_whitelist_response(
     """Compose the GET response from the currently-effective file."""
     path = resolve_destructive_whitelist_path(override_path)
     source = destructive_whitelist_source(override_path)
-    raw_yaml = (
-        path.read_text(encoding="utf-8") if path.is_file() else ""
-    )
+    raw_yaml = path.read_text(encoding="utf-8") if path.is_file() else ""
     wl = DestructiveWhitelist.load(path)
     categories = [
         DestructiveCategoryView(
@@ -433,11 +425,7 @@ async def _probe_model_endpoint(
 ) -> ModelEndpointHealth:
     """Probe the endpoint with the protocol-appropriate ping URL."""
     url_base = cfg.url.rstrip("/")
-    probe_url = (
-        f"{url_base}/api/tags"
-        if cfg.protocol == "ollama"
-        else f"{url_base}/v1/models"
-    )
+    probe_url = f"{url_base}/api/tags" if cfg.protocol == "ollama" else f"{url_base}/v1/models"
     headers: dict[str, str] = {}
     if cfg.auth_kind != "none" and cfg.auth_secret:
         headers["Authorization"] = f"Bearer {cfg.auth_secret}"
@@ -449,11 +437,7 @@ async def _probe_model_endpoint(
         latency_ms = int((time.monotonic() - start) * 1000)
         ok = 200 <= resp.status_code < 300
         server = resp.headers.get("server", "")
-        detail = (
-            f"server={server}"
-            if server
-            else f"status={resp.status_code}"
-        )
+        detail = f"server={server}" if server else f"status={resp.status_code}"
         return ModelEndpointHealth(
             ok=ok,
             status_code=resp.status_code,

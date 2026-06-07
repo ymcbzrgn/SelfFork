@@ -41,8 +41,7 @@ class ScreenshotCapture(Protocol):
     support cropping ignore the parameter and return the full frame.
     """
 
-    async def capture(self, rect: tuple[int, int, int, int] | None = None) -> bytes:
-        ...
+    async def capture(self, rect: tuple[int, int, int, int] | None = None) -> bytes: ...
 
 
 class _SubprocessCaptureBase:

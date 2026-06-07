@@ -71,8 +71,13 @@ class TmuxDesktopDriver:
     async def capture_pane(self, target_session: str, target_pane: str) -> str:
         target = f"{target_session}:{target_pane}" if target_pane else target_session
         proc = await asyncio.create_subprocess_exec(
-            "tmux", "capture-pane", "-p", "-t", target,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            "tmux",
+            "capture-pane",
+            "-p",
+            "-t",
+            target,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await proc.communicate()
         if proc.returncode != 0:

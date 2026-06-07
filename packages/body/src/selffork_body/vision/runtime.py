@@ -42,9 +42,7 @@ class VisionDecision:
     duration_ms: int
 
 
-def _decision_from_dict(
-    payload: dict[str, Any], *, tier: Tier, duration_ms: int
-) -> VisionDecision:
+def _decision_from_dict(payload: dict[str, Any], *, tier: Tier, duration_ms: int) -> VisionDecision:
     bbox_raw = payload.get("bbox")
     bbox: tuple[int, int, int, int] | None = None
     if isinstance(bbox_raw, (list, tuple)) and len(bbox_raw) == 4:
@@ -147,9 +145,7 @@ class MlxVlmAdapter:
             payload["stop"] = list(stop)
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{self.server_url}/v1/chat/completions", json=payload
-            )
+            response = await client.post(f"{self.server_url}/v1/chat/completions", json=payload)
             response.raise_for_status()
             data = response.json()
             return cast(str, data["choices"][0]["message"]["content"])
@@ -162,7 +158,9 @@ class OllamaVisionAdapter:
     chat endpoint. Linux server-side fallback when MLX is unavailable.
     """
 
-    def __init__(self, host: str = "http://127.0.0.1:11434", model: str = "gemma4:e2b-q4_K_M") -> None:
+    def __init__(
+        self, host: str = "http://127.0.0.1:11434", model: str = "gemma4:e2b-q4_K_M"
+    ) -> None:
         self.host = host.rstrip("/")
         self.model = model
 
@@ -260,7 +258,9 @@ class VisionOrchestrator:
         # emits as ``"unknown"`` in the audit payload.
         if model_id is None:
             model_id = getattr(runtime, "model_id", None) or getattr(
-                runtime, "model", None,
+                runtime,
+                "model",
+                None,
             )
         if backend is None:
             # Heuristic: class name → backend tag (mlx | ollama | other).

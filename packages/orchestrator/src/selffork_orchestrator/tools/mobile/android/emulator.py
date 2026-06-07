@@ -40,7 +40,8 @@ class AndroidEmulatorShutdownArgs(ToolArgs):
 
 
 async def _android_device_list(
-    ctx: ToolContext, args: AndroidDeviceListArgs,
+    ctx: ToolContext,
+    args: AndroidDeviceListArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
 
@@ -58,7 +59,8 @@ async def _android_device_list(
 
 
 async def _android_set_geolocation(
-    ctx: ToolContext, args: AndroidSetGeolocationArgs,
+    ctx: ToolContext,
+    args: AndroidSetGeolocationArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
 
@@ -79,14 +81,18 @@ async def _android_set_geolocation(
 
 
 async def _android_emulator_boot(
-    ctx: ToolContext, args: AndroidEmulatorBootArgs,
+    ctx: ToolContext,
+    args: AndroidEmulatorBootArgs,
 ) -> dict[str, Any]:
     _require_android_driver(ctx)
 
     async def _boot() -> dict[str, Any]:
         # ``emulator -avd <name>`` blocks; spawn detached, return PID.
         proc = await asyncio.create_subprocess_exec(
-            "emulator", "-avd", args.avd, "-no-snapshot-load",
+            "emulator",
+            "-avd",
+            args.avd,
+            "-no-snapshot-load",
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
             start_new_session=True,
@@ -103,7 +109,8 @@ async def _android_emulator_boot(
 
 
 async def _android_emulator_shutdown(
-    ctx: ToolContext, args: AndroidEmulatorShutdownArgs,
+    ctx: ToolContext,
+    args: AndroidEmulatorShutdownArgs,
 ) -> dict[str, Any]:
     drv = _require_android_driver(ctx)
 

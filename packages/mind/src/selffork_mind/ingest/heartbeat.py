@@ -282,7 +282,9 @@ class HeartbeatIngester:
     poll_seconds: float = 1.0
     _stop_event: asyncio.Event = field(default_factory=asyncio.Event, init=False, repr=False)
     _ingest_lock: asyncio.Lock = field(
-        default_factory=asyncio.Lock, init=False, repr=False,
+        default_factory=asyncio.Lock,
+        init=False,
+        repr=False,
     )
 
     def __post_init__(self) -> None:
@@ -478,9 +480,7 @@ def correction_entry_to_note(entry: dict[str, object]) -> Note | None:
     if not isinstance(text, str) or not text.strip():
         return None
     suggested = entry.get("suggested_action")
-    suggested_s = (
-        suggested if isinstance(suggested, str) and suggested else None
-    )
+    suggested_s = suggested if isinstance(suggested, str) and suggested else None
     source = entry.get("source")
     source_s = source if isinstance(source, str) and source else "operator"
     corrected_at_raw = entry.get("corrected_at")
@@ -548,10 +548,14 @@ class CorrectionIngester:
     checkpoint_path: Path | None = None
     poll_seconds: float = 1.0
     _stop_event: asyncio.Event = field(
-        default_factory=asyncio.Event, init=False, repr=False,
+        default_factory=asyncio.Event,
+        init=False,
+        repr=False,
     )
     _ingest_lock: asyncio.Lock = field(
-        default_factory=asyncio.Lock, init=False, repr=False,
+        default_factory=asyncio.Lock,
+        init=False,
+        repr=False,
     )
 
     def __post_init__(self) -> None:
@@ -595,7 +599,8 @@ class CorrectionIngester:
         report = HeartbeatIngestReport()
         assert self.checkpoint_path is not None  # noqa: S101
         checkpoint = await asyncio.to_thread(
-            _load_checkpoint, self.checkpoint_path,
+            _load_checkpoint,
+            self.checkpoint_path,
         )
         report.new_offset = checkpoint.last_byte_offset
         report.last_tick = checkpoint.last_tick
@@ -678,7 +683,9 @@ class CorrectionIngester:
             last_ingested_at=datetime.now(UTC),
         )
         await asyncio.to_thread(
-            _save_checkpoint, self.checkpoint_path, new_checkpoint,
+            _save_checkpoint,
+            self.checkpoint_path,
+            new_checkpoint,
         )
         report.new_offset = latest_offset
         return report

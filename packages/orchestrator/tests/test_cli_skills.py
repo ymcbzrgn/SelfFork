@@ -15,9 +15,7 @@ def runner() -> CliRunner:
     return CliRunner()
 
 
-def test_skills_list_no_canonical_dir(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_skills_list_no_canonical_dir(runner: CliRunner, tmp_path: Path) -> None:
     """Missing canonical dir is the pre-populate state; print + exit 0."""
     result = runner.invoke(
         app,
@@ -27,9 +25,7 @@ def test_skills_list_no_canonical_dir(
     assert "no skills found" in result.stdout
 
 
-def test_skills_list_empty_canonical(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_skills_list_empty_canonical(runner: CliRunner, tmp_path: Path) -> None:
     canonical = tmp_path / "canonical"
     canonical.mkdir()
     result = runner.invoke(
@@ -40,9 +36,7 @@ def test_skills_list_empty_canonical(
     assert "no skills found" in result.stdout
 
 
-def test_skills_list_with_skills(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_skills_list_with_skills(runner: CliRunner, tmp_path: Path) -> None:
     canonical = tmp_path / "canonical"
     canonical.mkdir()
     (canonical / "skill-a").mkdir()
@@ -59,9 +53,7 @@ def test_skills_list_with_skills(
     assert "ignored-file" not in result.stdout
 
 
-def test_skills_sync_no_canonical_dir(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_skills_sync_no_canonical_dir(runner: CliRunner, tmp_path: Path) -> None:
     """Missing canonical dir produces a clean message + exit 0."""
     result = runner.invoke(
         app,
@@ -71,9 +63,7 @@ def test_skills_sync_no_canonical_dir(
     assert "does not exist yet" in result.stdout
 
 
-def test_skills_sync_empty_canonical_no_op(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_skills_sync_empty_canonical_no_op(runner: CliRunner, tmp_path: Path) -> None:
     canonical = tmp_path / "canonical"
     canonical.mkdir()
     target = tmp_path / "target"
@@ -92,9 +82,7 @@ def test_skills_sync_empty_canonical_no_op(
     assert "nothing to do" in result.stdout
 
 
-def test_skills_sync_installs_into_targets(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_skills_sync_installs_into_targets(runner: CliRunner, tmp_path: Path) -> None:
     canonical = tmp_path / "canonical"
     canonical.mkdir()
     (canonical / "skill-a").mkdir()
@@ -145,9 +133,7 @@ def test_skills_sync_idempotent(runner: CliRunner, tmp_path: Path) -> None:
     assert "Installed" not in second.stdout or "0 link" in second.stdout
 
 
-def test_skills_sync_reports_file_conflict(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_skills_sync_reports_file_conflict(runner: CliRunner, tmp_path: Path) -> None:
     canonical = tmp_path / "canonical"
     canonical.mkdir()
     (canonical / "skill-a").mkdir()
@@ -170,14 +156,10 @@ def test_skills_sync_reports_file_conflict(
     assert "Conflicts" in result.stdout + result.stderr
     assert "skill-a" in result.stdout + result.stderr
     # Pre-existing file MUST remain untouched.
-    assert (target / "skill-a").read_text() == (
-        "not a skill — should not be overwritten"
-    )
+    assert (target / "skill-a").read_text() == ("not a skill — should not be overwritten")
 
 
-def test_skills_sync_reports_foreign_symlink_conflict(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_skills_sync_reports_foreign_symlink_conflict(runner: CliRunner, tmp_path: Path) -> None:
     canonical = tmp_path / "canonical"
     canonical.mkdir()
     (canonical / "skill-a").mkdir()

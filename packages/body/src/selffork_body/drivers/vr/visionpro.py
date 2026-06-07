@@ -39,7 +39,8 @@ class VisionProDriver:
         # ``xcrun simctl`` surface; the platform difference shows up in
         # the device list (runtime name contains "visionOS").
         self.simulator = IosSimulatorRuntime(
-            device_id=device_id, ios_version="visionOS",
+            device_id=device_id,
+            ios_version="visionOS",
         )
         self._applescript = AppleScriptRunner()
         self._started = False
@@ -78,7 +79,9 @@ class VisionProDriver:
         udid: str | None = None,
     ) -> str:
         return await self.simulator.get_logs(
-            predicate=predicate, last=last, udid=udid,
+            predicate=predicate,
+            last=last,
+            udid=udid,
         )
 
     async def click_at(self, x: int, y: int) -> None:
@@ -88,9 +91,7 @@ class VisionProDriver:
         clicks the topmost window underneath. Best-effort: visionOS sim
         must be the frontmost window for the click to land on it.
         """
-        script = (
-            f'tell application "System Events" to click at {{{x}, {y}}}'
-        )
+        script = f'tell application "System Events" to click at {{{x}, {y}}}'
         await self._applescript.run(script, language="AppleScript")
 
     async def get_device_summary(self) -> dict[str, Any]:

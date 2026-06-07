@@ -41,8 +41,7 @@ class _AutoPRCreateArgs(ToolArgs):
         min_length=1,
         max_length=200,
         description=(
-            "PR title — imperative + scoped (e.g. 'Add login flow'). "
-            "Required, max 200 chars."
+            "PR title — imperative + scoped (e.g. 'Add login flow'). Required, max 200 chars."
         ),
     )
     body: str = Field(
@@ -95,10 +94,7 @@ def _auto_pr_create_handler(
     if binary is None:
         return {
             "status": "missing_binary",
-            "error": (
-                "gh CLI not found on PATH; install + authenticate "
-                "(`gh auth login`) first"
-            ),
+            "error": ("gh CLI not found on PATH; install + authenticate (`gh auth login`) first"),
         }
 
     cmd = [
