@@ -1,0 +1,3 @@
+## 2024-06-08 - Accessible Focus Rings on Custom Buttons
+**Learning:** Custom interactive elements (like raw `<button>` tags outside the `shadcn/ui` ecosystem) often lack visible focus indicators by default, which breaks keyboard navigation. The standard pattern in this codebase for interactive elements is to apply `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background`.
+**Action:** When adding or editing custom `<button>` or `<Link>` elements, explicitly include the `focus-visible:ring-*` utility classes to ensure visual focus indicators are present for keyboard accessibility. Icon-only buttons also require `title` tooltips to match their `aria-label`.

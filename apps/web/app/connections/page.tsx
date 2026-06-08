@@ -350,7 +350,7 @@ export default function ConnectionsPage() {
               <button
                 type="button"
                 onClick={openSetup}
-                className="px-4 py-2 bg-primary text-white text-caption font-bold rounded-lg hover:bg-primary-container transition-colors"
+                className="px-4 py-2 bg-primary text-white text-caption font-bold rounded-lg hover:bg-primary-container transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 {tgConnected ? "Reconfigure…" : "Connect"}
               </button>
@@ -417,7 +417,7 @@ export default function ConnectionsPage() {
                   })();
                 }}
                 disabled={!tgConnected || testStatus === "sending"}
-                className="px-3 py-1.5 border border-outline-variant text-caption font-medium rounded-lg flex items-center gap-1 text-on-surface enabled:hover:bg-surface-container disabled:text-on-surface-variant disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-3 py-1.5 border border-outline-variant text-caption font-medium rounded-lg flex items-center gap-1 text-on-surface enabled:hover:bg-surface-container disabled:text-on-surface-variant disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 {testStatus === "sending" ? "Sending…" : "Send test"}
               </button>
@@ -521,7 +521,8 @@ function TelegramSetupModal({
             type="button"
             onClick={onCancel}
             aria-label="Close"
-            className="text-on-surface-variant hover:text-on-surface"
+            title="Close"
+            className="text-on-surface-variant hover:text-on-surface rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <X className="h-5 w-5" strokeWidth={1.75} />
           </button>
@@ -638,7 +639,7 @@ function TelegramSetupModal({
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="px-3 py-1.5 border border-outline-variant text-caption font-medium rounded-lg disabled:opacity-50"
+            className="px-3 py-1.5 border border-outline-variant text-caption font-medium rounded-lg disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             Cancel
           </button>
@@ -646,7 +647,7 @@ function TelegramSetupModal({
             type="button"
             disabled={busy || !form.bot_token.trim()}
             onClick={onSubmit}
-            className="px-4 py-2 bg-primary text-white text-caption font-bold rounded-lg disabled:opacity-50"
+            className="px-4 py-2 bg-primary text-white text-caption font-bold rounded-lg disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             {busy ? "Saving…" : "Save & connect"}
           </button>
