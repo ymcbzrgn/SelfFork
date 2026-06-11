@@ -158,7 +158,7 @@ export function Sidebar() {
             onClick={() => setOpen((x) => !x)}
             aria-expanded={open}
             className={cn(
-              "w-full rounded-lg px-4 py-2 flex items-center justify-between transition-colors",
+              "w-full rounded-lg px-4 py-2 flex items-center justify-between transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-container-low",
               inWorkspaces
                 ? "bg-primary/[0.08] text-primary font-semibold"
                 : "text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/50",

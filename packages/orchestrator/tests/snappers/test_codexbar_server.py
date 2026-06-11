@@ -145,16 +145,20 @@ async def test_start_then_stop_happy_path(
     sent_signals: list[int] = []
 
     def fake_killpg(pgid: int, sig: int) -> None:
-        sent_signals.append(sig)
+        sent_signals.append(int(sig))
         if server._process is not None:  # type: ignore[attr-defined]
             server._process.mark_exited(0)  # type: ignore[attr-defined]
+
+    def fake_getpgid(pid: int) -> int:
+        return pid
 
     import signal as _signal
 
     monkeypatch.setattr(os, "killpg", fake_killpg)
+    monkeypatch.setattr(os, "getpgid", fake_getpgid)
     await server.stop()
     assert server.state is CodexBarServerState.STOPPED
-    assert sent_signals == [_signal.SIGTERM]
+    assert sent_signals == [int(_signal.SIGTERM)]
 
 
 @pytest.mark.asyncio
