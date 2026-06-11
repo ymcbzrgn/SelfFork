@@ -1,0 +1,3 @@
+## 2024-05-20 - Icon Button Accessibility
+**Learning:** Custom icon-only `<button>` elements in layout components (like topbar and sidebar) often miss visual hover tooltips and keyboard focus indicators. While screen readers read `aria-label`, sighted keyboard users and mouse users need visual feedback.
+**Action:** Always pair `aria-label` with a matching `title` attribute on icon-only buttons for visual tooltips. Ensure `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2` is manually added to custom buttons, matching the offset color to the container background (e.g., `focus-visible:ring-offset-surface-container-lowest`).

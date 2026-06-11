@@ -224,8 +224,9 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
         <button
           type="button"
           onClick={() => fire("selffork:open-palette")}
-          className="relative w-72 max-w-[40vw] hidden md:flex items-center text-left"
+          className="relative w-72 max-w-[40vw] hidden md:flex items-center text-left rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-container-lowest"
           aria-label="Open command palette"
+          title="Open command palette"
         >
           <Search
             className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-on-surface-variant"
@@ -241,8 +242,13 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
         <button
           type="button"
           onClick={() => setPendingOpen(true)}
-          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full relative"
+          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-container-lowest"
           aria-label={
+            pendingCount
+              ? `Notifications, ${pendingCount} pending`
+              : "Notifications"
+          }
+          title={
             pendingCount
               ? `Notifications, ${pendingCount} pending`
               : "Notifications"
@@ -279,8 +285,9 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
         <button
           type="button"
           onClick={() => setStatusOpen(true)}
-          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full"
+          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-container-lowest"
           aria-label="System status"
+          title="System status"
         >
           <ServerCog
             className="h-5 w-5 text-on-surface-variant"
@@ -291,8 +298,9 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
         <button
           type="button"
           onClick={() => fire("selffork:show-shortcuts")}
-          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full"
+          className="p-2 hover:bg-surface-container-high/50 transition-colors rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-container-lowest"
           aria-label="Help and keyboard shortcuts"
+          title="Help and keyboard shortcuts"
         >
           <HelpCircle
             className="h-5 w-5 text-on-surface-variant"
