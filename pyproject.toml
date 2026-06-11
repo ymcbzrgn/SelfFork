@@ -3,7 +3,7 @@ name = "selffork"
 version = "0.0.1"
 description = "Autonomous coding orchestrator built on opencode and a non-fine-tuned local Gemma — the first slice of Yamaç Jr. Nano."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Yamaç Bezirgan" }]
 keywords = ["agent", "llm", "orchestrator", "opencode", "gemma", "mlx"]
