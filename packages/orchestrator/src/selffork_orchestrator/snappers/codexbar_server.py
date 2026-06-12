@@ -346,12 +346,12 @@ class CodexBarServer:
             self._process = None
             return
         with contextlib.suppress(ProcessLookupError, OSError):
-            os.killpg(4242, signal.SIGTERM)
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
         try:
             await asyncio.wait_for(proc.wait(), timeout=_TEARDOWN_GRACE_SECONDS)
         except TimeoutError:
             with contextlib.suppress(ProcessLookupError, OSError):
-                os.killpg(4242, signal.SIGKILL)
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
             with contextlib.suppress(Exception):
                 await asyncio.wait_for(proc.wait(), timeout=1.0)
         self._process = None

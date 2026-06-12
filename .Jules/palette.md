@@ -1,3 +1,0 @@
-## 2026-06-12 - Native Tooltips and Focus Rings for Topbar Icons
-**Learning:** While aria-labels are essential for screen readers, sighted mouse users and keyboard navigators also need clear feedback. Custom <button> elements in the topbar were missing visual hover states (tooltips) and keyboard focus indicators.
-**Action:** Always add a native `title` attribute matching the `aria-label` for icon-only buttons. Apply standard Tailwind focus utilities (`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background`) to ensure keyboard navigability.
