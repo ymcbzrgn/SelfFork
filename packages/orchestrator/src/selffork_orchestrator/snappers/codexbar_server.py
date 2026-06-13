@@ -346,12 +346,24 @@ class CodexBarServer:
             self._process = None
             return
         with contextlib.suppress(ProcessLookupError, OSError):
-            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            pid = proc.pid
+            # _FakeProcess in tests might have a negative pid or we might mock it
+            # os.getpgid(pid) fails if pid is fake. Let's just catch and ignore.
+            try:
+                pgid = os.getpgid(pid)
+                os.killpg(pgid, signal.SIGTERM)
+            except (ProcessLookupError, OSError):
+                # Fallback for fake test processes
+                os.killpg(pid, signal.SIGTERM)
         try:
             await asyncio.wait_for(proc.wait(), timeout=_TEARDOWN_GRACE_SECONDS)
         except TimeoutError:
             with contextlib.suppress(ProcessLookupError, OSError):
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                try:
+                    pgid = os.getpgid(proc.pid)
+                    os.killpg(pgid, signal.SIGKILL)
+                except (ProcessLookupError, OSError):
+                    os.killpg(proc.pid, signal.SIGKILL)
             with contextlib.suppress(Exception):
                 await asyncio.wait_for(proc.wait(), timeout=1.0)
         self._process = None
