@@ -1,0 +1,3 @@
+## 2024-06-15 - Topbar Button Accessibility Focus States
+**Learning:** Found an accessibility pattern specific to custom icon-only topbar buttons. They had hover states but lacked visible focus states for keyboard navigation, making the primary navigation controls invisible to keyboard users. Also, `aria-label` alone is insufficient for sighted users who need tooltips to understand icon meaning.
+**Action:** Always manually apply `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background` to custom `<button>` and `<Link>` elements to ensure keyboard focus states work, and mirror `aria-label` as the HTML `title` attribute.
