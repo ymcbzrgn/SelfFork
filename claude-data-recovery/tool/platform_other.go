@@ -38,3 +38,9 @@ func machineClaudeDirs() []string {
 // so the all-users walk just proceeds and logs any permission errors.
 func isElevated() bool        { return true }
 func relaunchElevated() error { return nil }
+
+func longPath(p string) string { return p }
+
+func driveKind(path string) string        { return "fixed" }
+func freeBytes(dir string) (uint64, bool)  { return 0, false }
+func classifyErr(err error) string         { return "skip" }

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -80,6 +81,79 @@ func machineClaudeDirs() []string {
 	return out
 }
 
+// driveKind classifies the volume a path lives on: removable | fixed | remote |
+// cdrom | ramdisk | unknown. Used to warn when output lands on an internal disk.
+func driveKind(path string) string {
+	vol := filepath.VolumeName(path)
+	if vol == "" {
+		return "unknown"
+	}
+	p, err := syscall.UTF16PtrFromString(vol + `\`)
+	if err != nil {
+		return "unknown"
+	}
+	kernel32 := syscall.NewLazyDLL("kernel32.dll")
+	getDriveType := kernel32.NewProc("GetDriveTypeW")
+	dt, _, _ := getDriveType.Call(uintptr(unsafe.Pointer(p)))
+	switch dt {
+	case 2:
+		return "removable"
+	case 3:
+		return "fixed"
+	case 4:
+		return "remote"
+	case 5:
+		return "cdrom"
+	case 6:
+		return "ramdisk"
+	default:
+		return "unknown"
+	}
+}
+
+// freeBytes returns the bytes available to the caller on the volume holding dir.
+// dir must exist. ok=false if the query failed.
+func freeBytes(dir string) (free uint64, ok bool) {
+	p, err := syscall.UTF16PtrFromString(dir)
+	if err != nil {
+		return 0, false
+	}
+	kernel32 := syscall.NewLazyDLL("kernel32.dll")
+	proc := kernel32.NewProc("GetDiskFreeSpaceExW")
+	var freeToCaller, total, totalFree uint64
+	r1, _, _ := proc.Call(
+		uintptr(unsafe.Pointer(p)),
+		uintptr(unsafe.Pointer(&freeToCaller)),
+		uintptr(unsafe.Pointer(&total)),
+		uintptr(unsafe.Pointer(&totalFree)),
+	)
+	if r1 == 0 {
+		return 0, false
+	}
+	return freeToCaller, true
+}
+
+// classifyErr maps a Win32 error to a copy-loop action: abort-* (whole-run
+// stopper), retry (transient lock), or skip (log and move on).
+func classifyErr(err error) string {
+	var e syscall.Errno
+	if !errors.As(err, &e) {
+		return "skip"
+	}
+	switch uintptr(e) {
+	case 112, 39: // ERROR_DISK_FULL, ERROR_HANDLE_DISK_FULL
+		return "abort-diskfull"
+	case 19: // ERROR_WRITE_PROTECT
+		return "abort-readonly"
+	case 21, 1167: // ERROR_NOT_READY, ERROR_DEVICE_NOT_CONNECTED
+		return "abort-notready"
+	case 32, 33: // ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION
+		return "retry"
+	default:
+		return "skip"
+	}
+}
+
 // isElevated reports whether the process is running with an elevated
 // (Administrator) token.
 func isElevated() bool {
@@ -136,6 +210,20 @@ func relaunchElevated() error {
 		return fmt.Errorf("ShellExecuteW failed (code %d)", r1)
 	}
 	return nil
+}
+
+// longPath returns the extended-length (\\?\) form of an absolute path so file
+// operations bypass the legacy 260-char MAX_PATH limit, unconditionally. The
+// path is cleaned first because \\?\ disables Win32 normalization.
+func longPath(p string) string {
+	if !filepath.IsAbs(p) || strings.HasPrefix(p, `\\?\`) {
+		return p
+	}
+	p = filepath.Clean(p)
+	if strings.HasPrefix(p, `\\`) { // UNC \\server\share -> \\?\UNC\server\share
+		return `\\?\UNC\` + p[2:]
+	}
+	return `\\?\` + p
 }
 
 func quoteArgs(args []string) string {

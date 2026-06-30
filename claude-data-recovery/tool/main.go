@@ -15,13 +15,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
 
 const (
 	appName    = "Claude Code Data Recovery Kit"
-	appVersion = "v0.1"
+	appVersion = "v0.3"
 )
 
 // Config holds the resolved run options.
@@ -37,6 +38,7 @@ type Config struct {
 	IncludeRemovable bool
 	Zip              bool
 	Silent           bool
+	Force            bool
 }
 
 // Summary is the end-of-run rollup shown to the user and written to disk.
@@ -46,9 +48,12 @@ type Summary struct {
 	Redacted      int
 	Quarantined   int
 	SkippedSecret int
+	Aborted       int
 	Errors        int
 	Excluded      int
 	ByKind        map[string]int
+	ErrorReasons  map[string]int
+	ErrorSamples  []string
 	OutDir        string
 	Host          string
 	Elapsed       string
@@ -56,6 +61,7 @@ type Summary struct {
 
 func main() {
 	cfg := parseFlags()
+	gSilent = cfg.Silent
 
 	// To read OTHER users' profiles we need Administrator. Re-launch elevated via
 	// a UAC prompt (overt, user-consented). Not for dry-runs; --no-elevate skips.
@@ -85,6 +91,7 @@ func main() {
 		fmt.Println("  [2/3] DRY-RUN — planning only, copying nothing.")
 		results = planResults(plan)
 	} else {
+		preflight(cfg, plan) // aborts up-front on no-space / not-writable
 		fmt.Printf("  [2/3] Copying to %s\n", cfg.OutDir)
 		pr := newProgress(plan.TotalBytes)
 		pr.run()
@@ -96,6 +103,16 @@ func main() {
 	sum := writeReports(cfg, plan, results, host, start)
 
 	printSummary(sum, cfg)
+
+	if !cfg.DryRun {
+		if verifyOutput(cfg) {
+			fmt.Printf("  ✓ Verified on disk: %s\n", cfg.OutDir)
+		} else {
+			fmt.Printf("  ✗ WARNING: manifest NOT found at %s after the run.\n", cfg.OutDir)
+			fmt.Println("    Output may not have persisted (drive removed early? writes blocked?).")
+			fmt.Println("    A local copy of this run's log is in your TEMP folder (claude-backup-logs).")
+		}
+	}
 	waitForKey(cfg)
 }
 
@@ -111,6 +128,7 @@ func parseFlags() *Config {
 	flag.BoolVar(&cfg.IncludeRemovable, "include-removable", false, "also sweep removable drives")
 	flag.BoolVar(&cfg.Zip, "zip", false, "(not implemented yet) zip the result")
 	flag.BoolVar(&cfg.Silent, "silent", false, "do not wait for a keypress at the end")
+	flag.BoolVar(&cfg.Force, "force", false, "skip the pre-flight free-space gate (copy even if space looks short)")
 	quick := flag.Bool("quick", false, "fast path: current user only, no elevation, pruned")
 	everything := flag.Bool("everything", false, "complete machine sweep: all users + exhaustive + removable drives")
 	var roots string
@@ -157,6 +175,10 @@ func parseFlags() *Config {
 	return cfg
 }
 
+// defaultOutDir places the backup NEXT TO THE EXE — what people expect: run it
+// from wherever (incl. deep inside a folder on the USB) and a claude-backup\
+// folder appears right there. Deep locations are safe: copyItem forces the
+// \\?\ extended-length form so we never hit the legacy 260-char path limit.
 func defaultOutDir() string {
 	if exe, err := os.Executable(); err == nil {
 		return filepath.Join(filepath.Dir(exe), "claude-backup")
@@ -195,6 +217,22 @@ func printSummary(s Summary, cfg *Config) {
 	}
 	if s.Quarantined > 0 || s.Redacted > 0 || s.SkippedSecret > 0 {
 		fmt.Printf("  Secrets: %d quarantined · %d redacted · %d skipped\n", s.Quarantined, s.Redacted, s.SkippedSecret)
+	}
+	if s.Aborted > 0 {
+		fmt.Printf("  ⛔ Copy ABORTED early (disk full / drive lost / write-protected): %d items not attempted.\n", s.Aborted)
+	}
+	if s.Errors > 0 {
+		fmt.Printf("  ⚠ WHY %d failed (top reasons):\n", s.Errors)
+		for _, kv := range topReasons(s.ErrorReasons, 6) {
+			fmt.Printf("     %5d × %s\n", kv.n, kv.reason)
+		}
+		if len(s.ErrorSamples) > 0 {
+			fmt.Println("  Example failures:")
+			for _, e := range s.ErrorSamples {
+				fmt.Println("     " + shorten(e, 110))
+			}
+		}
+		fmt.Println("  Full list in EXCLUDED.txt.")
 	}
 	fmt.Printf("  Output:   %s\n", cfg.OutDir)
 	fmt.Printf("  Manifest: MANIFEST.csv / .json   Verify: CHECKSUMS.sha256\n")
@@ -251,6 +289,38 @@ func fmtDur(sec float64) string {
 
 func keyPath(p string) string {
 	return strings.ToLower(filepath.Clean(p))
+}
+
+type reasonCount struct {
+	reason string
+	n      int
+}
+
+func topReasons(m map[string]int, k int) []reasonCount {
+	out := make([]reasonCount, 0, len(m))
+	for r, n := range m {
+		out = append(out, reasonCount{r, n})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].n > out[j].n })
+	if len(out) > k {
+		out = out[:k]
+	}
+	return out
+}
+
+// normalizeErr collapses a per-file error string to a path-independent reason
+// so failures can be tallied, e.g.
+// "error: open: open C:\x: Access is denied." -> "open: Access is denied."
+func normalizeErr(s string) string {
+	op := ""
+	if parts := strings.SplitN(s, ": ", 3); len(parts) >= 2 {
+		op = parts[1]
+	}
+	tail := s
+	if i := strings.LastIndex(s, ": "); i >= 0 {
+		tail = s[i+2:]
+	}
+	return op + ": " + tail
 }
 
 func sameOrUnder(path, base string) bool {
