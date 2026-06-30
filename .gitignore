@@ -76,3 +76,22 @@ Thumbs.db
 ~/.selffork/
 artifacts/
 AGENTS.md
+
+# ── Claude Code Data Recovery Kit ──────────────────────────────────────
+# Collected backups contain full transcripts, pasted secrets and LIVE OAuth
+# tokens. They must NEVER be committed. Local/dry-run output lands here; only
+# the explanatory README is tracked.
+claude-data-recovery/outputs/*
+!claude-data-recovery/outputs/README.md
+# NOTE: the built collector .exe is the SHIPPED PRODUCT — it must travel with
+# the repo so people can grab & run it. The generic `dist/` rule above would
+# hide it, so re-include its dist dir and the exe explicitly.
+!claude-data-recovery/tool/dist/
+!claude-data-recovery/tool/dist/ClaudeBackup.exe
+# Safety net: never commit a collected backup tree, wherever it lands.
+claude-backup/
+__SECRETS__/
+
+
+#Ignore vscode AI rules
+.github\instructions\codacy.instructions.md
