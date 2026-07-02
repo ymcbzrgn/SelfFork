@@ -211,6 +211,20 @@ class VisionConfig(_StrictModel):
     """When true, Cockpit Settings/Vision populates dropdowns by probing the
     running ``mlx_vlm.server`` and Ollama daemon via :meth:`list_models`."""
 
+    enabled: bool = False
+    """Master opt-in for the in-round-loop vision runtime that powers the
+    intelligent tools (``browser_act``/``extract``/``observe``/``agent`` and
+    ``visionpro_find_text``). Default OFF: building the runtime opens an HTTP
+    client against an external ``mlx_vlm.server`` / Ollama daemon that is
+    usually not running during a plain ``selffork run``, so the tools stay
+    gracefully ``unwired``. Set ``SELFFORK_VISION__ENABLED=true`` (or
+    ``vision.enabled: true`` in ``selffork.yaml``) once the server is up."""
+
+    adapter: Literal["mlx", "ollama"] = "mlx"
+    """Which Tier-1 multimodal backend the vision runtime wraps — ``mlx``
+    (Apple Silicon default, via ``mlx_server_url``) or ``ollama`` (Linux
+    fallback, via ``ollama_host``)."""
+
 
 class SelfForkSettings(BaseSettings):
     """Top-level SelfFork settings.

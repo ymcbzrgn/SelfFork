@@ -32,6 +32,11 @@ from pydantic import BaseModel
 from selffork_mind.projections.provenance import ProvenanceRecorder
 
 if TYPE_CHECKING:
+    from selffork_mind.ingest.heartbeat import (
+        CorrectionIngester,
+        HeartbeatIngester,
+    )
+    from selffork_mind.store.duckdb import DuckDBMindStore
     from selffork_orchestrator.dashboard.settings import (
         TelegramConfig,
         YamlSettingsStore,
@@ -114,6 +119,19 @@ _KANBAN_POLL_INTERVAL_SECONDS = 0.5
 # the dashboard event loop. Files past this depth are silently skipped.
 _WORKSPACE_MAX_DEPTH = 3
 _WORKSPACE_MAX_ENTRIES = 500
+
+
+def _mind_ingest_enabled() -> bool:
+    """Opt-in gate for the ADR-009 §5 Mind heartbeat/correction ingesters.
+
+    Default OFF: the heartbeat ``audit.jsonl`` / ``corrections.jsonl`` feed
+    only exists once the (itself opt-in) Heartbeat daemon runs, and a
+    long-lived DuckDB write handle on the orphan Mind store would otherwise
+    contend with the per-request stores the Mind router opens. Set
+    ``SELFFORK_MIND_INGEST_ENABLED=true|1|yes`` to tail the feed into T2.
+    """
+    raw = os.environ.get("SELFFORK_MIND_INGEST_ENABLED", "").strip().lower()
+    return raw in {"true", "1", "yes"}
 
 
 class DashboardConfig(BaseModel):
@@ -376,6 +394,12 @@ def build_app(config: DashboardConfig) -> FastAPI:
             _app.state, "structured_question_store", None
         )
         structured_question_cleanup_task: asyncio.Task[None] | None = None
+        # ADR-009 §5 — Mind ingesters (opt-in). Declared here so the
+        # teardown branch can drain them even if the startup spawn raises
+        # partway through.
+        mind_store: DuckDBMindStore | None = None
+        mind_ingesters: list[HeartbeatIngester | CorrectionIngester] = []
+        mind_ingester_tasks: list[asyncio.Task[None]] = []
         try:
             # S-Quota Faz B/E — boot the CodexBar sidecar first so the
             # secondary quota source is up before anything starts serving
@@ -465,6 +489,57 @@ def build_app(config: DashboardConfig) -> FastAPI:
                     await heartbeat.start()
                 except Exception:
                     _log.exception("heartbeat_start_failed")
+            # ADR-009 §5 — Mind heartbeat + correction ingesters tail the
+            # heartbeat ``audit.jsonl`` / ``corrections.jsonl`` feed into the
+            # T2 Episodic tier. Opt-in + fail-soft: a missing store, absent
+            # audit file, or open error logs and leaves the dashboard
+            # serving HTTP (the ingesters themselves no-op on a missing
+            # file). The orphan Mind root is reused via ``mind_deps`` so the
+            # path math stays in one place.
+            if _mind_ingest_enabled():
+                try:
+                    from selffork_mind.ingest.heartbeat import (
+                        CorrectionIngester,
+                        HeartbeatIngester,
+                    )
+                    from selffork_orchestrator.dashboard.activity import (
+                        default_heartbeat_audit_path,
+                    )
+                    from selffork_orchestrator.dashboard.mind_deps import (
+                        open_store,
+                        resolve_mind_root,
+                    )
+
+                    mind_root = resolve_mind_root(
+                        config=config.mind_config, project_slug=None
+                    )
+                    mind_store = await open_store(root=mind_root)
+                    audit_path = default_heartbeat_audit_path(config.audit_dir)
+                    corrections_path = audit_path.with_name(
+                        "corrections.jsonl"
+                    )
+                    heartbeat_ingester = HeartbeatIngester(
+                        audit_path=audit_path, store=mind_store
+                    )
+                    correction_ingester = CorrectionIngester(
+                        corrections_path=corrections_path, store=mind_store
+                    )
+                    mind_ingesters = [heartbeat_ingester, correction_ingester]
+                    mind_ingester_tasks = [
+                        asyncio.create_task(
+                            heartbeat_ingester.run(),
+                            name="selffork.mind_heartbeat_ingest",
+                        ),
+                        asyncio.create_task(
+                            correction_ingester.run(),
+                            name="selffork.mind_correction_ingest",
+                        ),
+                    ]
+                    _log.info("mind_ingesters_started")
+                except Exception:
+                    _log.exception("mind_ingesters_start_failed")
+            _app.state.mind_ingesters = mind_ingesters
+            _app.state.mind_ingester_tasks = mind_ingester_tasks
             yield
         finally:
             # Talk streaming tasks first — cancel any in-flight Self Jr
@@ -480,6 +555,19 @@ def build_app(config: DashboardConfig) -> FastAPI:
             if heartbeat is not None:
                 with contextlib.suppress(Exception):
                     await heartbeat.stop()
+            # ADR-009 §5 — drain the Mind ingesters: signal stop, cancel the
+            # tail tasks, then close the shared DuckDB store (producer before
+            # its store, mirroring the heartbeat teardown ordering).
+            for ingester in mind_ingesters:
+                with contextlib.suppress(Exception):
+                    ingester.stop()
+            for mind_task in mind_ingester_tasks:
+                mind_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await mind_task
+            if mind_store is not None:
+                with contextlib.suppress(Exception):
+                    await mind_store.teardown()
             # S6 — close affinity DuckDB handles after the heartbeat daemon
             # (which reads them) has stopped.
             if cli_affinity_provider is not None:

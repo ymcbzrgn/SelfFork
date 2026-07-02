@@ -27,6 +27,23 @@
 > ADR-004 (M4 Cockpit) + M4_Cockpit_Plan.md → `docs/archive/superseded/`.
 > M6 closes (→ M7 Reflex LAST MILE) only when all S1–S8 smoke gates PASS.
 
+> **⚠ 2026-05-26 durum güncellemesi — M6 Wave 2 kod olarak kapandı; sıradaki: S-Train → M7.**
+> ADR-007'nin S1–S8'i 2026-05-21→25 arasında bitti (ADR-007 §4 damgaları).
+> Ardından bu roadmap'e henüz işlenmemiş **7 ek sprint** ADR'leriyle birlikte
+> gemiye bindi:
+> **S-Auto** (ADR-008 heartbeat otonomi döngüsü) · **S-Memory** (ADR-009
+> dual-pool bellek) · **S-Quota** (CodexBar sidecar + kota yönetimi) ·
+> **S-Stream** (ADR-011 yavaş-inference dayanıklılığı) · **S-Vision**
+> (ADR-010 §2 agentic loop: StuckDetector + 50-aksiyon cap + checkpoint) ·
+> **S-Bridge** (Telegram voice/correction — 6 bilinen açık,
+> `docs/demos/2026-05-26-s-vision-close/README.md`) · **S-ToolFleet Faz 0–4**
+> (ADR-010 §9 — 289 tool'luk registry, 3019 backend test).
+> ADR-010 §9.17 sıradaki adımı ilan ediyor: **M7 freeze + S-Train sprint**
+> (Format Freeze'i fine-tune corpus stabilizasyon kapısı olarak kullanır).
+> Aşağıdaki milestone bölümleri ve takvim tablosu bu güncellemenin
+> **öncesine** aittir; tarihler (ör. "M5 2026-09'da başlar") artık tarihsel
+> plan kaydıdır, güncel durum değildir. Güncel durum için ADR-008→011'e bakın.
+
 > **Codename:** Yamaç Jr. Nano
 > **Hardware target (v1):** 16 GB Apple Silicon MacBook Pro (operator's existing machine)
 > **Default AI:** Gemma 4 E2B-it Q4_0 — *no fine-tune until M7*

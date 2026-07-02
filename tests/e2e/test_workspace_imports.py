@@ -1,8 +1,8 @@
-"""Placeholder smoke test until step 11 (full e2e) lands.
+"""Workspace import smoke test.
 
-Replaced in step 11 by `test_selffork_run_smoke.py` per ADR-001 §11 / §16.1.
-For now we only assert that all 5 workspace packages import cleanly,
-which is the minimum the bootstrap commit must guarantee.
+Asserts that all 5 workspace packages import cleanly from the root venv —
+the minimum any commit must guarantee. The full end-to-end runner smoke
+lives in `test_selffork_run_smoke.py` (ADR-001 §11 / §16.1).
 """
 
 from __future__ import annotations

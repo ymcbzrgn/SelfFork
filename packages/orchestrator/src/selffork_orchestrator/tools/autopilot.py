@@ -2,13 +2,13 @@
 
 - ``rotate_to``: request a CLI rotation (consumed by the round-loop driver)
 - ``sleep_until``: schedule a launchd wake at the given epoch
-- ``notify_telegram``: push to the operator (Order 5 wires the bridge)
-- ``compact_context``: trigger a Mind compaction strategy
+- ``notify_telegram``: push to the operator via the wired Telegram bridge
+- ``compact_context``: run a Mind compaction strategy over the note window
 """
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
 from pydantic import Field
 
@@ -169,19 +169,62 @@ class _NotifyTelegramArgs(ToolArgs):
     message: str = Field(..., min_length=1, max_length=4000)
 
 
-def _notify_telegram_handler(
+async def _notify_telegram_handler(
     ctx: ToolContext,
     args: _NotifyTelegramArgs,
 ) -> dict[str, Any]:
-    # Order 5 (Telegram bridge) replaces this stub with a real PTB v22.7
-    # call. Until then, the audit log captures the intent so the M7
-    # fine-tune dataset still includes operator-style notify decisions.
+    # Deliver via the session-wired bridge (mirrors cli.py's
+    # ``_build_pending_telegram_hook`` + dashboard/server.py). The bridge
+    # is typed ``object`` on ToolContext to keep the tools package free of
+    # a hard telegram import, so we narrow it here with local imports.
+    from selffork_orchestrator.telegram.bridge import (
+        NullTelegramBridge,
+        TelegramBridge,
+        TelegramMessage,
+    )
+
+    bridge = ctx.telegram_bridge
+    # Unwired: no bridge, an explicit null bridge, or a wired object that
+    # isn't a real TelegramBridge. Record intent (backward-compatible with
+    # the Order 5 stub shape) so the M7 fine-tune dataset still captures
+    # operator-style notify decisions.
+    if not isinstance(bridge, TelegramBridge) or isinstance(bridge, NullTelegramBridge):
+        return {
+            "delivered": False,
+            "reason": "Telegram bridge not wired (no bot token / Telegram disabled)",
+            "level": args.level,
+            "message_preview": args.message[:200],
+            "session_id": ctx.session_id,
+        }
+
+    message = TelegramMessage(
+        level=args.level,
+        text=args.message,
+        session_id=ctx.session_id,
+        project_slug=ctx.project_slug,
+    )
+    # The bridge contract says ``notify`` returns a DeliveryAttempt rather
+    # than raising on transient failure, but a misbehaving implementation
+    # (network stack, PTB internals) must never crash the round loop — so
+    # we degrade to a graceful ``delivered=False`` on any raise.
+    try:
+        attempt = await bridge.notify(message)
+    except Exception as exc:  # best-effort notify — a bridge raise is never fatal
+        return {
+            "delivered": False,
+            "reason": f"telegram notify raised: {type(exc).__name__}: {exc}",
+            "level": args.level,
+            "message_preview": args.message[:200],
+            "session_id": ctx.session_id,
+        }
     return {
-        "delivered": False,
-        "reason": "Telegram bridge not wired yet (Order 5)",
+        "delivered": attempt.delivered,
+        "reason": attempt.reason,
         "level": args.level,
         "message_preview": args.message[:200],
         "session_id": ctx.session_id,
+        "chat_id": attempt.chat_id,
+        "sent_at": attempt.sent_at.isoformat() if attempt.sent_at is not None else None,
     }
 
 
@@ -195,16 +238,18 @@ class _CompactContextArgs(ToolArgs):
     reason: str = Field(default="", max_length=400)
 
 
-def _compact_context_handler(
+# Recent-note window pulled for a compaction run — matches the
+# ``selffork mind compact`` CLI candidate cap (cli_mind._compact_async).
+_COMPACT_WINDOW: Final[int] = 500
+
+
+async def _compact_context_handler(
     ctx: ToolContext,
     args: _CompactContextArgs,
 ) -> dict[str, Any]:
-    # Compaction strategies live in :mod:`selffork_mind.compaction`
-    # (RecencyDecayCompactor, MedoidClusterCompactor, LLMSummaryCompactor)
-    # and need a tier-scoped "recent N notes" pull from MindStore. The
-    # round-loop driver (Order 9 close-out + Mind list_recent API) wires
-    # the actual run; today we record the intent so the M7 fine-tune
-    # dataset captures Jr's compaction decisions.
+    # When Mind isn't wired we can't compact anything — keep the honest
+    # deferred response so Jr learns the capability is absent (and the M7
+    # fine-tune dataset still captures the compaction *decision*).
     if ctx.mind_store is None:
         return {
             "compaction_requested": False,
@@ -213,14 +258,63 @@ def _compact_context_handler(
             "session_id": ctx.session_id,
             "deferred": "mind_store not wired in ToolContext",
         }
+
+    # Compaction strategies live in :mod:`selffork_mind.compaction`. Local
+    # imports keep the tools package free of a hard Mind import at module
+    # load (mirrors the ``mind_store`` typing on ToolContext).
+    from selffork_mind.compaction import (
+        ImportanceDistiller,
+        MedoidClusterCompactor,
+        RecencyDecayCompactor,
+        apply_plan,
+    )
+    from selffork_mind.store.base import MindStore, RetrieveConfig, StoreScope
+
+    store = ctx.mind_store
+    if not isinstance(store, MindStore):
+        return {
+            "compaction_requested": False,
+            "strategy": args.strategy,
+            "reason": args.reason,
+            "session_id": ctx.session_id,
+            "deferred": "mind_store wired but is not a MindStore",
+        }
+
+    # Pull the recent candidate window for this project via the store's
+    # real retrieval API (filter-only, no query vector -> currently-valid
+    # notes capped at the window), mirroring ``selffork mind compact``.
+    config = RetrieveConfig(
+        scope=StoreScope(project_slug=ctx.project_slug),
+        top_k=_COMPACT_WINDOW,
+        rerank_overfetch=1,
+    )
+    hits = await store.retrieve(config)
+    notes = [h.note for h in hits]
+
+    # Map the operator-facing strategy names onto Mind compaction layers:
+    #   truncate -> L1 recency-decay (ages down stale rounds)
+    #   handoff  -> L2 importance-distil (keeps the decision spine)
+    #   summary  -> L3 medoid-cluster (collapses near-duplicate notes)
+    # Each branch produces a CompactionPlan directly (the strategies'
+    # ``layer`` literals are invariant, so a shared Protocol-typed handle
+    # doesn't type-check — mirrors ``cli_mind._compact_async``).
+    if args.strategy == "truncate":
+        plan = await RecencyDecayCompactor().plan(notes=notes)
+    elif args.strategy == "handoff":
+        plan = await ImportanceDistiller().plan(notes=notes)
+    else:  # "summary"
+        plan = await MedoidClusterCompactor(store=store).plan(notes=notes)
+
+    applied = await apply_plan(plan, store=store, notes=notes)
     return {
         "compaction_requested": True,
         "strategy": args.strategy,
         "reason": args.reason,
         "session_id": ctx.session_id,
-        "deferred": (
-            "compactor execution pending MindStore.list_recent + driver wire"
-        ),
+        "layer": plan.layer,
+        "candidate_count": len(notes),
+        "plan_summary": dict(plan.summary),
+        "applied": applied,
     }
 
 

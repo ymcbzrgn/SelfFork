@@ -2,7 +2,8 @@
 
 ## Status
 
-- **Status:** Proposed — operatör onayı bekliyor (2026-05-18 taslak V1).
+- **Status:** Accepted + Implemented — 2026-05-23 operatör onaylı; S-Auto
+  sprint'i aynı gün 8 fazda tamamlandı (bkz. §13). (Taslak V1: 2026-05-18.)
 - **Type:** Architecture ADR — SelfFork'un otonomi katmanını ("hür irade")
   tanımlar. Yeni bir pillar değil; mevcut Orchestrator'a bir **dış döngü**
   ekler.

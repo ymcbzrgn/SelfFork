@@ -717,6 +717,7 @@ class Session:
             proactive_reader=self._proactive_reader,
             launchd_scheduler=self._launchd_scheduler,
             resume_store=self._resume_store,
+            telegram_bridge=self._telegram_bridge,
             body_driver=self._body_driver,
             vision_runtime=self._vision_runtime,
             permission_warden=self._permission_warden,

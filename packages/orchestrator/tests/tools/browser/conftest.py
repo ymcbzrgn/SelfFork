@@ -284,3 +284,25 @@ def ctx_browser(stub_browser_driver) -> ToolContext:
 @pytest.fixture
 def ctx_no_browser() -> ToolContext:
     return make_ctx(driver=None)
+
+
+class StubVisionRuntime:
+    """Minimal runtime satisfying the tools' ``decide(prompt, image)`` contract."""
+
+    def __init__(self, reply: str = "VISION_OK") -> None:
+        self.reply = reply
+        self.calls: list[tuple[str, bytes | None]] = []
+
+    async def decide(self, *, prompt: str, image: bytes | None) -> str:
+        self.calls.append((prompt, image))
+        return self.reply
+
+
+@pytest.fixture
+def stub_vision_runtime() -> StubVisionRuntime:
+    return StubVisionRuntime()
+
+
+@pytest.fixture
+def ctx_browser_vision(stub_browser_driver, stub_vision_runtime) -> ToolContext:
+    return make_ctx(driver=stub_browser_driver, vision_runtime=stub_vision_runtime)

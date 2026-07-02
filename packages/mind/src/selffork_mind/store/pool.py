@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -124,9 +124,10 @@ class _PoolEngines:
 
     ADR-009 §3 T3 Semantic Graph PROJECT + GLOBAL split — each pool
     carries its own graph store so triples never cross pool boundaries
-    accidentally. Default :class:`InMemoryGraphStore` (zero-config,
-    Apache 2.0); operators can swap to :class:`KuzuGraphStore` by
-    constructing the resolver with a custom factory.
+    accidentally. The default factory is :class:`InMemoryGraphStore`
+    (zero-config, Apache 2.0); operators swap to
+    :class:`~selffork_mind.graph.kuzu.KuzuGraphStore` by passing a custom
+    ``graph_store_factory`` to :class:`PoolResolver`.
     """
 
     notes: DuckDBMindStore
@@ -151,11 +152,18 @@ class PoolResolver:
     Global-only queries (``project_slug=None, include_global=True``) hit
     only the GLOBAL engine — used by identity recall and cross-project
     reflection workflows.
+
+    ``graph_store_factory`` is the pluggable T3 backend hook (ADR-009 §3):
+    it defaults to :class:`InMemoryGraphStore` and is called once per pool
+    to build that pool's graph engine. Pass e.g.
+    ``graph_store_factory=lambda: KuzuGraphStore(db_path=...)`` to swap the
+    on-disk Kuzu backend in without touching any existing call site.
     """
 
     project_slug: str | None
     home: Path | None = None
     embedding_dim: int = 1024
+    graph_store_factory: Callable[[], SemanticGraphStore] = InMemoryGraphStore
     _project: _PoolEngines | None = field(default=None, init=False, repr=False)
     _global: _PoolEngines | None = field(default=None, init=False, repr=False)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
@@ -184,7 +192,7 @@ class PoolResolver:
                     db_path=paths.vectors_dir,
                     embedding_dim=self.embedding_dim,
                 ),
-                graph=InMemoryGraphStore(),
+                graph=self.graph_store_factory(),
                 group_id=project_group_id(self.project_slug),
             )
         if not self._project.setup_done:
@@ -203,7 +211,7 @@ class PoolResolver:
                     db_path=paths.vectors_dir,
                     embedding_dim=self.embedding_dim,
                 ),
-                graph=InMemoryGraphStore(),
+                graph=self.graph_store_factory(),
                 group_id=GLOBAL_GROUP_ID,
             )
         if not self._global.setup_done:

@@ -1,6 +1,9 @@
 # M6 — SelfFork v3 Pivot Implementation Plan
 
-> **Status:** Active.
+> **Status:** Wave 1 + Wave 2 code-complete (S1–S8 shipped 2026-05-21 →
+> 2026-05-25; see ADR-007 §4 stamps + table below). Follow-up sprints
+> (S-Auto, S-Memory, S-Quota, S-Stream, S-Vision, S-Bridge, S-ToolFleet)
+> are recorded in ADR-008/009/010/011. Next: S-Train → M7.
 > **Reference ADR:** [`docs/decisions/ADR-006_v2_Pivot.md`](../decisions/ADR-006_v2_Pivot.md).
 > **Started:** 2026-05-17.
 
@@ -12,7 +15,7 @@ phase from "in flight" to "shipped".
 
 M6 runs in **two waves**. Wave 1 (MV scaffold) is DONE. Wave 2 (wiring
 completion) is sequenced by **[`ADR-007_v3_Wiring_Completion.md`](../decisions/ADR-007_v3_Wiring_Completion.md)**
-into 6 backend-first sprints (S1–S6).
+into 8 backend-first sprints (S1–S8; 2026-05-18 revision widened 6→8).
 
 ### Wave 1 — MV Scaffold (DONE, commit `8d509d5`)
 
@@ -41,14 +44,14 @@ into 6 backend-first sprints (S1–S6).
 
 | Sprint | Scope | Status |
 |---|---|---|
-| **S1 Talk Loop** | `talk_router` + Self Jr session resolver + Talk page real wire | ⬜ Next |
-| **S2 Live Run Theater** | theater event producer (snapper/vision/speaker) + `/api/loop/active` derive | ⬜ |
-| **S3 Destructive Warden + Telegram** | warden hook → `whitelist.match` → `store.request()` + Telegram outbound **ve** inbound (Sr→Jr) | ⬜ |
-| **S4 Settings Persistence** | settings endpoints GET/PUT + form wire + kill hardcoded mock data | ⬜ |
-| **S5 Connections Actions** | provider sign-in flow + Telegram setup + button handlers | ⬜ |
-| **S6 CLI Router** | `select_cli` (quota + RAG affinity + operator override) + auto-switch | ⬜ |
-| **S7 Workspace Actions** | kanban add/drag/filter + Notes GET/PUT + header/theater buttons | ⬜ |
-| **S8 Dashboard Activity + Final Cleanup** | `/api/activity` endpoint + topbar/sidebar + son dead-button taraması | ⬜ |
+| **S1 Talk Loop** | `talk_router` + Self Jr session resolver + Talk page real wire | ✅ Done (commit `2455b7a`) |
+| **S2 Live Run Theater** | theater event producer (snapper/vision/speaker) + `/api/loop/active` derive | ✅ Done (commit `f79bc7d`) |
+| **S3 Destructive Warden + Telegram** | warden hook → `whitelist.match` → `store.request()` + Telegram outbound **ve** inbound (Sr→Jr) | ✅ Done (commit `23a0b0b`, inbound router dahil) |
+| **S4 Settings Persistence** | settings endpoints GET/PUT + form wire + kill hardcoded mock data | ✅ Done (2026-05-23, ADR-007 §4) |
+| **S5 Connections Actions** | provider sign-in flow + Telegram setup + button handlers | ✅ Done (2026-05-23, ADR-007 §4) |
+| **S6 CLI Router** | `select_cli` (quota + RAG affinity + operator override) + auto-switch | ✅ Done (2026-05-24, ADR-007 §4) |
+| **S7 Workspace Actions** | kanban add/drag/filter + Notes GET/PUT + header/theater buttons | ✅ Done (2026-05-25, ADR-007 §4) |
+| **S8 Dashboard Activity + Final Cleanup** | `/api/activity` endpoint + topbar/sidebar + son dead-button taraması | ✅ Done (2026-05-25, ADR-007 §4) |
 
 Each sprint is backend-first, ends end-to-end (not scaffold), passes its
 own smoke gate. Full sprint detail (backend/frontend line items,

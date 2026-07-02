@@ -90,10 +90,15 @@ class ToolContext:
     cli_agent_name: str | None = None
     # M3 Order 4 — Jr autopilot dependencies. All optional, None when the
     # corresponding subsystem isn't wired (e.g. snappers off, non-macOS host
-    # without launchd, Telegram bridge pending Order 5).
+    # without launchd, no Telegram bot token so the null bridge is used).
     proactive_reader: object | None = None  # selffork_orchestrator.usage.ProactiveUsageReader
     launchd_scheduler: object | None = None  # selffork_orchestrator.resume.cron.LaunchdScheduler
     resume_store: object | None = None  # selffork_orchestrator.resume.store.ScheduledResumeStore
+    # Telegram bridge for the ``notify_telegram`` act tool. ``None`` (or a
+    # :class:`NullTelegramBridge`) when Telegram is disabled / no bot token;
+    # the tool then records intent instead of delivering. Typed ``object``
+    # here to keep the tools package free of a hard telegram import.
+    telegram_bridge: object | None = None  # selffork_orchestrator.telegram.bridge.TelegramBridge
     # M5 Body pillar — vision-driven UI control (ADR-005 §M5-G). Optional, None
     # when the body pillar isn't wired into this session (e.g. legacy text-only
     # round-loop). Tools that require these fields (body_click, body_screenshot,

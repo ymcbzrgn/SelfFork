@@ -310,7 +310,7 @@ recorded in §5 covers 10 wire surfaces now (4 added at S-Vision close: LegalAct
 set, `Correction` schema, `VoiceBackend.transcribe` signature, `auto_pr_create` tool name+args).
 
 **Sprint order ([[sprint-order-2026-05-22]] tail):** S-Vision ✅ → S-Bridge ✅ →
-**S-ToolFleet (in progress — Faz 0 substrate solidify ✅; Faz 1-4 fan-out next)** → S-Train → M7.
+**S-ToolFleet ✅ (Faz 0-4 complete, 2026-05-26 night — 289-tool registry, §9.17)** → S-Train → M7.
 S-Stream (ADR-011) ✅ landed earlier as the agentic-loop prerequisite.
 
 ---

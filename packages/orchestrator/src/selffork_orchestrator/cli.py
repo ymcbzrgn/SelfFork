@@ -66,6 +66,7 @@ from selffork_orchestrator.tools.structured_question import (
     PendingStructuredQuestionStore,
     SqlitePendingStructuredQuestionStore,
 )
+from selffork_orchestrator.vision_runtime import build_default_vision_runtime
 from selffork_shared.audit import AuditLogger
 from selffork_shared.config import SelfForkSettings, load_settings
 from selffork_shared.errors import ConfigError, SelfForkError
@@ -677,6 +678,11 @@ async def _amain(
     body_driver = build_default_body_driver()
     body_warden = _build_body_warden_for_driver(body_driver)
     body_screenshot_store = ScreenshotStore() if body_driver is not None else None
+    # Vision runtime for the intelligent tools (browser_act/extract/observe/
+    # agent + visionpro_find_text). Opt-in via ``SELFFORK_VISION__ENABLED``;
+    # None by default so those tools stay gracefully ``unwired`` (no HTTP
+    # client against a vision server that isn't running for a plain run).
+    vision_runtime = build_default_vision_runtime(settings.vision)
 
     session = Session(
         session_id=session_id,
@@ -716,6 +722,7 @@ async def _amain(
         body_driver=body_driver,
         permission_warden=body_warden,
         screenshot_store=body_screenshot_store,
+        vision_runtime=vision_runtime,
     )
     # S-ToolFleet Faz 1 §A — start the body driver before round-loop so
     # body tools can dispatch immediately; stop it after. Failures here

@@ -1,12 +1,14 @@
 """Heartbeat scheduler daemon (S-Auto Faz A).
 
 ADR-008 §3 outer-loop scaffold — the ``perceive → decide → act → record``
-tick that sits above the existing round-loop. Faz A scope is the
-**daemon shell only**: lifecycle (start/stop), tick loop, deterministic
-reactive gates (pause flag + active-hours window), and an event queue.
-The decide stage is a deliberate stub (always selects ``wait``) until
-Faz B (legal-action filter), Faz C (deliberative selector), and Faz D
-(action vocabulary) replace it.
+tick that sits above the existing round-loop. Faz A shipped the daemon
+shell (lifecycle start/stop, tick loop, deterministic reactive gates —
+pause flag + active-hours window — and an event queue); Faz B-E filled
+in the rest. ``_one_tick`` now runs the full pipeline: legal-action
+filter (Faz B) → deliberative selector (Faz C, optional) → executor
+(Faz D, optional) → AIR detector + audit/checkpoint record (Faz E).
+Deliberation/executor/audit surfaces are independently optional, so an
+unwired daemon degrades to pure observe mode instead of failing.
 
 Pattern parity:
 * lifecycle wrapper + :class:`StrEnum` state machine mirror
@@ -24,9 +26,9 @@ import contextlib
 import logging
 import time
 import zoneinfo
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from selffork_orchestrator.heartbeat.actions import LegalAction
 from selffork_orchestrator.heartbeat.air import AIRAlert, AIRDetector
@@ -60,6 +62,12 @@ from selffork_orchestrator.telegram.bridge import (
     TelegramMessage,
 )
 from selffork_orchestrator.telegram.inbound_router import PauseSignal
+
+if TYPE_CHECKING:
+    from selffork_mind.reflection.auto_dream import (
+        AutoDreamReport,
+        AutoDreamRunner,
+    )
 
 __all__ = [
     "HeartbeatEvent",
@@ -138,6 +146,7 @@ class HeartbeatScheduler:
         checkpoint_writer: CheckpointWriter | None = None,
         air_detector: AIRDetector | None = None,
         emergency_telegram_bridge: TelegramBridge | None = None,
+        auto_dream_runner: AutoDreamRunner | None = None,
     ) -> None:
         self._config = config or build_default_heartbeat_config()
         self._pause = pause_signal or PauseSignal()
@@ -159,6 +168,12 @@ class HeartbeatScheduler:
         self._checkpoint_writer = checkpoint_writer
         self._air_detector = air_detector
         self._emergency_bridge = emergency_telegram_bridge
+        # ADR-009 §4 — optional threshold-gated GLOBAL-pool reflection.
+        # Wired the same way as deliberation/executor/audit: ``None`` keeps
+        # the daemon in pure observe mode; a wired runner self-gates so the
+        # per-tick call is cheap until all four dream thresholds hold.
+        self._auto_dream_runner = auto_dream_runner
+        self._last_auto_dream_report: AutoDreamReport | None = None
         self._state = (
             HeartbeatState.DISABLED
             if not self._config.enabled
@@ -260,6 +275,17 @@ class HeartbeatScheduler:
         """
         return self._resumed_from
 
+    @property
+    def last_auto_dream_report(self) -> AutoDreamReport | None:
+        """The most recent Auto Dream run (ADR-009 §4), or ``None``.
+
+        ``None`` when no runner is wired or the gate has never opened (the
+        common case — a dream needs >=24h + >=5 sessions + not rate-limited
+        + idle). When set, ``reflection.reflections_written`` and
+        ``duration_seconds`` summarise the last GLOBAL-pool consolidation.
+        """
+        return self._last_auto_dream_report
+
     def submit_event(self, event: HeartbeatEvent) -> None:
         """Non-blocking event submission — the event-driven hot path.
 
@@ -352,10 +378,15 @@ class HeartbeatScheduler:
     async def _one_tick(self) -> None:
         """Execute one perceive→decide→act→record cycle.
 
-        Faz A scope:
-        * **perceive** — pause flag + active-hours gate (deterministic).
-        * **decide** — stub (records tick; always implicit ``wait``).
-        * **act** + **record** — stubs (Faz D + Faz E).
+        * **perceive** — pause flag + active-hours gate, then the full
+          deterministic world snapshot via ``WorldStateBuilder``.
+        * **decide** — Faz B legal-action filter, then the optional
+          Faz C deliberation layer selects an action (observe-only
+          when no deliberation is wired).
+        * **act** — the optional Faz D executor runs the decision
+          (honours ``SELF_STOP`` cooperatively).
+        * **record** — Faz E AIR detector check, then audit append +
+          checkpoint refresh (each independently optional).
         """
         # PERCEIVE — reactive gates first (ADR-008 §4.3, Lock #3).
         if self._pause.is_set():
@@ -484,6 +515,58 @@ class HeartbeatScheduler:
                 "air_severity": (
                     air_alert.severity if air_alert is not None else None
                 ),
+            },
+        )
+
+        # REFLECT (ADR-009 §4) — optional threshold-gated Auto Dream over
+        # the GLOBAL pool. Runs last (after record) and only when a runner
+        # is wired and the daemon isn't already halting. Like every other
+        # optional surface it is a no-op when unwired; the runner's own gate
+        # keeps the per-tick call cheap, and it is fail-soft so a reflection
+        # error never kills the outer loop.
+        if self._auto_dream_runner is not None and not self._self_stop_requested:
+            await self._maybe_auto_dream(self._auto_dream_runner, world_state)
+
+    async def _maybe_auto_dream(
+        self, runner: AutoDreamRunner, world_state: WorldState
+    ) -> None:
+        """Evaluate + (rarely) run the Auto Dream gate for one tick.
+
+        ADR-009 §4's pseudocode reads ``world_state.rate_limited`` and
+        ``world_state.last_activity_at``; the shipped
+        :class:`~selffork_orchestrator.heartbeat.filter.WorldState` exposes
+        neither, so we derive both from the fields it does carry:
+
+        * ``rate_limited`` — true when every tracked CLI's quota is
+          exhausted (``not any_cli_has_quota()``); the ADR-008 quota signal.
+        * idle — approximated from the live inner-loop session count. A busy
+          tick stamps ``now`` as the last activity so the runner's idle
+          sub-gate blocks; an idle tick passes ``None`` to disable that
+          sub-gate (the other three thresholds still apply).
+
+        GLOBAL pool only (``project_slug=None``) per ADR-009 §3 T5.
+        """
+        now = datetime.now(UTC)
+        rate_limited = not world_state.any_cli_has_quota()
+        busy = world_state.active_concurrent_sessions > 0
+        try:
+            report = await runner.maybe_run(
+                now=now,
+                rate_limited=rate_limited,
+                last_activity_at=now if busy else None,
+                project_slug=None,
+            )
+        except Exception:
+            _log.exception("heartbeat_auto_dream_failed")
+            return
+        if report is None:
+            return
+        self._last_auto_dream_report = report
+        _log.info(
+            "heartbeat_auto_dream_ran",
+            extra={
+                "duration_seconds": report.duration_seconds,
+                "reflections_written": report.reflection.reflections_written,
             },
         )
 

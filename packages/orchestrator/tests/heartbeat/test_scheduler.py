@@ -1012,3 +1012,105 @@ async def test_resume_hint_survives_a_stalled_first_tick(tmp_path: Path) -> None
     assert "Resuming after a restart" in speaker.prompts[1]
     # Tick 2 was a real decision -> hint consumed -> gone by tick 3.
     assert "Resuming after a restart" not in speaker.prompts[2]
+
+
+# ── Auto Dream wiring (ADR-009 §4) ─────────────────────────────────────
+
+
+class _FakeReflection:
+    def __init__(self, reflections_written: int = 3) -> None:
+        self.reflections_written = reflections_written
+
+
+class _FakeAutoDreamReport:
+    def __init__(self) -> None:
+        self.duration_seconds = 0.5
+        self.reflection = _FakeReflection()
+
+
+class _RecordingAutoDreamRunner:
+    """Records every ``maybe_run`` call; returns a canned report (or None)."""
+
+    def __init__(self, report: object | None = None) -> None:
+        self.calls = 0
+        self.kwargs: list[dict[str, object]] = []
+        self._report = report
+
+    async def maybe_run(
+        self,
+        *,
+        now: object | None = None,
+        rate_limited: bool = False,
+        last_activity_at: object | None = None,
+        project_slug: str | None = None,
+    ) -> object | None:
+        self.calls += 1
+        self.kwargs.append(
+            {
+                "rate_limited": rate_limited,
+                "last_activity_at": last_activity_at,
+                "project_slug": project_slug,
+            }
+        )
+        return self._report
+
+
+@pytest.mark.asyncio
+async def test_auto_dream_runner_called_and_report_recorded(
+    tmp_path: Path,
+) -> None:
+    report = _FakeAutoDreamReport()
+    runner = _RecordingAutoDreamRunner(report=report)
+    pause = PauseSignal(flag_path=tmp_path / "pause.flag")
+    sched = HeartbeatScheduler(
+        config=_enabled_config(),
+        pause_signal=pause,
+        auto_dream_runner=runner,  # type: ignore[arg-type]
+    )
+    await sched.start()
+    sched.submit_event(HeartbeatEvent.KANBAN_CHANGED)
+    await asyncio.sleep(0.1)
+    await sched.stop()
+    assert runner.calls >= 1
+    assert sched.last_auto_dream_report is report
+    # Reflection always targets the GLOBAL pool (project_slug=None).
+    assert all(call["project_slug"] is None for call in runner.kwargs)
+
+
+@pytest.mark.asyncio
+async def test_auto_dream_not_wired_is_noop(tmp_path: Path) -> None:
+    pause = PauseSignal(flag_path=tmp_path / "pause.flag")
+    sched = HeartbeatScheduler(config=_enabled_config(), pause_signal=pause)
+    await sched.start()
+    sched.submit_event(HeartbeatEvent.KANBAN_CHANGED)
+    await asyncio.sleep(0.1)
+    assert sched.tick_count >= 1
+    assert sched.last_auto_dream_report is None
+    await sched.stop()
+
+
+@pytest.mark.asyncio
+async def test_auto_dream_runner_error_is_fail_soft(tmp_path: Path) -> None:
+    class _BoomRunner:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def maybe_run(self, **_kwargs: object) -> object | None:
+            self.calls += 1
+            raise RuntimeError("dream exploded")
+
+    runner = _BoomRunner()
+    pause = PauseSignal(flag_path=tmp_path / "pause.flag")
+    sched = HeartbeatScheduler(
+        config=_enabled_config(),
+        pause_signal=pause,
+        auto_dream_runner=runner,  # type: ignore[arg-type]
+    )
+    await sched.start()
+    sched.submit_event(HeartbeatEvent.KANBAN_CHANGED)
+    await asyncio.sleep(0.1)
+    # The runner blew up but the daemon kept ticking.
+    assert runner.calls >= 1
+    assert sched.is_running
+    assert sched.last_auto_dream_report is None
+    await sched.stop()

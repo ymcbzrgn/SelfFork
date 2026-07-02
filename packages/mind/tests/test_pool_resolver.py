@@ -12,6 +12,8 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from selffork_mind.graph.base import SemanticGraphStore
+from selffork_mind.graph.in_memory import InMemoryGraphStore
 from selffork_mind.memory.model import Note
 from selffork_mind.store.base import (
     GLOBAL_GROUP_ID,
@@ -500,3 +502,93 @@ class TestUUIDInRowToNote:
         ids = {h.note.id for h in hits}
         assert isinstance(stored.id, UUID)
         assert stored.id in ids
+
+
+def _stub_lance(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No-op the LanceDB vector engine's async lifecycle.
+
+    The graph-factory hook is orthogonal to the vector store; stubbing
+    keeps these tests focused on T3 wiring and runnable where the optional
+    ``lancedb`` package is absent.
+    """
+
+    async def _noop(_self: object) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "selffork_mind.store.lance.LanceDBVectorStore.setup", _noop
+    )
+    monkeypatch.setattr(
+        "selffork_mind.store.lance.LanceDBVectorStore.teardown", _noop
+    )
+
+
+class TestGraphStoreFactory:
+    """ADR-009 §3 pluggable T3 graph-backend factory hook."""
+
+    async def test_default_factory_is_in_memory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Backward compatibility — no factory ⇒ InMemoryGraphStore per pool."""
+        _stub_lance(monkeypatch)
+        resolver = PoolResolver(
+            project_slug="fac-default",
+            home=tmp_path,
+            embedding_dim=_DIM,
+        )
+        await resolver.setup()
+        try:
+            assert resolver._project is not None
+            assert resolver._global is not None
+            assert isinstance(resolver._project.graph, InMemoryGraphStore)
+            assert isinstance(resolver._global.graph, InMemoryGraphStore)
+        finally:
+            await resolver.teardown()
+
+    async def test_custom_factory_builds_one_engine_per_pool(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The factory is invoked once per pool and its stores are used."""
+        _stub_lance(monkeypatch)
+        made: list[SemanticGraphStore] = []
+
+        def factory() -> SemanticGraphStore:
+            store = InMemoryGraphStore()
+            made.append(store)
+            return store
+
+        resolver = PoolResolver(
+            project_slug="fac-custom",
+            home=tmp_path,
+            embedding_dim=_DIM,
+            graph_store_factory=factory,
+        )
+        await resolver.setup()
+        try:
+            # Called exactly once per pool (PROJECT + GLOBAL).
+            assert len(made) == 2
+            assert resolver._project is not None
+            assert resolver._global is not None
+            assert resolver._project.graph in made
+            assert resolver._global.graph in made
+            # Distinct instances → triples never share a backend.
+            assert resolver._project.graph is not resolver._global.graph
+        finally:
+            await resolver.teardown()
+
+    async def test_factory_error_propagates_from_setup(
+        self, tmp_path: Path
+    ) -> None:
+        """A raising factory surfaces at setup — the resolver never swallows it."""
+
+        def boom() -> SemanticGraphStore:
+            raise RuntimeError("no graph backend")
+
+        resolver = PoolResolver(
+            project_slug="fac-boom",
+            home=tmp_path,
+            embedding_dim=_DIM,
+            graph_store_factory=boom,
+        )
+        with pytest.raises(RuntimeError, match="no graph backend"):
+            await resolver.setup()

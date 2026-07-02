@@ -1,7 +1,9 @@
 """HybridRetriever — adaptive hybrid retrieval over a :class:`MindStore`.
 
-Per ADR-002 §5: vector + BM25 + tag-boost fusion with adaptive routing
-(graph routing stub lands Order 4 with HippoRAG 2 PPR). Every recall
+Per ADR-002 §5: vector + BM25 + tag-boost fusion with adaptive routing.
+Graph-labelled queries additionally blend HippoRAG-2 PPR hits from
+:mod:`selffork_mind.graph` (``GraphRetriever``) via ``_blend_graph_hits``.
+Every recall
 emits a :class:`ProvenanceEntry` so the dashboard's Sources surface has
 ground truth (ADR-002 §8).
 
@@ -59,8 +61,9 @@ __all__ = [
 QueryRoute = Literal["vector", "graph", "hybrid"]
 """Routing label produced by :func:`classify_query`.
 
-``vector`` — single-fact / semantic similarity. Default route in Order 2.
-``graph`` — multi-hop / temporal / causal. Stub label until Order 4.
+``vector`` — single-fact / semantic similarity. Default route.
+``graph`` — multi-hop / temporal / causal, served by ``GraphRetriever``
+(HippoRAG-2 PPR) and blended via ``_blend_graph_hits``.
 ``hybrid`` — blend of both (vector primary, graph signal layered).
 """
 
@@ -86,10 +89,10 @@ _TEMPORAL_HINTS: tuple[str, ...] = (
 def classify_query(query: str) -> QueryRoute:
     """Heuristic query classifier — vector vs graph vs hybrid.
 
-    Order 2 only ships the vector route end-to-end; graph is a stub.
-    The classifier still returns the correct label so audit logs and
-    provenance traces describe what *would* have run when the graph
-    backend lands in Order 4.
+    The label steers retrieval: ``graph``/``hybrid`` queries pull
+    ``GraphRetriever`` (HippoRAG-2 PPR) hits into the fusion via
+    ``_blend_graph_hits``; ``vector`` skips the graph pass. The label
+    is also recorded in audit logs and provenance traces.
     """
     text = query.lower()
     if any(hint in text for hint in _TEMPORAL_HINTS):

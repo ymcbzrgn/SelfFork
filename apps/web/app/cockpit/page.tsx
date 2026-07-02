@@ -1,11 +1,9 @@
 /**
  * Cockpit ``/cockpit`` page — 4-tab shell wired to URL state.
  *
- * Order 5 lays the tab structure with placeholder bodies so subsequent
- * orders can paint the real Mission/Run/Chat/Context content without
- * touching shell wiring. Each tab placeholder renders a banner so the
- * operator always knows which surface they're looking at, even before
- * later orders ship.
+ * All four tabs (Mission/Run/Chat/Context) render their real content;
+ * the shell owns URL ↔ store tab sync so deep links and non-Tabs
+ * surfaces (e.g. the command palette) stay in lockstep.
  */
 "use client";
 
@@ -95,25 +93,5 @@ export default function CockpitPage() {
         <ContextTab />
       </TabsContent>
     </Tabs>
-  );
-}
-
-function CockpitTabPlaceholder({
-  tab,
-  summary,
-}: {
-  tab: CockpitTab;
-  summary: string;
-}) {
-  return (
-    <div
-      className="rounded-md border border-dashed border-border/60 bg-card/40 p-6 text-sm text-muted-foreground"
-      data-testid={`cockpit-tab-${tab}-placeholder`}
-    >
-      <h2 className="text-base font-semibold text-foreground">
-        {TAB_LABEL[tab]}
-      </h2>
-      <p className="mt-2">{summary}</p>
-    </div>
   );
 }
