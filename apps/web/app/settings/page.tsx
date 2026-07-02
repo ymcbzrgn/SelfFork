@@ -41,10 +41,10 @@ type Section =
   | "autonomy";
 
 const DEFAULT_OPEN: Record<Section, boolean> = {
-  model: true,
-  telegram: true,
+  model: false,
+  telegram: false,
   codexbar: false,
-  autonomy: true,
+  autonomy: false,
 };
 
 const SAVE_WINDOW_OPTIONS = [
@@ -68,9 +68,7 @@ export default function SettingsPage() {
             Settings
           </h1>
           <p className="font-body text-caption text-on-surface-variant">
-            Model endpoint, training, Telegram bridge, and autonomy
-            preferences. Restart-required for most changes; the panels
-            note where this applies.
+            Expand a section to view or change it.
           </p>
         </header>
 
@@ -94,8 +92,7 @@ export default function SettingsPage() {
 
         <SectionCard
           id="codexbar"
-          title="CodexBar (secondary quota source)"
-          previewWhenClosed="S-Quota Wave 2 — live + editable"
+          title="CodexBar"
           open={open}
           onToggle={toggle}
         >
@@ -104,8 +101,7 @@ export default function SettingsPage() {
 
         <SectionCard
           id="autonomy"
-          title="Autonomy — Heartbeat (S-Auto)"
-          previewWhenClosed="Live daemon state + editable preset/knobs"
+          title="Autonomy"
           open={open}
           onToggle={toggle}
         >
@@ -395,8 +391,7 @@ function ModelEndpointSection() {
       <HealthPill health={health} />
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-[11px] text-on-surface-variant italic">
-          Saved to ~/.selffork/settings/model-endpoint.yaml. Effect on
-          next dashboard restart.
+          Effect on next restart.
         </p>
         <div className="flex items-center gap-2">
           {savedAt && !saving && (
@@ -741,7 +736,7 @@ function CodexBarSection() {
         )}
         {config && (
           <>
-            <FormRow label="Version pin (empty = vendored manifest default)">
+            <FormRow label="Version pin">
               <input
                 type="text"
                 value={config.version_pin}
@@ -752,7 +747,7 @@ function CodexBarSection() {
                 className="w-full font-mono text-caption px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg"
               />
             </FormRow>
-            <FormRow label="Binary path override (empty = PATH search + vendored fallback)">
+            <FormRow label="Binary path override">
               <input
                 type="text"
                 value={config.binary_path_override}
@@ -1099,8 +1094,7 @@ function AutonomySection() {
         </div>
         <div className="flex items-center justify-between flex-wrap gap-2">
           <p className="text-[11px] text-on-surface-variant italic">
-            Persisted to ~/.selffork/heartbeat/autonomy.yaml. Effect on
-            next daemon restart (hot-reload deferred).
+            Effect on next daemon restart.
           </p>
           <div className="flex items-center gap-2">
             {savedAt && !saving && (
@@ -1160,7 +1154,7 @@ function AutonomySection() {
           <div
             className={`${airColor[state.last_air_alert.severity] ?? "text-error"} text-[11px] uppercase tracking-wide mb-1 font-bold`}
           >
-            🚨 AIR alert · {state.last_air_alert.severity}
+            AIR alert · {state.last_air_alert.severity}
           </div>
           <div className="text-[12px]">
             {state.last_air_alert.reason} (consecutive failures:{" "}

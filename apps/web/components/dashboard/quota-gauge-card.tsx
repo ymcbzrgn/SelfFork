@@ -44,7 +44,7 @@ export function QuotaGaugeCard({ provider, quota, resetIn, signedIn }: QuotaCard
 
   const pct = quota ?? 0;
   const low = pct < 30;
-  const barColor = low ? "bg-amber-500" : meta.barClass;
+  const barColor = low ? "bg-amber-500" : "bg-on-surface-variant/60";
   const borderClass = low
     ? "border-2 border-amber-400/50"
     : "border border-outline-variant/10";
@@ -54,7 +54,7 @@ export function QuotaGaugeCard({ provider, quota, resetIn, signedIn }: QuotaCard
       className={`w-[160px] h-[120px] bg-surface rounded-lg p-4 shadow-sm ${borderClass} hover:shadow-md transition-shadow`}
     >
       <div className="flex justify-between items-start mb-2">
-        <span className={`text-caption font-bold ${meta.textClass}`}>{meta.label}</span>
+        <span className="text-caption font-medium text-on-surface-variant">{meta.label}</span>
         <span className="text-caption tabular-nums font-semibold text-on-surface">
           {quota === undefined ? "—" : `${pct}%`}
         </span>

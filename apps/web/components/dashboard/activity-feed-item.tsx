@@ -53,32 +53,20 @@ function formatTime(iso: string): string {
 export function ActivityFeedItem({ row }: { row: ActivityRow }) {
   const Icon = KIND_ICON[row.event_kind] ?? Wrench;
   return (
-    <tr className="hover:bg-surface-container-low transition-colors group">
-      <td className="py-4 pl-6 w-10 align-top">
+    <tr className="hover:bg-surface-container-low/50 transition-colors group">
+      <td className="py-3 pl-6 w-9 align-middle">
         <Icon
-          className={`w-5 h-5 transition-colors ${SEVERITY_CLASS[row.severity]}`}
+          className={`w-4 h-4 transition-colors ${SEVERITY_CLASS[row.severity]}`}
           strokeWidth={1.75}
         />
       </td>
-      <td className="py-4 font-mono text-[11px] tabular-nums text-on-surface-variant w-[80px] align-top">
-        {formatTime(row.ts)}
-      </td>
-      <td className="py-4 align-top">
-        {row.project_slug ? (
-          <span className="bg-surface-variant px-2 py-0.5 rounded text-[10px] font-bold uppercase text-on-surface-variant">
-            {row.project_slug}
+      <td className="py-3 pr-6 align-middle">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="text-caption text-on-surface truncate">{row.summary}</span>
+          <span className="text-[11px] tabular-nums text-on-surface-variant/70 shrink-0">
+            {formatTime(row.ts)}
           </span>
-        ) : (
-          <span className="text-[10px] text-on-surface-variant/40">—</span>
-        )}
-      </td>
-      <td className="py-4 pr-6 text-caption text-on-surface">
-        <span>{row.summary}</span>
-        {row.intent && (
-          <span className="mt-0.5 block text-[11px] italic text-on-surface-variant/70">
-            {row.intent}
-          </span>
-        )}
+        </div>
       </td>
     </tr>
   );

@@ -40,6 +40,11 @@
 > (ADR-010 §9 — 289 tool'luk registry, 3019 backend test).
 > ADR-010 §9.17 sıradaki adımı ilan ediyor: **M7 freeze + S-Train sprint**
 > (Format Freeze'i fine-tune corpus stabilizasyon kapısı olarak kullanır).
+> S-Train artık kendi kapı dokümanlarına sahip:
+> [`ADR-012`](decisions/ADR-012_S-Train_Corpus.md) (kapsam kilidi — sadece corpus
+> montajı, GPU worker M7'de), [`docs/plans/S-Train_Plan.md`](plans/S-Train_Plan.md)
+> (T1-T6 iş kalemleri) ve [`docs/plans/S-Train_Smoke_Checklist.md`](plans/S-Train_Smoke_Checklist.md).
+> Kilitli eğitim kararları: [`docs/Operator_Locked_Decisions.md`](Operator_Locked_Decisions.md).
 > Aşağıdaki milestone bölümleri ve takvim tablosu bu güncellemenin
 > **öncesine** aittir; tarihler (ör. "M5 2026-09'da başlar") artık tarihsel
 > plan kaydıdır, güncel durum değildir. Güncel durum için ADR-008→011'e bakın.

@@ -23,6 +23,7 @@ import (
 	"github.com/selffork/selffork-daemon/internal/cli_bridge"
 	"github.com/selffork/selffork-daemon/internal/command_intake"
 	"github.com/selffork/selffork-daemon/internal/heartbeat"
+	"github.com/selffork/selffork-daemon/internal/registration"
 	"github.com/selffork/selffork-daemon/internal/state_reporter"
 )
 
@@ -77,6 +78,39 @@ func runDaemon(cmd *cobra.Command, _ []string) error {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+
+	// Self-register with the orchestrator's fleet registry BEFORE starting the
+	// heartbeat/state/intake goroutines. The server keys heartbeat and state
+	// ingest on the machine_id already existing in its registry (unknown
+	// machines get HTTP 404), so an unregistered daemon would 404 on its very
+	// first heartbeat. RegisterWithRetry mirrors the heartbeat resilience
+	// policy: it retries a transiently-unreachable orchestrator with backoff
+	// rather than aborting, and returns only once registered (HTTP 201), when
+	// the machine is already known (HTTP 409, treated as idempotent success),
+	// or when ctx is cancelled by a shutdown signal.
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = machineID
+	}
+	regResult, err := registration.RegisterWithRetry(ctx, registration.Config{
+		OrchestratorURL: orchURL,
+		MachineID:       machineID,
+		Hostname:        hostname,
+		LocationTier:    locationTier,
+		Version:         Version,
+	}, log.Printf)
+	if err != nil {
+		// ctx was cancelled (shutdown signal) before registration completed.
+		return nil
+	}
+	if regResult.AlreadyRegistered {
+		log.Printf("fleet registration: machine %q already registered, continuing", machineID)
+	} else {
+		// The auth_key is issued for future authenticated ingest; today's
+		// heartbeat/state endpoints authorise purely on the registered
+		// machine_id, so it is not threaded into their wire payloads.
+		log.Printf("fleet registration: machine %q registered (auth_key issued, %d chars)", machineID, len(regResult.AuthKey))
+	}
 
 	hb := &heartbeat.Heartbeat{
 		OrchestratorURL: orchURL,

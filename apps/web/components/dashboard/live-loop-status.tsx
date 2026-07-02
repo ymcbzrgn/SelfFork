@@ -12,16 +12,14 @@ export interface LiveLoop {
 export function LiveLoopStatus({ loop }: { loop: LiveLoop | null }) {
   if (!loop) {
     return (
-      <div className="bg-surface border-l-[6px] border-outline-variant/30 rounded-xl shadow-sm p-card-padding flex items-center justify-between">
-        <div className="flex flex-col gap-1">
-          <span className="text-caption uppercase tracking-wider font-bold text-on-surface-variant">
-            Idle
-          </span>
-          <span className="text-body text-on-surface">Self Jr is waiting for a task.</span>
-        </div>
+      <div className="bg-surface rounded-xl border border-outline-variant/10 p-card-padding flex items-center justify-between gap-4">
+        <p className="text-body text-on-surface-variant flex items-center gap-2 min-w-0">
+          <span className="w-2 h-2 rounded-full bg-on-surface-variant/40 shrink-0" />
+          <span className="truncate">Idle — waiting for a task.</span>
+        </p>
         <Link
           href="/talk"
-          className="text-caption font-bold text-primary hover:underline"
+          className="text-caption font-bold text-primary hover:underline whitespace-nowrap"
         >
           Start something →
         </Link>
@@ -30,28 +28,22 @@ export function LiveLoopStatus({ loop }: { loop: LiveLoop | null }) {
   }
 
   return (
-    <div className="relative bg-surface border-l-[6px] border-primary-container rounded-xl shadow-sm overflow-hidden">
-      <div className="p-card-padding">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="bg-error/10 text-error px-2 py-0.5 rounded flex items-center gap-1.5 font-bold text-[10px] tracking-wider uppercase">
-              <span className="w-1.5 h-1.5 rounded-full bg-error animate-pulse-red" />
-              Live Loop
-            </div>
-            <span className="text-caption font-mono text-on-surface-variant">
-              {loop.workspace} · {loop.cli} CLI · turn {loop.turn} · {loop.durationLabel}
-            </span>
-          </div>
-          <Link
-            href={`/workspaces/${loop.workspaceSlug}`}
-            className="bg-primary text-white text-caption font-bold px-4 py-2 rounded-lg hover:bg-primary-container transition-colors shadow-sm whitespace-nowrap"
-          >
-            Open Workspace →
-          </Link>
-        </div>
-        <p className="text-heading text-on-surface font-body leading-relaxed max-w-2xl italic">
-          “{loop.thought}”
+    <div className="bg-surface rounded-xl border border-outline-variant/10 shadow-sm p-card-padding">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <p className="text-body text-on-surface flex items-center gap-2 min-w-0">
+          <span className="w-2 h-2 rounded-full bg-primary animate-pulse shrink-0" />
+          <span className="truncate">
+            <span className="text-on-surface-variant">Working on </span>
+            {loop.workspace}
+            <span className="text-on-surface-variant"> — “{loop.thought}”</span>
+          </span>
         </p>
+        <Link
+          href={`/workspaces/${loop.workspaceSlug}`}
+          className="text-caption font-bold text-primary hover:underline whitespace-nowrap"
+        >
+          Open workspace →
+        </Link>
       </div>
     </div>
   );

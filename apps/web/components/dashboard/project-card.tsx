@@ -22,21 +22,23 @@ export function ProjectCard({ slug, name, status, progress }: ProjectCardData) {
   return (
     <Link
       href={`/workspaces/${slug}`}
-      className="bg-surface p-4 rounded-xl shadow-sm border border-outline-variant/10 hover:-translate-y-1 transition-transform cursor-pointer relative group block"
+      className="group flex items-center justify-between gap-3 px-4 py-3 hover:bg-surface-container-low transition-colors"
     >
-      <div className="flex justify-between items-start mb-4">
+      <div className="min-w-0">
+        <h3 className="font-display text-body text-on-surface truncate">{name}</h3>
+        <p className="text-caption text-on-surface-variant">{progress}</p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
         <span
           className={`${meta.classes} text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-tight`}
         >
           {meta.label}
         </span>
         <ArrowUpRight
-          className="w-5 h-5 text-on-surface-variant group-hover:text-primary"
+          className="w-4 h-4 text-on-surface-variant/50 group-hover:text-primary transition-colors"
           strokeWidth={1.75}
         />
       </div>
-      <h3 className="font-display text-body font-bold text-on-surface">{name}</h3>
-      <p className="text-caption text-on-surface-variant">{progress}</p>
     </Link>
   );
 }
@@ -45,13 +47,13 @@ export function NewProjectCard() {
   return (
     <Link
       href="/talk?intent=new-workspace"
-      className="border-2 border-dashed border-outline-variant/50 p-4 rounded-xl flex flex-col items-center justify-center gap-2 hover:bg-surface-container-low transition-colors cursor-pointer group min-h-[110px]"
+      className="group flex items-center gap-2 px-4 py-3 text-on-surface-variant hover:bg-surface-container-low transition-colors"
     >
       <PlusCircle
-        className="w-8 h-8 text-primary group-hover:scale-110 transition-transform"
+        className="w-4 h-4 text-primary shrink-0"
         strokeWidth={1.75}
       />
-      <span className="text-caption font-bold text-on-surface-variant">New workspace</span>
+      <span className="text-caption font-medium">New workspace</span>
     </Link>
   );
 }

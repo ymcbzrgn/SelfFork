@@ -230,9 +230,7 @@ export default function ConnectionsPage() {
             Connections
           </h1>
           <p className="font-body text-caption text-on-surface-variant">
-            CLI provider auth status + Telegram bridge. SelfFork
-            doesn't orchestrate sign-in — each CLI handles its own
-            auth in your terminal.
+            Sign-in status per CLI, plus the Telegram bridge.
           </p>
         </section>
 
@@ -260,75 +258,59 @@ export default function ConnectionsPage() {
             return (
               <div
                 key={row.canonical}
-                className={`bg-surface p-5 rounded-xl shadow-sm border ${
+                title={
+                  hasUsage
+                    ? `${u?.calls_in_window ?? 0} calls in ${
+                        u?.window_label ?? "window"
+                      }${resetLabel ? ` · resets in ${resetLabel}` : ""}${
+                        u?.proactive_source
+                          ? ` · source ${u.proactive_source}`
+                          : ""
+                      }`
+                    : undefined
+                }
+                className={`bg-surface px-5 py-3.5 rounded-xl border ${
                   hasUsage
                     ? "border-outline-variant/20"
-                    : "border-dashed border-outline-variant/40"
-                } flex items-start gap-4 flex-wrap`}
+                    : "border-outline-variant/15"
+                } flex items-center gap-3 flex-wrap`}
               >
-                <div className="flex items-center gap-3">
-                  <StatusDot kind={dotKind} />
+                <StatusDot kind={dotKind} />
+                <span className="bg-surface-container-low text-on-surface-variant text-[10px] font-semibold uppercase tracking-tight px-2 py-0.5 rounded">
+                  {row.canonical}
+                </span>
+                <h3 className="flex-1 min-w-[160px] text-body font-medium text-on-surface">
+                  {row.displayName}
+                </h3>
+                <span
+                  className={`text-caption ${
+                    expired ? "text-error" : "text-on-surface-variant"
+                  }`}
+                >
+                  {expired
+                    ? "auth expired"
+                    : hasUsage
+                      ? "healthy"
+                      : row.canonical === "minimax" ||
+                          row.canonical === "glm"
+                        ? "via opencode"
+                        : "signed out"}
+                </span>
+                {(expired ||
+                  (!hasUsage &&
+                    row.canonical !== "minimax" &&
+                    row.canonical !== "glm")) && (
                   <span
-                    className={`${row.pillBg} ${row.pillText} text-[10px] font-bold uppercase tracking-tight px-2 py-0.5 rounded`}
+                    className={`flex items-center gap-1.5 font-mono text-[11px] px-2 py-0.5 rounded ${
+                      expired
+                        ? "text-error/80 bg-error/10"
+                        : "text-on-surface-variant/70 bg-surface-container-low"
+                    }`}
                   >
-                    {row.canonical}
+                    <Terminal className="h-3 w-3" strokeWidth={1.75} />
+                    <code>{row.loginCommand}</code>
                   </span>
-                </div>
-                <div className="flex-1 min-w-[260px]">
-                  <h3 className="text-body font-semibold text-on-surface">
-                    {row.displayName}
-                  </h3>
-                  {hasUsage && !expired && (
-                    <p className="text-caption text-on-surface-variant tabular-nums">
-                      {u?.calls_in_window ?? 0} calls in {u?.window_label}
-                      {resetLabel && ` · Resets in ${resetLabel}`}
-                    </p>
-                  )}
-                  {!hasUsage && !expired && (
-                    row.canonical === "minimax" || row.canonical === "glm" ? (
-                      <p className="text-caption text-on-surface-variant italic">
-                        Routed via OpenCode — Self Jr reaches this
-                        provider through the OpenCode CLI, so its quota
-                        rolls up under OpenCode above.
-                      </p>
-                    ) : (
-                      <p className="text-caption text-on-surface-variant italic">
-                        No recent activity. Run{" "}
-                        <code className="font-mono text-on-surface bg-surface-container-low px-1.5 rounded">
-                          {row.loginCommand}
-                        </code>{" "}
-                        in your terminal to sign in.
-                      </p>
-                    )
-                  )}
-                  {expired && (
-                    <p className="text-caption text-error">
-                      Auth expired — Self Jr will keep nudging you in
-                      Telegram. Run{" "}
-                      <code className="font-mono bg-error/10 px-1.5 rounded">
-                        {row.loginCommand}
-                      </code>{" "}
-                      to re-authenticate.
-                    </p>
-                  )}
-                  {u?.proactive_source && (
-                    <p
-                      className="text-[11px] text-on-surface-variant/70 mt-1"
-                      title="Where the live secondary quota signal comes from"
-                    >
-                      Source:{" "}
-                      <span className="font-mono">{u.proactive_source}</span>
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 text-caption text-on-surface-variant">
-                  <Terminal className="h-3.5 w-3.5" strokeWidth={1.75} />
-                  <span className="font-mono">
-                    {row.canonical === "minimax" || row.canonical === "glm"
-                      ? "via opencode"
-                      : row.loginCommand}
-                  </span>
-                </div>
+                )}
               </div>
             );
           })}
@@ -338,14 +320,16 @@ export default function ConnectionsPage() {
           <h2 className="text-[11px] uppercase tracking-wider font-bold text-on-surface-variant">
             Telegram Bridge
           </h2>
-          <div className="bg-surface p-6 rounded-xl shadow-sm border border-outline-variant/20">
-            <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
+          <div className="bg-surface p-6 rounded-xl border border-outline-variant/20">
+            <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-3">
                 <StatusDot kind={tgConnected ? "green" : "gray"} />
-                <h3 className="text-body font-bold text-on-surface">
-                  Telegram Bridge —{" "}
-                  {tgConnected ? "Connected" : "Not configured"}
+                <h3 className="text-body font-semibold text-on-surface">
+                  Telegram bridge
                 </h3>
+                <span className="text-caption text-on-surface-variant">
+                  {tgConnected ? "connected" : "not configured"}
+                </span>
               </div>
               <button
                 type="button"
@@ -355,47 +339,7 @@ export default function ConnectionsPage() {
                 {tgConnected ? "Reconfigure…" : "Connect"}
               </button>
             </div>
-            <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-caption">
-              <div className="flex gap-2">
-                <dt className="text-on-surface-variant w-32">Bot:</dt>
-                <dd className="font-mono text-on-surface">
-                  {tg?.bot_username ? `@${tg.bot_username}` : "—"}
-                </dd>
-              </div>
-              <div className="flex gap-2">
-                <dt className="text-on-surface-variant w-32">Mode:</dt>
-                <dd className="font-mono text-on-surface">
-                  {tg?.mode ?? "—"}
-                </dd>
-              </div>
-              <div className="flex gap-2 md:col-span-2">
-                <dt className="text-on-surface-variant w-32">Webhook:</dt>
-                <dd className="font-mono text-on-surface break-all">
-                  {tg?.webhook_url ?? (
-                    <span className="text-on-surface-variant/60 italic">
-                      not set
-                    </span>
-                  )}
-                </dd>
-              </div>
-              <div className="flex gap-2">
-                <dt className="text-on-surface-variant w-32">Soft confirm:</dt>
-                <dd className="text-on-surface">
-                  {tg?.soft_confirm_window_hours ?? 4} hours
-                </dd>
-              </div>
-              <div className="flex gap-2">
-                <dt className="text-on-surface-variant w-32">Last activity:</dt>
-                <dd className="text-on-surface">
-                  {tg?.last_activity_summary ?? (
-                    <span className="text-on-surface-variant/60 italic">
-                      never
-                    </span>
-                  )}
-                </dd>
-              </div>
-            </dl>
-            <div className="mt-4 pt-4 border-t border-outline-variant/30 flex items-center gap-2 flex-wrap">
+            <div className="mt-4 flex items-center gap-3 flex-wrap">
               <button
                 type="button"
                 onClick={() => {
@@ -422,57 +366,101 @@ export default function ConnectionsPage() {
                 {testStatus === "sending" ? "Sending…" : "Send test"}
               </button>
               {testStatus === "ok" && (
-                <span className="text-caption text-success">✓ delivered</span>
+                <span className="text-caption text-success">delivered</span>
               )}
               {testStatus === "error" && (
                 <span className="text-caption text-error">
-                  ✗ {testError ?? "failed"}
+                  {testError ?? "failed"}
                 </span>
               )}
             </div>
-            {activity &&
-              activity.inbound.length + activity.outbound.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-outline-variant/30">
-                  <h4 className="text-[11px] uppercase tracking-wider font-bold text-on-surface-variant mb-2">
-                    Recent activity
-                  </h4>
-                  <ul className="space-y-1 text-caption">
-                    {[
-                      ...activity.outbound.slice(0, 3),
-                      ...activity.inbound.slice(0, 3),
-                    ]
-                      .sort((a, b) => b.at.localeCompare(a.at))
-                      .slice(0, 5)
-                      .map((entry) => (
-                        <li
-                          key={`${entry.direction}-${entry.at}`}
-                          className="flex items-center gap-2"
-                        >
-                          <span
-                            className={
-                              entry.direction === "outbound"
-                                ? "text-primary"
-                                : "text-success"
-                            }
-                          >
-                            {entry.direction === "outbound" ? "↑" : "↓"}
-                          </span>
-                          <span className="text-on-surface-variant w-32 truncate">
-                            {new Date(entry.at).toLocaleTimeString()}
-                          </span>
-                          <span className="text-on-surface truncate">
-                            {entry.summary}
-                          </span>
-                        </li>
-                      ))}
-                  </ul>
+            <details className="mt-4 pt-4 border-t border-outline-variant/30">
+              <summary className="text-caption text-on-surface-variant cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
+                Bridge details
+              </summary>
+              <dl className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-caption">
+                <div className="flex gap-2">
+                  <dt className="text-on-surface-variant w-32">Bot:</dt>
+                  <dd className="font-mono text-on-surface">
+                    {tg?.bot_username ? `@${tg.bot_username}` : "—"}
+                  </dd>
                 </div>
-              )}
+                <div className="flex gap-2">
+                  <dt className="text-on-surface-variant w-32">Mode:</dt>
+                  <dd className="font-mono text-on-surface">
+                    {tg?.mode ?? "—"}
+                  </dd>
+                </div>
+                <div className="flex gap-2 md:col-span-2">
+                  <dt className="text-on-surface-variant w-32">Webhook:</dt>
+                  <dd className="font-mono text-on-surface break-all">
+                    {tg?.webhook_url ?? (
+                      <span className="text-on-surface-variant/60 italic">
+                        not set
+                      </span>
+                    )}
+                  </dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="text-on-surface-variant w-32">Soft confirm:</dt>
+                  <dd className="text-on-surface">
+                    {tg?.soft_confirm_window_hours ?? 4} hours
+                  </dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="text-on-surface-variant w-32">Last activity:</dt>
+                  <dd className="text-on-surface">
+                    {tg?.last_activity_summary ?? (
+                      <span className="text-on-surface-variant/60 italic">
+                        never
+                      </span>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+              {activity &&
+                activity.inbound.length + activity.outbound.length > 0 && (
+                  <div className="mt-4">
+                    <h4 className="text-[11px] uppercase tracking-wider font-bold text-on-surface-variant mb-2">
+                      Recent activity
+                    </h4>
+                    <ul className="space-y-1 text-caption">
+                      {[
+                        ...activity.outbound.slice(0, 3),
+                        ...activity.inbound.slice(0, 3),
+                      ]
+                        .sort((a, b) => b.at.localeCompare(a.at))
+                        .slice(0, 5)
+                        .map((entry) => (
+                          <li
+                            key={`${entry.direction}-${entry.at}`}
+                            className="flex items-center gap-2"
+                          >
+                            <span
+                              className={
+                                entry.direction === "outbound"
+                                  ? "text-primary"
+                                  : "text-success"
+                              }
+                            >
+                              {entry.direction === "outbound" ? "↑" : "↓"}
+                            </span>
+                            <span className="text-on-surface-variant w-32 truncate">
+                              {new Date(entry.at).toLocaleTimeString()}
+                            </span>
+                            <span className="text-on-surface truncate">
+                              {entry.summary}
+                            </span>
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                )}
+            </details>
           </div>
           <p className="text-caption text-on-surface-variant flex items-center gap-1">
             <Check className="h-3.5 w-3.5 text-success" strokeWidth={2} />
-            Soft confirmation (4h, fail-safe NO) replaces autonomy sliders — see
-            ADR-006 §4.5.
+            Soft confirmation — fail-safe no.
           </p>
         </section>
       </main>

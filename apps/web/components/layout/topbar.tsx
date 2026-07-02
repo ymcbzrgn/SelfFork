@@ -183,7 +183,7 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
 
   return (
     <header
-      className="h-topbar-height w-full sticky top-0 z-40 bg-surface-container-lowest border-b border-outline-variant/20 flex items-center justify-between px-gutter-desktop"
+      className="h-topbar-height w-full sticky top-0 z-40 bg-background/85 backdrop-blur-sm border-b border-border flex items-center justify-between px-gutter-desktop"
       aria-label="Top navigation"
     >
       <div className="flex items-center gap-8 min-w-0">
@@ -191,7 +191,7 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex items-center gap-2 font-heading text-body font-bold text-on-surface group whitespace-nowrap outline-none"
+              className="flex items-center gap-2 text-[16px] font-semibold text-foreground group whitespace-nowrap outline-none"
               aria-label="Page actions"
             >
               <span className="truncate">{title}</span>
@@ -231,7 +231,7 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
             className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-on-surface-variant"
             strokeWidth={1.75}
           />
-          <span className="w-full bg-surface-container-high/50 rounded-full pl-10 pr-4 py-1.5 text-caption text-on-surface-variant">
+          <span className="w-full bg-secondary border border-border rounded-lg pl-10 pr-4 py-1.5 text-[12.5px] text-muted-foreground">
             Search… ⌘K
           </span>
         </button>
@@ -267,11 +267,11 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
         >
           <span
             className={`w-2 h-2 rounded-full ${
-              online ? "bg-error animate-pulse-red" : "bg-on-surface-variant"
+              online ? "bg-primary animate-pulse" : "bg-muted-foreground"
             }`}
             aria-hidden
           />
-          <span className="text-caption font-bold text-on-surface-variant">
+          <span className="text-[12.5px] font-semibold text-muted-foreground">
             {online ? "Live" : "Offline"}
           </span>
         </div>
@@ -302,9 +302,9 @@ export function TopBar({ title = "Dashboard" }: TopBarProps) {
 
         <div
           aria-label="Local operator"
-          className="ml-2 w-8 h-8 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container font-caption text-caption font-semibold"
+          className="ml-2 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[12px] font-semibold"
         >
-          ·
+          Y
         </div>
       </div>
 

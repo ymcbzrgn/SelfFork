@@ -224,9 +224,9 @@ export default function DashboardPage() {
 
   return (
     <AppShell title="Dashboard">
-      <div className="max-w-7xl mx-auto px-gutter-desktop py-vertical-gap space-y-8">
+      <div className="max-w-5xl mx-auto px-gutter-desktop py-vertical-gap space-y-8">
         <section>
-          <h1 className="font-display text-display text-on-surface">Dashboard</h1>
+          <h1 className="font-display text-heading text-on-surface">Dashboard</h1>
           <p className="font-body text-on-surface-variant mt-1">{subtitle}</p>
           {error && (
             <p className="mt-2 text-caption text-error">
@@ -235,40 +235,81 @@ export default function DashboardPage() {
           )}
         </section>
 
-        <section className="space-y-4">
-          <h2 className="font-display text-heading text-on-surface">CLI Quota</h2>
-          <div className="flex gap-4 flex-wrap">
+        {/* Current state — the calm lead */}
+        <LiveLoopStatus loop={liveLoop} />
+
+        {/* CLI quota — quiet chip row at rest, full gauges on demand */}
+        <details className="group bg-surface rounded-xl border border-outline-variant/10 p-card-padding">
+          <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer flex items-center gap-3 flex-wrap">
+            <span className="text-caption text-on-surface-variant">CLI quota</span>
+            <span className="flex items-center gap-3 flex-wrap">
+              {quotaCards.map((c) => (
+                <span key={c.provider} className="inline-flex items-center gap-1.5">
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      c.quota !== undefined && c.quota < 30
+                        ? "bg-amber-500"
+                        : c.signedIn
+                          ? "bg-on-surface-variant"
+                          : "bg-on-surface-variant/25"
+                    }`}
+                  />
+                  <span className="text-[11px] text-on-surface-variant">{c.provider}</span>
+                </span>
+              ))}
+            </span>
+            <span className="ml-auto text-[11px] text-on-surface-variant/70">
+              <span className="group-open:hidden">Details</span>
+              <span className="hidden group-open:inline">Hide</span>
+            </span>
+          </summary>
+          <div className="flex gap-4 flex-wrap mt-4">
             {quotaCards.map((c) => (
               <QuotaGaugeCard key={c.provider} {...c} />
             ))}
           </div>
-        </section>
-
-        <LiveLoopStatus loop={liveLoop} />
+        </details>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <section className="space-y-4">
+          <section className="space-y-3">
             <h2 className="font-display text-heading text-on-surface">Recent activity</h2>
             <div className="bg-surface rounded-xl shadow-sm border border-outline-variant/10 overflow-hidden">
               {activity.length === 0 ? (
                 <div className="p-card-padding text-center text-caption text-on-surface-variant">
-                  No activity yet. Self Jr will start logging when a workspace is active.
+                  Nothing yet — Self Jr will log here when a workspace is active.
                 </div>
               ) : (
-                <table className="w-full text-left">
-                  <tbody className="divide-y divide-outline-variant/10">
-                    {activity.map((row) => (
-                      <ActivityFeedItem key={row.id} row={row} />
-                    ))}
-                  </tbody>
-                </table>
+                <>
+                  <table className="w-full text-left">
+                    <tbody className="divide-y divide-outline-variant/10">
+                      {activity.slice(0, 5).map((row) => (
+                        <ActivityFeedItem key={row.id} row={row} />
+                      ))}
+                    </tbody>
+                  </table>
+                  {activity.length > 5 && (
+                    <details className="group border-t border-outline-variant/10">
+                      <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer py-3 text-center text-caption text-on-surface-variant hover:text-on-surface">
+                        <span className="group-open:hidden">Show {activity.length - 5} earlier</span>
+                        <span className="hidden group-open:inline">Show less</span>
+                      </summary>
+                      <table className="w-full text-left">
+                        <tbody className="divide-y divide-outline-variant/10">
+                          {activity.slice(5).map((row) => (
+                            <ActivityFeedItem key={row.id} row={row} />
+                          ))}
+                        </tbody>
+                      </table>
+                    </details>
+                  )}
+                </>
               )}
             </div>
           </section>
 
-          <section className="space-y-4">
+          <section className="space-y-3">
             <h2 className="font-display text-heading text-on-surface">Workspaces</h2>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="bg-surface rounded-xl shadow-sm border border-outline-variant/10 overflow-hidden divide-y divide-outline-variant/10">
               {projects.map((p) => (
                 <ProjectCard
                   key={p.slug}

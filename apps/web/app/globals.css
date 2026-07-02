@@ -15,55 +15,55 @@
      * design system (asset 9d2751c7cf544707904ba33bfce4602c).
      * Light mode only; Lovable.dev / Cursor / Notion-light vocabulary.
      */
-    --background: 0 0% 99%;
-    --foreground: 228 16% 12%;
+    --background: 100 9% 93%;
+    --foreground: 120 7% 14%;
     --card: 0 0% 100%;
-    --card-foreground: 228 16% 12%;
+    --card-foreground: 120 7% 14%;
 
     /* `primary` = the single CTA blue. One per screen. */
     /* Stitch primary #004ac6 ≈ HSL 221.4 100% 38.8% (sync with raw hex
        in tailwind.config.ts "primary-container" + "surface-tint"). */
-    --primary: 221 100% 39%;
+    --primary: 161 36% 42%;
     --primary-foreground: 0 0% 100%;
 
     /* `secondary` = neutral fill, less common than `muted`. */
-    --secondary: 240 14% 96%;
-    --secondary-foreground: 228 16% 12%;
+    --secondary: 90 12% 97%;
+    --secondary-foreground: 120 7% 14%;
 
     /* `muted` = surface-muted (sidebar, hover, soft fills). */
-    --muted: 240 14% 96%;
-    --muted-foreground: 240 8% 53%;
+    --muted: 100 11% 95%;
+    --muted-foreground: 128 5% 40%;
 
     /* `accent` is reserved for shadcn hover bg use; same as muted. */
-    --accent: 240 22% 93%;
-    --accent-foreground: 228 16% 12%;
+    --accent: 150 21% 91%;
+    --accent-foreground: 120 7% 14%;
 
-    --destructive: 0 78% 56%;
+    --destructive: 5 42% 48%;
     --destructive-foreground: 0 0% 100%;
-    --success: 146 71% 41%;
+    --success: 152 40% 40%;
     --success-foreground: 0 0% 100%;
-    --warning: 35 96% 53%;
-    --warning-foreground: 228 16% 12%;
-    --info: 220 100% 39%;
+    --warning: 36 58% 40%;
+    --warning-foreground: 120 7% 14%;
+    --info: 160 30% 38%;
     --info-foreground: 0 0% 100%;
 
-    --border: 228 17% 93%;
-    --input: 228 17% 93%;
-    --ring: 220 100% 39%;
-    --radius: 0.75rem;
+    --border: 100 7% 85%;
+    --input: 100 7% 85%;
+    --ring: 160 37% 32%;
+    --radius: 0.7rem;
 
-    --sidebar: 240 14% 96%;
-    --sidebar-foreground: 228 16% 12%;
-    --sidebar-border: 228 17% 93%;
-    --sidebar-accent: 240 22% 93%;
+    --sidebar: 100 11% 95%;
+    --sidebar-foreground: 120 7% 14%;
+    --sidebar-border: 100 7% 85%;
+    --sidebar-accent: 150 21% 91%;
   }
 
   .dark {
-    --background: 240 8% 6%;
-    --foreground: 0 0% 98%;
-    --card: 240 7% 9%;
+    --background: 100 9% 93%;
+    --foreground: 120 7% 14%;
+    --card: 0 0% 100%;
     --card-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
+    --primary: 161 36% 42%;
     --primary-foreground: 240 6% 10%;
     --secondary: 240 4% 16%;
     --secondary-foreground: 0 0% 98%;
@@ -88,7 +88,7 @@
      * content area reads as the focal surface, mirrors Linear's 2026
      * refresh philosophy. Border is dimmer too (no harsh divider).
      */
-    --sidebar: 240 10% 3%;
+    --sidebar: 100 11% 95%;
     --sidebar-foreground: 0 0% 95%;
     --sidebar-border: 240 6% 11%;
     --sidebar-accent: 240 4% 14%;

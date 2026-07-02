@@ -524,11 +524,8 @@ export default function TalkPage() {
         <header className="px-gutter-desktop pt-vertical-gap max-w-3xl mx-auto w-full">
           <div className="flex items-start justify-between flex-wrap gap-3">
             <div>
-              <h1 className="font-display text-display text-on-surface">
-                Talk
-              </h1>
-              <div className="font-body text-caption text-on-surface-variant mt-1 flex items-center gap-2 flex-wrap">
-                <span>Speaker: Self Jr · Context:</span>
+              <div className="font-body text-caption text-on-surface-variant flex items-center gap-2 flex-wrap">
+                <span>Context</span>
                 <div className="relative">
                   <button
                     type="button"
@@ -639,7 +636,7 @@ export default function TalkPage() {
           <div className="px-gutter-desktop max-w-3xl mx-auto w-full mt-3">
             <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-2 flex items-center justify-between gap-3">
               <p className="text-caption text-on-surface">
-                📲 {telegramDrafts.length} Telegram message
+                {telegramDrafts.length} Telegram message
                 {telegramDrafts.length === 1 ? "" : "s"} waiting
               </p>
               <div className="flex items-center gap-2">
@@ -686,8 +683,8 @@ export default function TalkPage() {
                   Talk to Self Jr
                 </h3>
                 <p className="text-caption text-on-surface-variant max-w-md">
-                  Project-context-aware. Ask about progress, redirect the
-                  active CLI, or queue work for the next session.
+                  Ask about progress, redirect the active CLI, or queue work
+                  for later.
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center mt-4">
                   {EXAMPLE_PROMPTS.map((prompt) => (
@@ -742,9 +739,7 @@ export default function TalkPage() {
                           className="h-3.5 w-3.5 animate-spin"
                           strokeWidth={2}
                         />
-                        generating… ({pending.tokenCount} token
-                        {pending.tokenCount === 1 ? "" : "s"} · {elapsedSeconds}
-                        s)
+                        generating · {elapsedSeconds}s
                       </span>
                       <button
                         type="button"
