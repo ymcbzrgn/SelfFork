@@ -15,6 +15,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -125,7 +126,14 @@ func runDaemon(cmd *cobra.Command, _ []string) error {
 		}
 	}()
 
-	bridge := cli_bridge.NewTmuxBridge()
+	// Select the platform CLI bridge: PowerShell job control on Windows, tmux
+	// elsewhere. Both satisfy the cli_bridge.Bridge contract.
+	var bridge cli_bridge.Bridge
+	if runtime.GOOS == "windows" {
+		bridge = cli_bridge.NewWindowsBridge()
+	} else {
+		bridge = cli_bridge.NewTmuxBridge()
+	}
 	reporter := &state_reporter.Reporter{
 		OrchestratorURL: orchURL,
 		MachineID:       machineID,

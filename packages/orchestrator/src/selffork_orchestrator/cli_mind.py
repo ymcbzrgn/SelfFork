@@ -1089,6 +1089,71 @@ async def _export_corpus_async(
         await store.teardown()
 
 
+@mind_app.command("recall-decision")
+def recall_decision_cmd(
+    query: Annotated[
+        str,
+        typer.Argument(..., help="What to recall, e.g. 'heartbeat autonomy'."),
+    ],
+    decisions_dir: Annotated[
+        Path,
+        typer.Option("--decisions-dir", help="Directory of ADR / decision markdown files."),
+    ] = Path("docs/decisions"),
+    archive: Annotated[
+        Path | None,
+        typer.Option(
+            "--archive",
+            help="Optional archived decisions SSOT (e.g. docs/archive/Yamac_Jr_Nano_Kararlar.md).",
+        ),
+    ] = None,
+    top_k: Annotated[
+        int,
+        typer.Option("--top-k", min=1, max=20, help="How many decisions to return."),
+    ] = 3,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit machine-readable JSON."),
+    ] = False,
+) -> None:
+    """Recall past operator decisions with ``path:line`` citations (historian).
+
+    Deterministic keyword recall over ``docs/decisions/*.md`` (+ optional
+    archive) — no embeddings, no store. Answers "what did we decide about
+    X?" and cites the exact ADR + line (see :mod:`selffork_mind.historian`).
+    """
+    from selffork_mind.historian import Historian
+
+    historian = Historian.from_dir(decisions_dir, archive=archive)
+    hits = historian.recall(query, top_k=top_k)
+    if as_json:
+        typer.echo(
+            json.dumps(
+                [
+                    {
+                        "id": hit.decision.id,
+                        "title": hit.decision.title,
+                        "citation": hit.citation,
+                        "score": round(hit.score, 3),
+                    }
+                    for hit in hits
+                ],
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+    if not hits:
+        typer.echo(
+            f"No decision found for {query!r} "
+            f"(indexed {len(historian.decisions)} decisions in {decisions_dir})."
+        )
+        return
+    typer.echo(f"Decisions matching {query!r}:")
+    for hit in hits:
+        typer.echo(f"  {hit.decision.title}")
+        typer.echo(f"    {hit.citation}  (score {hit.score:.1f})")
+
+
 # ── tiny re-export so tests can construct an ad-hoc app ───────────────────
 
 
