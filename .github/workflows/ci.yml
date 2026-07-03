@@ -47,3 +47,6 @@ jobs:
 
       - name: Pytest
         run: uv run pytest -m "not real_runtime and not real_docker"
+
+      - name: Validate M5 vision eval dataset
+        run: uv run python benchmarks/m5_vision_eval/validate_dataset.py

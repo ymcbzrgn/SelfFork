@@ -17,8 +17,11 @@ benchmarks/m5_vision_eval/
 │   │   └── expected_action.json   # ground-truth eylem
 │   ├── web_002_github_pr_merge/...
 │   └── ...
-├── run_eval.py              # pytest harness (R1 gate)
-└── validate_dataset.py      # CI hook (index ↔ dir senkron)
+├── run_eval.py              # R1 gate harness (real model; real_runtime)
+├── validate_dataset.py      # CI hook (index ↔ dir senkron)
+├── synth.py                 # sentetik fixture üretici (modelsiz smoke)
+├── conftest.py              # importlib modunda sibling import köprüsü
+└── test_run_eval.py         # OFFLINE harness testleri (modelsiz)
 ```
 
 ## index.jsonl Schema
@@ -124,6 +127,37 @@ Her task için bir satır:
 - **Görsel deterministik:** ham PNG dosyaları repo'da (git LFS düşünülmedi; 30 task @ ~500KB = ~15MB, OK).
 - **Vision deterministik:** `temperature=0.0` (default — `runtime.py:71`).
 - **Model deterministik:** `mlx-community/gemma-4-E2B-it-4bit` veya `gemma4:e2b-q4_K_M`; aktif config `GET /api/settings/vision` ile sorgulanır.
+
+## Offline Harness Doğrulaması (modelsiz — CI + geliştirici)
+
+Gerçek R1 gate bir vision modeli (MLX/Ollama) + gerçek ekran fotoları ister;
+ikisi de CI'da veya GPU'suz makinede üretilemez. Ama **harness'ın kendi
+doğruluğu** modelsiz doğrulanır ve doğrulanmalıdır — R1 gate'in ship/regress
+kararı bu matematiğe dayanır:
+
+- **`test_run_eval.py`** (pytest, `testpaths`'e dahil → her CI koşusu + `uv run
+  pytest` ile çalışır): `_bbox_iou`, `_target_match`, `evaluate_decision` (R1
+  pass kuralı), `summarize` birim testleri + tam skorlama hattının stub
+  adapter ile uçtan uca smoke'u.
+- **`synth.py`**: saf-stdlib PNG üretici (Pillow yok). Bilinen bbox'lı,
+  deterministik, >1 KB sentetik ekran fotoları çizer — harness'ı gerçek model
+  olmadan uçtan uca çalıştırmaya yeter. **Sentetik ≠ R1 gate**: sadece boru
+  tesisatını (IoU, target match, aggregation, audit) kanıtlar. Elle smoke
+  korpusu üretmek için:
+
+  ```bash
+  uv run python benchmarks/m5_vision_eval/synth.py --out /tmp/synth_corpus
+  ```
+
+- **`validate_dataset.py`**: CI'da ayrı bir adım olarak koşar
+  (`.github/workflows/ci.yml` → "Validate M5 vision eval dataset"), `index.jsonl`
+  ↔ `tasks/` drift'ini her PR'da yakalar (script exit 1). Aynı kontrol
+  `test_run_eval.py::test_committed_dataset_in_sync` ile pytest'te de var.
+
+Gerçek gate (`run_eval.py::test_r1_gate`) `@pytest.mark.real_runtime` ile
+işaretli **ve** `test_*.py` isminde değil — yani CI'nın `-m "not real_runtime"`
+filtresi onu asla çalıştırmaz; operatör gerçek model + 30-task korpusla
+`pytest benchmarks/m5_vision_eval/run_eval.py -v` diyerek açıkça koşar.
 
 ## Karşı Senaryo (Bouncing Back)
 

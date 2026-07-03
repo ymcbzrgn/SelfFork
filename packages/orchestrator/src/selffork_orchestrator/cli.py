@@ -1097,6 +1097,75 @@ def project_show(
 # ── selffork train ────────────────────────────────────────────────────────────
 
 
+def _assemble_auto_corpus(*, audit_dir: Path | None, corpus_out: Path | None) -> None:
+    """S-Train T4 -- assemble + validate the session-history corpus (no GPU).
+
+    Reads SelfFork's own session audit JSONL, runs the T1/T2 corpus pipeline
+    (:mod:`selffork_reflex.data`), validates it (T5), and writes the corpus
+    artifact. No weights, no GPU -- the pre-M7 corpus surface for
+    ``selffork train --dataset auto``. ``selffork_reflex`` is a workspace
+    sibling package (installed with the workspace); imported here so the rest
+    of ``train`` carries no reflex import cost.
+    """
+    from selffork_reflex.data import (
+        SessionCapture,
+        assemble_corpus,
+        sample_to_dict,
+        session_events_from_audit,
+        validate_corpus_rows,
+        write_corpus,
+    )
+    from selffork_shared.audit_reader import iter_session_events, list_audit_files
+
+    if audit_dir is not None:
+        source_dir = audit_dir
+    else:
+        source_dir = Path(load_settings().audit.audit_dir).expanduser()
+    files = list_audit_files([source_dir])
+    captures = [
+        SessionCapture(
+            session_id=f.stem,
+            source="self_audit",
+            events=session_events_from_audit(iter_session_events(f)),
+        )
+        for f in files
+    ]
+    corpus = assemble_corpus(captures)
+    if not corpus:
+        # No history yet is a normal pre-corpus state -- warn and let the plan
+        # stub still print, rather than hard-failing a planning invocation.
+        typer.echo(
+            f"corpus warning: no operator turns found in {len(files)} "
+            f"session(s) at {source_dir}; skipping corpus assembly.",
+            err=True,
+        )
+        return
+
+    report = validate_corpus_rows([sample_to_dict(cs) for cs in corpus])
+    for warning in report.warnings:
+        typer.echo(f"corpus warning: {warning}", err=True)
+    if not report.ok:
+        typer.echo(
+            f"selffork: assembled corpus failed validation "
+            f"({len(report.errors)} errors):",
+            err=True,
+        )
+        for err in report.errors[:20]:
+            typer.echo(f"  - {err}", err=True)
+        raise typer.Exit(code=1)
+
+    if corpus_out is not None:
+        out_path = corpus_out
+    else:
+        out_path = source_dir.parent / "reflex" / "corpus" / "corpus.jsonl"
+    count = write_corpus(corpus, out_path)
+    typer.echo("")
+    typer.echo("--- corpus assembly (S-Train T4, no GPU) ---")
+    typer.echo(f"sessions:       {len(files)}")
+    typer.echo(f"samples:        {count}")
+    typer.echo(f"corpus:         {out_path}")
+
+
 @app.command()
 def train(
     info_only: Annotated[
@@ -1169,6 +1238,26 @@ def train(
             ),
         ),
     ] = None,
+    corpus_out: Annotated[
+        Path | None,
+        typer.Option(
+            "--corpus-out",
+            help=(
+                "Where ``--dataset auto`` writes the assembled corpus JSONL "
+                "(default: <audit_dir>/../reflex/corpus/corpus.jsonl)."
+            ),
+        ),
+    ] = None,
+    audit_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--audit-dir",
+            help=(
+                "Session-history dir ``--dataset auto`` reads "
+                "(default: the configured audit_dir)."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Reflex pillar fine-tune entry point (M7).
 
@@ -1233,6 +1322,11 @@ def train(
     if lora_alpha <= 0:
         typer.echo("selffork: --lora-alpha must be > 0", err=True)
         raise typer.Exit(code=2)
+
+    # S-Train T4: ``--dataset auto`` assembles + validates a real corpus
+    # artifact (no GPU, no weights) before the M7 plan stub prints.
+    if dataset_source == "auto":
+        _assemble_auto_corpus(audit_dir=audit_dir, corpus_out=corpus_out)
 
     typer.echo("")
     typer.echo("--- training plan (M7 worker stub) ---")

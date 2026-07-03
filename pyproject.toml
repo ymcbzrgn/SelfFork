@@ -230,6 +230,10 @@ testpaths = [
     "packages/reflex/tests",
     "packages/body/tests",
     "packages/mind/tests",
+    # M5 vision eval: offline harness tests (test_run_eval.py). The real R1
+    # gate (run_eval.py::test_r1_gate) is marked real_runtime + not a
+    # ``test_*.py`` file, so it is never auto-collected here.
+    "benchmarks/m5_vision_eval",
 ]
 asyncio_mode = "auto"
 markers = [

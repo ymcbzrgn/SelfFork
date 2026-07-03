@@ -34,6 +34,7 @@ in CI before the operator has seeded the 30-task corpus).
 
 import json
 import os
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -143,6 +144,72 @@ def _target_match(predicted: str, expected: str, mode: str) -> bool:
     return expected in predicted or predicted in expected
 
 
+async def score_dataset(
+    dataset: list[dict],
+    decide: Callable[[bytes, str], Awaitable[VisionDecision]],
+    *,
+    dataset_root: Path = DATASET_ROOT,
+    target_mode: str = "lenient",
+) -> list[dict]:
+    """Run ``decide`` over every task and apply the R1 pass rule.
+
+    ``decide(screenshot_bytes, goal)`` is injected so the harness can be
+    exercised offline with a stub (see ``test_run_eval.py``); the real gate
+    passes ``VisionOrchestrator.decide``. Returns audit-compatible rows.
+    """
+    report: list[dict] = []
+    for entry in dataset:
+        task_dir = dataset_root / entry["dir"]
+        screenshot = (task_dir / "screenshot.png").read_bytes()
+        goal = (task_dir / "goal.txt").read_text().strip()
+        expected = json.loads((task_dir / "expected_action.json").read_text())
+        decision = await decide(screenshot, goal)
+        result = evaluate_decision(decision, expected, target_match_mode=target_mode)
+        report.append(
+            {
+                "task_id": entry["task_id"],
+                "surface": entry.get("surface", "unknown"),
+                "instruction": goal,
+                "expected": expected,
+                "predicted": {
+                    "action": decision.action,
+                    "target": decision.target,
+                    "bbox": list(decision.bbox) if decision.bbox else None,
+                    "confidence": decision.confidence,
+                    "tier": decision.tier,
+                    "duration_ms": decision.duration_ms,
+                },
+                **result,
+            }
+        )
+    return report
+
+
+def summarize(report: list[dict]) -> dict[str, float]:
+    """Aggregate a report into ``pass_count`` / ``total`` / ``accuracy``."""
+    pass_count = sum(1 for r in report if r["pass"])
+    total = len(report)
+    accuracy = pass_count / total if total else 0.0
+    return {"pass_count": pass_count, "total": total, "accuracy": accuracy}
+
+
+def write_report(report: list[dict], *, kind: str, out_dir: Path | None = None) -> Path:
+    """Dump per-task rows to an audit-compatible JSONL; return its path.
+
+    ``out_dir`` defaults to ``~/.selffork/audit`` (real runs); tests pass a
+    tmp dir to keep the operator's audit trail clean.
+    """
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    base = out_dir if out_dir is not None else Path.home() / ".selffork" / "audit"
+    out = base / f"m5_r1_eval_{kind}_{timestamp}.jsonl"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w") as f:
+        for row in report:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return out
+
+
+@pytest.mark.real_runtime
 @pytest.mark.asyncio
 async def test_r1_gate() -> None:
     """R1 acceptance gate — pass rate ≥ 85% across the dataset."""
@@ -173,43 +240,13 @@ async def test_r1_gate() -> None:
         backend=kind,
     )
 
-    report: list[dict] = []
-    for entry in dataset:
-        task_dir = DATASET_ROOT / entry["dir"]
-        screenshot = (task_dir / "screenshot.png").read_bytes()
-        goal = (task_dir / "goal.txt").read_text().strip()
-        expected = json.loads((task_dir / "expected_action.json").read_text())
-        decision = await orchestrator.decide(screenshot=screenshot, goal=goal)
-        result = evaluate_decision(decision, expected, target_match_mode=target_mode)
-        report.append({
-            "task_id": entry["task_id"],
-            "surface": entry.get("surface", "unknown"),
-            "instruction": goal,
-            "expected": expected,
-            "predicted": {
-                "action": decision.action,
-                "target": decision.target,
-                "bbox": list(decision.bbox) if decision.bbox else None,
-                "confidence": decision.confidence,
-                "tier": decision.tier,
-                "duration_ms": decision.duration_ms,
-            },
-            **result,
-        })
-
-    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    out = Path.home() / ".selffork" / "audit" / f"m5_r1_eval_{kind}_{timestamp}.jsonl"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    with out.open("w") as f:
-        for row in report:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
-
-    pass_count = sum(1 for r in report if r["pass"])
-    total = len(report)
-    accuracy = pass_count / total if total else 0.0
+    report = await score_dataset(dataset, orchestrator.decide, target_mode=target_mode)
+    out = write_report(report, kind=kind)
+    summary = summarize(report)
+    accuracy = summary["accuracy"]
 
     print(f"\n[R1] adapter={kind} model={model_id} target_match={target_mode}")
-    print(f"[R1] pass={pass_count}/{total} ({accuracy:.2%})")
+    print(f"[R1] pass={summary['pass_count']}/{summary['total']} ({accuracy:.2%})")
     print(f"[R1] report={out}")
 
     assert accuracy >= R1_THRESHOLD, (
