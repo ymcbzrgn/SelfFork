@@ -22,6 +22,22 @@ the frozen wire contracts. It does **not** ship the GPU training worker (M7).
 > autonomous batch; T1/T2/T4/T5 follow. T1 depends on `audit_reader` (tests added
 > 2026-07-02) since the normalizer reuses its session-JSONL parsing.
 
+## Update (2026-07-03)
+
+- **T1–T5 landed and committed** (T1 normalizer, T2 assembler, T4 `train
+  --dataset auto`, T5 validator; T3 correction-quality + T6 Mind-publishing landed
+  2026-07-02). The pipeline is real and offline-tested.
+- **New sibling track — the synthetic tool-mastery corpus.** T1/T2 harvest *real*
+  operator sessions, but the operator has never run SelfFork, so there is **no
+  real data yet**. The corpus that will actually feed M7 is therefore
+  **teacher-authored and 100% synthetic**, built under
+  `packages/orchestrator/.../corpus/` and gated against the real 289-tool
+  registry. As of `981a7fd`: **974 samples, 289/289 tools, 0 rejected, T5-valid,
+  29 corpus tests green.**
+- Plan + roadmap (20 domains / 4 phases / ~15k target / mixed-model policy):
+  [`S-Train_Corpus_Authoring.md`](./S-Train_Corpus_Authoring.md).
+  Architecture + how-to: [`corpus/README.md`](../../packages/orchestrator/src/selffork_orchestrator/corpus/README.md).
+
 ## Scope guard
 
 Anything touching GPU/QLoRA/MLX training, adapter packaging, hot-swap, or held-out

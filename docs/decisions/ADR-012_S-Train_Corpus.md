@@ -84,3 +84,26 @@ normalizer + assembler produce a schema-valid corpus from synthetic sessions
 with a correct loss mask, `selffork train --dataset auto` writes a validated
 artifact, and the validator rejects a deliberately-corrupted corpus. Then M7
 (the training worker) may open.
+
+## 6. Update (2026-07-03) — synthetic tool-mastery corpus
+
+§2 items 1–5 all landed and were committed. In execution, one reality reshaped
+the corpus source: the operator has **never run SelfFork**, so the T1/T2
+real-session harvest has nothing to ingest yet. The corpus that will actually
+feed M7 is therefore **teacher-authored and 100% synthetic**, generated under
+`packages/orchestrator/src/selffork_orchestrator/corpus/` and validated against
+the *real* 289-tool registry (`spec.args_model.model_validate` + strict-args +
+the T5 loss-mask check) so no invalid call can enter.
+
+This does **not** change this ADR's scope split — it is still corpus assembly
+only; GPU/QLoRA/adapter/eval stay M7. It records where the corpus *content* comes
+from while real data is absent. See:
+
+- [`docs/plans/S-Train_Corpus_Authoring.md`](../plans/S-Train_Corpus_Authoring.md)
+  — authoring roadmap (20 domains / 4 phases / ~15k target / mixed-model policy)
+  + hard-won operational lessons.
+- [`packages/orchestrator/.../corpus/README.md`](../../packages/orchestrator/src/selffork_orchestrator/corpus/README.md)
+  — architecture, the validation gate, wire format, loss mask, file map.
+
+The operator-voice track (real external transcripts, Operator_Locked_Decisions
+§4 precedence) remains the *later* corpus, exactly as §2 intended.

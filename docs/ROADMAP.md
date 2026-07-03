@@ -44,6 +44,11 @@
 > [`ADR-012`](decisions/ADR-012_S-Train_Corpus.md) (kapsam kilidi — sadece corpus
 > montajı, GPU worker M7'de), [`docs/plans/S-Train_Plan.md`](plans/S-Train_Plan.md)
 > (T1-T6 iş kalemleri) ve [`docs/plans/S-Train_Smoke_Checklist.md`](plans/S-Train_Smoke_Checklist.md).
+> Operatörün gerçek kullanım verisi olmadığından, asıl M7'yi besleyecek **%100
+> sentetik tool-mastery korpusu** ayrı bir track olarak yürüyor (289 tool + 10
+> LegalAction'ı öğretir): roadmap+playbook
+> [`docs/plans/S-Train_Corpus_Authoring.md`](plans/S-Train_Corpus_Authoring.md),
+> kod+mimari [`corpus/README.md`](../packages/orchestrator/src/selffork_orchestrator/corpus/README.md).
 > Kilitli eğitim kararları: [`docs/Operator_Locked_Decisions.md`](Operator_Locked_Decisions.md).
 > Aşağıdaki milestone bölümleri ve takvim tablosu bu güncellemenin
 > **öncesine** aittir; tarihler (ör. "M5 2026-09'da başlar") artık tarihsel
