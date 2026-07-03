@@ -86,9 +86,9 @@ def test_gate_rejects_unknown_tool_scenario() -> None:
     assert not result.ok
 
 
-def test_first_slice_has_mixed_targets_one_tool() -> None:
+def test_corpus_has_mixed_targets_and_grows() -> None:
     stats = corpus_stats(ALL_SCENARIOS)
-    assert stats["tools"] == 1  # first slice is one tool
-    assert stats["lean"] >= 1
-    assert stats["with_reasoning"] >= 1
+    assert stats["lean"] >= 1  # hybrid mix: some lean targets
+    assert stats["with_reasoning"] >= 1  # ...and some reasoning targets
+    assert stats["tools"] >= 2  # corpus spans multiple tools as banks are added
     assert stats["scenarios"] == len(ALL_SCENARIOS)

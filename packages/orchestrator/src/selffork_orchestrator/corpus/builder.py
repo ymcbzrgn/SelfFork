@@ -19,11 +19,17 @@ from selffork_orchestrator.tools import ToolRegistry
 from selffork_reflex.data import SYSTEM_PROMPT
 
 __all__ = [
+    "AgenticStep",
+    "AgenticTrajectory",
     "BuildResult",
     "ToolScenario",
+    "TrajectoryResult",
     "build_corpus",
     "build_row",
+    "build_trajectories",
+    "build_trajectory_rows",
     "corpus_stats",
+    "trajectory_stats",
 ]
 
 Row = dict[str, object]
@@ -122,4 +128,120 @@ def corpus_stats(scenarios: Sequence[ToolScenario]) -> dict[str, int]:
         "archetypes": len({s.archetype for s in scenarios}),
         "lean": sum(1 for s in scenarios if s.reasoning is None),
         "with_reasoning": sum(1 for s in scenarios if s.reasoning is not None),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Agentic trajectories -- multi-tool chains (act -> observe -> act -> ... done)
+# ---------------------------------------------------------------------------
+def _msg(role: str, content: str, weight: float) -> Row:
+    return {"role": role, "content": content, "loss_weight": weight}
+
+
+@dataclass(frozen=True)
+class AgenticStep:
+    """One step of an agentic trajectory: an action (tool call + optional
+    reasoning) followed by the observed tool ``result`` that feeds the next step.
+    """
+
+    tool: str
+    args: dict[str, object]
+    result: str
+    reasoning: str | None = None
+
+
+@dataclass(frozen=True)
+class AgenticTrajectory:
+    """A multi-step agentic flow toward a ``goal``.
+
+    Emits ONE training sample per step over a GROWING session prefix, so the
+    model learns each next action given the goal + all prior actions and their
+    results -- the "önce X, sonucu gör, sonra Y" behaviour a small model needs
+    to chain tools. Prior actions carry the locked prior-operator weight (0.3),
+    tool results are context (0.0), the step under training is the target (1.0).
+    """
+
+    name: str
+    goal: str
+    steps: list[AgenticStep]
+
+
+@dataclass(frozen=True)
+class TrajectoryResult:
+    """Outcome of building a batch of trajectories."""
+
+    rows: list[Row]
+    rejected: list[tuple[str, list[str]]]
+
+    @property
+    def ok(self) -> bool:
+        return not self.rejected
+
+
+def build_trajectory_rows(
+    trajectory: AgenticTrajectory, *, registry: ToolRegistry
+) -> list[Row]:
+    """Render one trajectory into per-step corpus rows (growing prefix)."""
+    rows: list[Row] = []
+    prefix: list[Row] = [
+        _msg("system", SYSTEM_PROMPT, 0.0),
+        _msg("context", trajectory.goal, 0.0),
+    ]
+    for step_index, step in enumerate(trajectory.steps):
+        args = _canonical_args(step.tool, step.args, registry=registry)
+        action = render_target(step.tool, args, reasoning=step.reasoning)
+        messages = [*prefix, _msg("operator", action, 1.0)]
+        rows.append({
+            "source": "synthetic",
+            "session_id": f"syn_traj_{trajectory.name}_{step_index:02d}",
+            "target_index": len(messages) - 1,
+            "messages": messages,
+        })
+        # The just-emitted action becomes a prior operator turn (0.3); its
+        # observed result is context (0.0). Both extend the next step's prefix.
+        prefix = [
+            *prefix,
+            _msg("operator", action, 0.3),
+            _msg("context", step.result, 0.0),
+        ]
+    return rows
+
+
+def build_trajectories(
+    trajectories: Iterable[AgenticTrajectory],
+    *,
+    registry: ToolRegistry | None = None,
+) -> TrajectoryResult:
+    """Gate every step of every trajectory, then emit per-step rows.
+
+    A trajectory with any invalid step (bad tool/arg) is rejected whole -- a
+    chain is only as trustworthy as its weakest link.
+    """
+    reg = registry if registry is not None else default_registry()
+    rows: list[Row] = []
+    rejected: list[tuple[str, list[str]]] = []
+    for trajectory in trajectories:
+        errors: list[str] = []
+        for step_index, step in enumerate(trajectory.steps):
+            args = _canonical_args(step.tool, step.args, registry=reg)
+            result = validate_reply(
+                render_target(step.tool, args, reasoning=step.reasoning), registry=reg
+            )
+            if not result.ok:
+                errors.append(f"step[{step_index}] {step.tool}: {result.all_errors()}")
+        if errors:
+            rejected.append((trajectory.name, errors))
+            continue
+        rows.extend(build_trajectory_rows(trajectory, registry=reg))
+    return TrajectoryResult(rows=rows, rejected=rejected)
+
+
+def trajectory_stats(trajectories: Sequence[AgenticTrajectory]) -> dict[str, int]:
+    """Coverage tally: trajectories, steps (== samples), distinct tools chained."""
+    steps = sum(len(t.steps) for t in trajectories)
+    return {
+        "trajectories": len(trajectories),
+        "total_steps": steps,
+        "samples": steps,
+        "tools": len({s.tool for t in trajectories for s in t.steps}),
     }
