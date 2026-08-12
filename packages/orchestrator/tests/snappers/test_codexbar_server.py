@@ -142,7 +142,7 @@ async def test_start_then_stop_happy_path(
     assert server.state is CodexBarServerState.READY
     assert server.is_running
 
-    sent_signals: list[int] = []
+    sent_signals: list[int | _signal.Signals] = []
 
     def fake_killpg(pgid: int, sig: int) -> None:
         sent_signals.append(sig)
@@ -152,9 +152,10 @@ async def test_start_then_stop_happy_path(
     import signal as _signal
 
     monkeypatch.setattr(os, "killpg", fake_killpg)
+    monkeypatch.setattr(os, "getpgid", lambda pid: pid)
     await server.stop()
     assert server.state is CodexBarServerState.STOPPED
-    assert sent_signals == [_signal.SIGTERM]
+    assert [int(s) for s in sent_signals] == [_signal.SIGTERM]
 
 
 @pytest.mark.asyncio
@@ -209,6 +210,7 @@ async def test_start_is_idempotent_when_ready(
             server._process.mark_exited(0)  # type: ignore[attr-defined]
 
     monkeypatch.setattr(os, "killpg", fake_killpg)
+    monkeypatch.setattr(os, "getpgid", lambda pid: pid)
     await server.stop()
 
 
