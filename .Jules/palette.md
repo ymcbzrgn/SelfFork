@@ -1,0 +1,3 @@
+## 2024-06-01 - Keyboard Accessibility for Hover-Only Actions
+**Learning:** Hover-only actions (like delete buttons on kanban cards) that use `opacity-0 group-hover:opacity-100` are completely invisible to keyboard navigation. This prevents keyboard users from discovering or using the action.
+**Action:** When using hover-based visibility, always combine it with `focus-visible:opacity-100` and standard focus ring utilities (e.g. `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background`) to ensure the action is discoverable and usable via keyboard.
