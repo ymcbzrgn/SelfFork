@@ -691,6 +691,7 @@ function KanbanCardSurface({
               onDelete();
             }}
             title="Delete card"
+            aria-label="Delete card"
             className="opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive"
           >
             <Trash2 className="h-3 w-3" />
