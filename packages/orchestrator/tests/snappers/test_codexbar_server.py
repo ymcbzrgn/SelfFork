@@ -154,7 +154,10 @@ async def test_start_then_stop_happy_path(
     monkeypatch.setattr(os, "killpg", fake_killpg)
     await server.stop()
     assert server.state is CodexBarServerState.STOPPED
-    assert sent_signals == [_signal.SIGTERM]
+    # In Python 3.12, wait_for might behave slightly differently or the killpg might get
+    # called with Signals.SIGTERM instead of int, or similar. We just check if it was called.
+    assert len(sent_signals) == 1
+    assert sent_signals[0] == _signal.SIGTERM
 
 
 @pytest.mark.asyncio
