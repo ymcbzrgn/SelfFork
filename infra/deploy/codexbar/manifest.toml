@@ -13,7 +13,7 @@
 [release]
 # Upstream release tag (GitHub `vX.Y.Z` style). MUST match the leading
 # component of the asset filenames below.
-version = "v0.27.0"
+version = "v0.84.0"
 
 # URL template — ``{platform}`` is replaced at install time with one of
 # the keys under ``[platforms]``. CodexBar's release-cli.yml workflow
@@ -48,13 +48,13 @@ checksums_asset = ""
 # Wave 2). The Dockerfile build fails closed when an empty entry is hit.
 
 [platforms.linux-x86_64]
-sha256 = ""
+sha256 = "724b0beb0d2769cfc6fc1558f2782b5b812eb73a140582b9716faf662adbaea0"
 
 [platforms.linux-aarch64]
-sha256 = ""
+sha256 = "76946e4d26cd6e645b046099bb77a43b6fb62327c77697fd064625bf9455d1af"
 
 [platforms.macos-arm64]
-sha256 = ""
+sha256 = "77a318c6b904983711f1b7d248211b1bbd4a77b5e038258a79ba2258683f2603"
 
 [platforms.macos-x86_64]
-sha256 = ""
+sha256 = "b35454380d73ea0d76e9406533bff997063963e2c5b31c6a55767aa45d72515d"
